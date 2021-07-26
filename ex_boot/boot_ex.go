@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/ldsec/lattigo/v2/ckks"
 	"github.com/ldsec/lattigo/v2/rlwe"
@@ -81,8 +82,10 @@ func main() {
 	// To equalize the scale, the function evaluator.SetScale(ciphertext, parameters.Scale) can be used at the expense of one level.
 	fmt.Println()
 	fmt.Println("Bootstrapping...")
+
+	start := time.Now()
 	ciphertext2 := btp.Bootstrapp(ciphertext1)
-	fmt.Println("Done")
+	fmt.Printf("Done in %s \n", time.Since(start))
 
 	// Decrypt, print and compare with the plaintext values
 	fmt.Println()
