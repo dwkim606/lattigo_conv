@@ -3,91 +3,128 @@ package main
 import (
 	"fmt"
 	"math"
+	"time"
 
 	"github.com/ldsec/lattigo/v2/ckks"
 	"github.com/ldsec/lattigo/v2/rlwe"
-	"github.com/ldsec/lattigo/v2/utils"
 )
 
 func main() {
-	fmt.Println("Hello World!")
-
+	var start time.Time
 	var err error
 
-	var btp *ckks.Bootstrapper
-	var kgen rlwe.KeyGenerator
-	var encoder ckks.Encoder
-	var sk *rlwe.SecretKey
-	var pk *rlwe.PublicKey
-	var encryptor ckks.Encryptor
-	var decryptor ckks.Decryptor
-	var plaintext *ckks.Plaintext
+	const log_c_scale = 30
+	const log_in_scale = 30
+	const log_out_scale = 20
+	const logN = 13
 
-	// Bootstrapping parameters
-	// Four sets of parameters (index 0 to 3) ensuring 128 bit of security
-	// are available in github.com/ldsec/lattigo/v2/ckks/bootstrap_params
-	// LogSlots is hardcoded to 15 in the parameters, but can be changed from 1 to 15.
-	// When changing logSlots make sure that the number of levels allocated to CtS and StC is
-	// smaller or equal to logSlots.
-	btpParams := ckks.DefaultBootstrapParams[0]
-	params, err := btpParams.Params()
+	// Schemes parameters are created from scratch
+	params, err := ckks.NewParametersFromLiteral(ckks.ParametersLiteral{
+		LogN:     logN,
+		LogQ:     []int{log_out_scale + log_c_scale, log_in_scale},
+		LogP:     []int{60},
+		Sigma:    rlwe.DefaultSigma,
+		LogSlots: 12,
+		Scale:    float64(1 << log_in_scale),
+	})
 	if err != nil {
 		panic(err)
 	}
 
 	fmt.Println()
-	fmt.Printf("CKKS parameters: logN = %d, logSlots = %d, h = %d, logQP = %d, levels = %d, scale= 2^%f, sigma = %f \n", params.LogN(), params.LogSlots(), btpParams.H, params.LogQP(), params.QCount(), math.Log2(params.Scale()), params.Sigma())
-
-	// Scheme context and keys
-	kgen = ckks.NewKeyGenerator(params)
-
-	sk, pk = kgen.GenKeyPairSparse(btpParams.H)
-
-	encoder = ckks.NewEncoder(params)
-	decryptor = ckks.NewDecryptor(params, sk)
-	encryptor = ckks.NewEncryptor(params, pk)
-
+	fmt.Println("=========================================")
+	fmt.Println("         INSTANTIATING SCHEME            ")
+	fmt.Println("=========================================")
 	fmt.Println()
-	fmt.Println("Generating bootstrapping keys...")
-	rotations := btpParams.RotationsForBootstrapping(params.LogSlots())
-	rotkeys := kgen.GenRotationKeysForRotations(rotations, true, sk)
+
+	start = time.Now()
+
+	kgen := ckks.NewKeyGenerator(params)
+	sk := kgen.GenSecretKey()
 	rlk := kgen.GenRelinearizationKey(sk, 2)
-	btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
-	if btp, err = ckks.NewBootstrapper(params, btpParams, btpKey); err != nil {
-		panic(err)
-	}
-	fmt.Println("Done")
-
-	// Generate a random plaintext
-	valuesWant := make([]complex128, params.Slots())
-	for i := range valuesWant {
-		valuesWant[i] = utils.RandComplex128(-1, 1)
+	rotations := []int{}
+	for i := 0; i < logN; i++ {
+		rotations = append(rotations, 1<<i)
 	}
 
-	plaintext = encoder.EncodeNew(valuesWant, params.LogSlots())
+	rotkeys := kgen.GenRotationKeysForRotations(rotations, true, sk)
 
-	// Encrypt
-	ciphertext1 := encryptor.EncryptNew(plaintext)
+	encryptor := ckks.NewEncryptor(params, sk)
+	decryptor := ckks.NewDecryptor(params, sk)
+	encoder := ckks.NewEncoder(params)
+	evaluator := ckks.NewEvaluator(params, rlwe.EvaluationKey{Rlk: rlk, Rtks: rotkeys})
 
-	// Decrypt, print and compare with the plaintext values
+	cfsEncoder := ckks.NewEncoderBigComplex(params, 64)
+
+	for i := 0; i < slots; i++ {
+		cfsEncoder.values[i].Set(values[i])
+	}
+
+	cfsEncoder.FFT(cfsEncoder.values, (1 << logN))
+
+	cfsEncoder.InvFFT(cfsEncoder.values, (1 << logN))
+
+	fmt.Printf("Done in %s \n", time.Since(start))
+
 	fmt.Println()
-	fmt.Println("Precision of values vs. ciphertext")
-	valuesTest1 := printDebug(params, ciphertext1, valuesWant, decryptor, encoder)
+	fmt.Printf("CKKS parameters: logN = %d, logSlots = %d, logQP = %d, levels = %d, scale= %f, sigma = %f \n",
+		params.LogN(), params.LogSlots(), params.LogQP(), params.MaxLevel()+1, params.Scale(), params.Sigma())
 
-	// Bootstrap the ciphertext (homomorphic re-encryption)
-	// It takes a ciphertext at level 0 (if not at level 0, then it will reduce it to level 0)
-	// and returns a ciphertext at level MaxLevel - k, where k is the depth of the bootstrapping circuit.
-	// CAUTION: the scale of the ciphertext MUST be equal (or very close) to params.Scale
-	// To equalize the scale, the function evaluator.SetScale(ciphertext, parameters.Scale) can be used at the expense of one level.
 	fmt.Println()
-	fmt.Println("Bootstrapping...")
-	ciphertext2 := btp.Bootstrapp(ciphertext1)
-	fmt.Println("Done")
+	fmt.Println("=========================================")
+	fmt.Println("           PLAINTEXT CREATION            ")
+	fmt.Println("=========================================")
+	fmt.Println()
 
-	// Decrypt, print and compare with the plaintext values
+	start = time.Now()
+
+	r := float64(16)
+
+	pi := 3.141592653589793
+
+	slots := params.Slots()
+
+	values := make([]complex128, slots)
+	for i := range values {
+		values[i] = complex(2*pi, 0)
+	}
+
+	plaintext := ckks.NewPlaintext(params, params.MaxLevel(), params.Scale()/r)
+	encoder.Encode(plaintext, values, params.LogSlots())
+
+	fmt.Printf("Done in %s \n", time.Since(start))
+
 	fmt.Println()
-	fmt.Println("Precision of ciphertext vs. Bootstrapp(ciphertext)")
-	printDebug(params, ciphertext2, valuesTest1, decryptor, encoder)
+	fmt.Println("=========================================")
+	fmt.Println("              ENCRYPTION                 ")
+	fmt.Println("=========================================")
+	fmt.Println()
+
+	start = time.Now()
+
+	ciphertext := encryptor.EncryptNew(plaintext)
+
+	fmt.Printf("Done in %s \n", time.Since(start))
+
+	printDebug(params, ciphertext, values, decryptor, encoder)
+
+	fmt.Println()
+	fmt.Println("===============================================")
+	fmt.Printf("        EVALUATION OF i*x on %d values\n", slots)
+	fmt.Println("===============================================")
+	fmt.Println()
+
+	start = time.Now()
+
+	evaluator.MultByi(ciphertext, ciphertext)
+
+	fmt.Printf("Done in %s \n", time.Since(start))
+
+	for i := range values {
+		values[i] *= complex(0, 1)
+	}
+
+	printDebug(params, ciphertext, values, decryptor, encoder)
 }
 
 func printDebug(params ckks.Parameters, ciphertext *ckks.Ciphertext, valuesWant []complex128, decryptor ckks.Decryptor, encoder ckks.Encoder) (valuesTest []complex128) {
