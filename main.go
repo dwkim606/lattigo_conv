@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ldsec/lattigo/v2/ckks"
+	"github.com/ldsec/lattigo/v2/ring"
 	"github.com/ldsec/lattigo/v2/rlwe"
 )
 
@@ -16,7 +17,7 @@ func main() {
 	const log_c_scale = 30
 	const log_in_scale = 30
 	const log_out_scale = 20
-	const logN = 13
+	const logN = 5
 
 	// Schemes parameters are created from scratch
 	params, err := ckks.NewParametersFromLiteral(ckks.ParametersLiteral{
@@ -24,7 +25,7 @@ func main() {
 		LogQ:     []int{log_out_scale + log_c_scale, log_in_scale},
 		LogP:     []int{60},
 		Sigma:    rlwe.DefaultSigma,
-		LogSlots: 12,
+		LogSlots: logN - 1,
 		Scale:    float64(1 << log_in_scale),
 	})
 	if err != nil {
@@ -42,27 +43,26 @@ func main() {
 	kgen := ckks.NewKeyGenerator(params)
 	sk := kgen.GenSecretKey()
 	rlk := kgen.GenRelinearizationKey(sk, 2)
-	rotations := []int{}
+	rots := []int{}
 	for i := 0; i < logN; i++ {
-		rotations = append(rotations, 1<<i)
+		rots = append(rots, 1<<i)
 	}
-
-	rotkeys := kgen.GenRotationKeysForRotations(rotations, true, sk)
+	rotkeys := kgen.GenRotationKeysForRotations(rots, true, sk)
 
 	encryptor := ckks.NewEncryptor(params, sk)
 	decryptor := ckks.NewDecryptor(params, sk)
 	encoder := ckks.NewEncoder(params)
 	evaluator := ckks.NewEvaluator(params, rlwe.EvaluationKey{Rlk: rlk, Rtks: rotkeys})
+	cfsEncoder := ckks.NewEncoderBigComplex(params, 0)
 
-	cfsEncoder := ckks.NewEncoderBigComplex(params, 64)
+	slots := params.Slots()
 
+	plain_idx, _ := gen_idxNlogs(kgen, sk, cfsEncoder, encoder, params)
+
+	cvalues := make([]*ring.Complex, slots)
 	for i := 0; i < slots; i++ {
-		cfsEncoder.values[i].Set(values[i])
+		cvalues[i] = ring.NewComplex(ring.NewFloat(0.0, 0), ring.NewFloat(0.0, 0))
 	}
-
-	cfsEncoder.FFT(cfsEncoder.values, (1 << logN))
-
-	cfsEncoder.InvFFT(cfsEncoder.values, (1 << logN))
 
 	fmt.Printf("Done in %s \n", time.Since(start))
 
@@ -80,17 +80,18 @@ func main() {
 
 	r := float64(16)
 
-	pi := 3.141592653589793
-
-	slots := params.Slots()
-
 	values := make([]complex128, slots)
-	for i := range values {
-		values[i] = complex(2*pi, 0)
-	}
-
 	plaintext := ckks.NewPlaintext(params, params.MaxLevel(), params.Scale()/r)
 	encoder.Encode(plaintext, values, params.LogSlots())
+
+	for j := 0; j < logN; j++ {
+		values = encoder.Decode(plain_idx[j], params.LogSlots())
+		coeffs := cdecode(cfsEncoder, values)
+
+		for i := 0; i < 2*slots; i++ {
+			fmt.Printf("%d -th: %f ,", i, coeffs[i])
+		}
+	}
 
 	fmt.Printf("Done in %s \n", time.Since(start))
 
