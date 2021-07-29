@@ -1,15 +1,56 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/ldsec/lattigo/v2/ckks"
 	"github.com/ldsec/lattigo/v2/rlwe"
 )
 
-// Output the vector containing the valid result of our conv algorithm
+// print slice (back and forth prt_size elements)
+func prt_vec(vec []float64) {
+	prt_size := 4
+	total_size := len(vec)
+
+	if total_size <= 2*prt_size {
+		fmt.Print("    [")
+		for i := 0; i < total_size; i++ {
+			fmt.Printf("  %4.4f, ", vec[i])
+		}
+		fmt.Print(" ]\n")
+	} else {
+		fmt.Print("    [")
+		for i := 0; i < prt_size; i++ {
+			fmt.Printf(" %4.4f, ", vec[i])
+		}
+		fmt.Printf(" ...,")
+		for i := total_size - prt_size; i < total_size; i++ {
+			fmt.Printf(" %4.4f", vec[i])
+		}
+		fmt.Print(" ]\n")
+	}
+	fmt.Println()
+}
+
+// print slice as a 2D slice with rowLen row length
+func prt_mat(vec []float64, rowLen int) {
+	mat_size := len(vec) / rowLen
+	j, k := 0, 0
+	for i := 0; i < len(vec); i += rowLen {
+		fmt.Printf("(%d, %d): ", j, k)
+		prt_vec(vec[i : i+rowLen])
+		k++
+		if k*k == mat_size {
+			k = 0
+			j++
+		}
+	}
+}
+
+// Output the vector containing the valid result of our conv algorithm (format is the same as python; (row, col, batch)-format)
 // in_wid, ker_wid, batch all are those from the input of our conv algorithm
 func reshape_conv_out(result []float64, in_wid int, ker_wid int, batch int) []float64 {
 	out_wid := in_wid - ker_wid + 1
-
 	prt_out := make([]float64, out_wid*out_wid*batch)
 
 	for i := 0; i < batch; i++ {

@@ -61,7 +61,6 @@ func main() {
 		params.LogN(), params.LogSlots(), params.LogQP(), params.MaxLevel()+1, params.Scale(), params.Sigma())
 
 	const N = (1 << logN)
-	// slots := params.Slots()
 	const in_wid = 8
 	const in_size = in_wid * in_wid
 	const batch = N / in_size
@@ -91,8 +90,10 @@ func main() {
 	fmt.Println("input width: ", in_wid)
 	fmt.Println("kernel width: ", ker_wid)
 	fmt.Println("num batches: ", batch)
-	// fmt.Println("Input matrix: ", input)
-	// fmt.Println("Ker1_in (1st part): ", ker1[0])
+	fmt.Println("Input matrix: ")
+	prt_vec(input)
+	fmt.Println("Ker1_in (1st part): ")
+	prt_vec(ker1[0])
 
 	fmt.Println()
 	fmt.Println("=========================================")
@@ -104,8 +105,9 @@ func main() {
 
 	cfs_tmp := make([]float64, N)                                             // contain coefficient msgs
 	plain_tmp := ckks.NewPlaintext(params, params.MaxLevel(), params.Scale()) // contain plaintext values
+	copy(cfs_tmp, input)
 
-	encoder.EncodeCoeffs(input, plain_tmp)
+	encoder.EncodeCoeffs(cfs_tmp, plain_tmp)
 	ctxt_input := encryptor.EncryptNew(plain_tmp)
 	ctxt_out := make([]*ckks.Ciphertext, batch)
 
@@ -121,7 +123,6 @@ func main() {
 
 	for i := 0; i < batch; i++ {
 		ctxt_out[i] = pack_evaluator.MulNew(ctxt_input, pl_ker[i])
-		// pack_evaluator.Mul(ctxt_input, pl_ker[i], ctxt_out[i])
 	}
 
 	result := pack_ctxts(pack_evaluator, ctxt_out, batch, plain_idx, params)
@@ -137,72 +138,12 @@ func main() {
 	start = time.Now()
 
 	decryptor.Decrypt(result, plain_tmp)
-	cfs_tmp = encoder.DecodeCoeffs(plain_tmp)
-	for i, val := range cfs_tmp {
-		cfs_tmp[i] = math.Round(val*100) / 100
-	}
+	cfs_tmp = reshape_conv_out(encoder.DecodeCoeffs(plain_tmp), in_wid, ker_wid, batch)
 
-	fmt.Println(reshape_conv_out(cfs_tmp, in_wid, ker_wid, batch))
+	fmt.Print("Result: \n")
+	prt_mat(cfs_tmp, batch)
 
 	fmt.Printf("Done in %s \n", time.Since(start))
-
-	// const cnum = 16                                                           // number of ciphertexts to be packed
-	// cfs_tmp := make([]float64, N)                                             // contain coefficient msgs
-	// plain_tmp := ckks.NewPlaintext(params, params.MaxLevel(), params.Scale()) // contain plaintext values
-	// ctxts := make([]*ckks.Ciphertext, cnum)                                   // ctxts to be packed
-
-	// for i := 0; i < cnum; i++ {
-	// 	for j := 0; j < N; j += cnum {
-	// 		cfs_tmp[j] = float64(j + i)
-	// 	}
-	// 	encoder.EncodeCoeffs(cfs_tmp, plain_tmp)
-	// 	ctxts[i] = encryptor.EncryptNew(plain_tmp)
-	// 	cfs_tmp = make([]float64, N)
-	// }
-
-	// fmt.Printf("Done in %s \n", time.Since(start))
-
-	// fmt.Println()
-	// fmt.Println("===============================================")
-	// fmt.Println("     			   EVALUATION					")
-	// fmt.Println("===============================================")
-	// fmt.Println()
-
-	// start = time.Now()
-
-	// result := pack_ctxts(pack_evaluator, ctxts, cnum, plain_idx, params)
-
-	// fmt.Printf("Done in %s \n", time.Since(start))
-
-	// fmt.Println()
-	// fmt.Println("=========================================")
-	// fmt.Println("              DECRYPTION                 ")
-	// fmt.Println("=========================================")
-	// fmt.Println()
-
-	// start = time.Now()
-
-	// decryptor.Decrypt(result, plain_tmp)
-	// cfs_tmp = encoder.DecodeCoeffs(plain_tmp)
-	// for i, val := range cfs_tmp {
-	// 	cfs_tmp[i] = math.Round(val*100) / 100
-	// }
-	// // fmt.Println(cfs_tmp)
-
-	// fmt.Printf("Done in %s \n", time.Since(start))
-
-	// printDebug(params, ciphertext, values, decryptor, encoder)
-
-	// decryptor.Decrypt(ctxts[i], plain_tmp)
-	// cfs_tmp = encoder.DecodeCoeffs(plain_idx[i])
-
-	// for i := 0; i < slots; i++ {
-	// 	cvalues[i] = ring.NewComplex(ring.NewFloat(0.0, 0), ring.NewFloat(0.0, 0))
-	// }
-
-	// for i := range values {
-	// 	values[i] *= complex(0, 1)
-	// }
 
 	// printDebug(params, ciphertext, values, decryptor, encoder)
 }
