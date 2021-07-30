@@ -8,8 +8,34 @@ import (
 )
 
 // print slice (back and forth prt_size elements)
+// scaled by 2N
+func prt_vecc(vec []complex128) {
+	prt_size := 5
+	total_size := len(vec)
+
+	if total_size <= 2*prt_size {
+		fmt.Print("    [")
+		for i := 0; i < total_size; i++ {
+			fmt.Printf("  %4.5f + %1.2f i, ", real(vec[i])/(1.0*(1<<17)), imag(vec[i]))
+		}
+		fmt.Print(" ]\n")
+	} else {
+		fmt.Print("    [")
+		for i := 0; i < prt_size; i++ {
+			fmt.Printf(" %4.5f + %1.2f i, ", real(vec[i])/(1.0*(1<<17)), imag(vec[i]))
+		}
+		fmt.Printf(" ...,")
+		for i := total_size - prt_size; i < total_size; i++ {
+			fmt.Printf(" %4.5f + %1.2f i, ", real(vec[i])/(1.0*(1<<17)), imag(vec[i]))
+		}
+		fmt.Print(" ]\n")
+	}
+	fmt.Println()
+}
+
+// print slice (back and forth prt_size elements)
 func prt_vec(vec []float64) {
-	prt_size := 4
+	prt_size := 5
 	total_size := len(vec)
 
 	if total_size <= 2*prt_size {
@@ -35,13 +61,13 @@ func prt_vec(vec []float64) {
 // print slice as a 2D slice with rowLen row length
 func prt_mat(vec []float64, rowLen int) {
 	mat_size := len(vec) / rowLen
-	j, k := 0, 0
+	j, k := 1, 1
 	for i := 0; i < len(vec); i += rowLen {
 		fmt.Printf("(%d, %d): ", j, k)
 		prt_vec(vec[i : i+rowLen])
 		k++
-		if k*k == mat_size {
-			k = 0
+		if k*k > mat_size {
+			k = 1
 			j++
 		}
 	}

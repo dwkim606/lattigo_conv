@@ -7,6 +7,7 @@ import (
 
 	"github.com/ldsec/lattigo/v2/ckks"
 	"github.com/ldsec/lattigo/v2/rlwe"
+	"github.com/ldsec/lattigo/v2/utils"
 )
 
 func main() {
@@ -41,12 +42,6 @@ func main() {
 
 	kgen := ckks.NewKeyGenerator(params)
 	sk := kgen.GenSecretKey()
-	// rlk := kgen.GenRelinearizationKey(sk, 2)
-	// rots := []int{}
-	// for i := 0; i < logN; i++ {
-	// 	rots = append(rots, 1<<i)
-	// }
-	// rotkeys := kgen.GenRotationKeysForRotations(rots, true, sk)
 
 	encryptor := ckks.NewEncryptor(params, sk)
 	decryptor := ckks.NewDecryptor(params, sk)
@@ -145,7 +140,106 @@ func main() {
 
 	fmt.Printf("Done in %s \n", time.Since(start))
 
-	// printDebug(params, ciphertext, values, decryptor, encoder)
+	fmt.Println()
+	fmt.Println("=========================================")
+	fmt.Println("              BOOTSTRAPP                 ")
+	fmt.Println("=========================================")
+	fmt.Println()
+
+	var btp *ckks.Bootstrapper
+	var plaintext *ckks.Plaintext
+
+	// Bootstrapping parameters
+	// Four sets of parameters (index 0 to 3) ensuring 128 bit of security
+	// are available in github.com/ldsec/lattigo/v2/ckks/bootstrap_params
+	// LogSlots is hardcoded to 15 in the parameters, but can be changed from 1 to 15.
+	// When changing logSlots make sure that the number of levels allocated to CtS and StC is
+	// smaller or equal to logSlots.
+	btpParams := ckks.DefaultBootstrapParams[2]
+	params, err = btpParams.Params()
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println()
+	fmt.Printf("CKKS parameters: logN = %d, logSlots = %d, h = %d, logQP = %d, levels = %d, scale= 2^%f, sigma = %f \n",
+		params.LogN(), params.LogSlots(), btpParams.H, params.LogQP(), params.QCount(), math.Log2(params.Scale()), params.Sigma())
+
+	// Scheme context and keys
+	kgen = ckks.NewKeyGenerator(params)
+	sk, _ = kgen.GenKeyPairSparse(btpParams.H)
+	encoder = ckks.NewEncoder(params)
+	decryptor = ckks.NewDecryptor(params, sk)
+	encryptor = ckks.NewEncryptor(params, sk)
+
+	fmt.Println()
+	fmt.Println("Generating bootstrapping keys...")
+	rotations := btpParams.RotationsForBootstrapping(params.LogSlots())
+	rotkeys := kgen.GenRotationKeysForRotations(rotations, true, sk)
+	rlk := kgen.GenRelinearizationKey(sk, 2)
+	btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
+	if btp, err = ckks.NewBootstrapper(params, btpParams, btpKey); err != nil {
+		panic(err)
+	}
+	fmt.Println("Done")
+
+	// Generate a random plaintext
+	valuesWant := make([]complex128, params.Slots())
+	for i := range valuesWant {
+		valuesWant[i] = utils.RandComplex128(-1, 1)
+	}
+
+	// plaintext = encoder.EncodeNew(valuesWant, params.LogSlots())
+	cfs_tmp = make([]float64, params.N())
+	for i := range cfs_tmp {
+		cfs_tmp[i] = 0.0001 * float64(i)
+	}
+	fmt.Print("Boot in: ")
+	prt_vec(cfs_tmp)
+	plaintext = ckks.NewPlaintext(params, params.MaxLevel(), params.Scale()) // contain plaintext values
+	encoder.EncodeCoeffs(cfs_tmp, plaintext)
+
+	// Encrypt
+	ciphertext1 := encryptor.EncryptNew(plaintext)
+
+	// Decrypt, print and compare with the plaintext values
+	// fmt.Println()
+	// fmt.Println("Precision of values vs. ciphertext")
+	// valuesTest1 := printDebug(params, ciphertext1, valuesWant, decryptor, encoder)
+
+	// Bootstrap the ciphertext (homomorphic re-encryption)
+	// It takes a ciphertext at level 0 (if not at level 0, then it will reduce it to level 0)
+	// and returns a ciphertext at level MaxLevel - k, where k is the depth of the bootstrapping circuit.
+	// CAUTION: the scale of the ciphertext MUST be equal (or very close) to params.Scale
+	// To equalize the scale, the function evaluator.SetScale(ciphertext, parameters.Scale) can be used at the expense of one level.
+	fmt.Println()
+	fmt.Println("Bootstrapping...")
+
+	start = time.Now()
+	// ciphertext2 := btp.Bootstrapp(ciphertext1)
+	// fmt.Printf("Done in %s \n", time.Since(start))
+
+	// decryptor.Decrypt(ciphertext2, plaintext)
+	// cfs_tmp = encoder.DecodeCoeffs(plaintext)
+	// prt_vec(cfs_tmp)
+
+	ciphertext2, ciphertext3 := btp.BootstrappConv(ciphertext1)
+	fmt.Printf("Done in %s \n", time.Since(start))
+
+	decryptor.Decrypt(ciphertext2, plaintext)
+	value_out := encoder.Decode(plaintext, params.LogSlots())
+	fmt.Printf("Boot out1: ")
+	prt_vecc(value_out)
+
+	decryptor.Decrypt(ciphertext3, plaintext)
+	value_out = encoder.Decode(plaintext, params.LogSlots())
+	fmt.Printf("Boot out2: ")
+	prt_vecc(value_out)
+
+	// Decrypt, print and compare with the plaintext values
+	// fmt.Println()
+	// fmt.Println("Precision of ciphertext vs. Bootstrapp(ciphertext)")
+	// printDebug(params, ciphertext2, valuesTest1, decryptor, encoder)
 }
 
 func printDebug(params ckks.Parameters, ciphertext *ckks.Ciphertext, valuesWant []complex128, decryptor ckks.Decryptor, encoder ckks.Encoder) (valuesTest []complex128) {
