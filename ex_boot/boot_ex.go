@@ -30,7 +30,7 @@ func main() {
 	// LogSlots is hardcoded to 15 in the parameters, but can be changed from 1 to 15.
 	// When changing logSlots make sure that the number of levels allocated to CtS and StC is
 	// smaller or equal to logSlots.
-	btpParams := ckks.DefaultBootstrapParams[0]
+	btpParams := ckks.DefaultBootstrapParams[2]
 	params, err := btpParams.Params()
 	if err != nil {
 		panic(err)
@@ -62,7 +62,8 @@ func main() {
 	// Generate a random plaintext
 	valuesWant := make([]complex128, params.Slots())
 	for i := range valuesWant {
-		valuesWant[i] = utils.RandComplex128(-1, 1)
+		valuesWant[i] = complex(utils.RandFloat64(-1, 1), 0)
+		// valuesWant[i] = utils.RandComplex128(-1, 1)
 	}
 
 	plaintext = encoder.EncodeNew(valuesWant, params.LogSlots())

@@ -7,6 +7,30 @@ import (
 	"github.com/ldsec/lattigo/v2/rlwe"
 )
 
+// output bitreversed input with bitwid
+func reverseBits(num uint32, bitwid int) uint32 {
+	num = num << (32 - bitwid)
+
+	var ret = uint32(0)
+	var power = uint32(31)
+	for num != 0 {
+		ret += (num & 1) << power
+		num = num >> 1
+		power -= 1
+	}
+	return ret
+}
+
+// output the slice with bitreversed order from input
+func reverseOrder(input []float64, bitwid int) []float64 {
+	out := make([]float64, len(input))
+	for i := range out {
+		out[i] = input[reverseBits(uint32(i), bitwid)]
+	}
+
+	return out
+}
+
 // print slice (back and forth prt_size elements)
 // scaled by 2N
 func prt_vecc(vec []complex128) {
@@ -16,17 +40,17 @@ func prt_vecc(vec []complex128) {
 	if total_size <= 2*prt_size {
 		fmt.Print("    [")
 		for i := 0; i < total_size; i++ {
-			fmt.Printf("  %4.5f + %1.2f i, ", real(vec[i])/(1.0*(1<<17)), imag(vec[i]))
+			fmt.Printf("  %4.5f + %1.2f i, ", real(vec[i]), imag(vec[i]))
 		}
 		fmt.Print(" ]\n")
 	} else {
 		fmt.Print("    [")
 		for i := 0; i < prt_size; i++ {
-			fmt.Printf(" %4.5f + %1.2f i, ", real(vec[i])/(1.0*(1<<17)), imag(vec[i]))
+			fmt.Printf(" %4.5f + %1.2f i, ", real(vec[i]), imag(vec[i]))
 		}
 		fmt.Printf(" ...,")
 		for i := total_size - prt_size; i < total_size; i++ {
-			fmt.Printf(" %4.5f + %1.2f i, ", real(vec[i])/(1.0*(1<<17)), imag(vec[i]))
+			fmt.Printf(" %4.5f + %1.2f i, ", real(vec[i]), imag(vec[i]))
 		}
 		fmt.Print(" ]\n")
 	}
