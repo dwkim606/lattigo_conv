@@ -20,7 +20,8 @@ const logN = 16
 
 func main() {
 
-	testPoly()
+	testBRrot()
+	// testPoly()
 	// testBoot()
 
 }
@@ -523,5 +524,91 @@ func testBoot() {
 		values_testC[i] = complex(values_test2[i], 0)
 	}
 	printDebug(params, ciphertext3, values_testC, decryptor, encoder)
+
+}
+
+func testBRrot() {
+
+	const logN = 5
+	const N = (1 << logN)
+	const in_wid = (1 << 1)
+	const in_size = in_wid * in_wid
+	const batch = N / in_size
+
+	fmt.Print("Batch: ", batch, "\n\n")
+
+	sm_input := make([]int, in_size)
+	input := make([]int, N)
+	input_rev := make([]int, N)
+
+	sm_out := make([]int, 4*in_size)
+	out_dsr := make([]int, N)     // desired output
+	out_dsr_rev := make([]int, N) // desired output, bitrev
+
+	for i := range sm_input {
+		sm_input[i] = 2*i + 1
+	}
+	for i, elt := range sm_input {
+		sm_out[2*(i/in_wid)*(2*in_wid)+2*(i%in_wid)] = elt
+	}
+
+	arrgvec(sm_input, input, 0)
+	arrgvec(sm_out, out_dsr, 0)
+
+	for i := range sm_input {
+		sm_input[i] = 2*i + 2
+	}
+	for i, elt := range sm_input {
+		sm_out[2*(i/in_wid)*(2*in_wid)+2*(i%in_wid)] = elt
+	}
+
+	arrgvec(sm_input, input, 1)
+	arrgvec(sm_out, out_dsr, 1)
+
+	print_vec("input", input, in_wid, 0)
+	print_vec("input", input, in_wid, 1)
+	print_vec("out", out_dsr, 2*in_wid, 0)
+	print_vec("out", out_dsr, 2*in_wid, 1)
+
+	for i, elt := range input {
+		input_rev[reverseBits(uint32(i), logN)] = elt
+	}
+
+	for i, elt := range out_dsr {
+		out_dsr_rev[reverseBits(uint32(i), logN)] = elt
+	}
+
+	fmt.Print("intput: ", input, "\n\n")
+
+	fmt.Print("inputRev: ", input_rev, "\n\n")
+
+	fmt.Print("outDesiredRev: ", out_dsr_rev, "\n\n")
+
+	fmt.Print("OutDesired: ", out_dsr, "\n\n")
+
+}
+
+// distribute input to the output starting from pos position
+func arrgvec(input []int, output []int, pos int) {
+	batch := len(output) / len(input)
+
+	for i, elt := range input {
+		output[pos+i*batch] = elt
+	}
+}
+
+// print out arrg vec input from pos position
+func print_vec(title string, input []int, in_wid int, pos int) {
+	row := make([]int, in_wid)
+	step := len(input) / (in_wid * in_wid)
+	fmt.Println(title, ": ")
+	for j := 0; j < in_wid; j++ {
+		for i := range row {
+			row[i] = input[(j*in_wid+i)*step+pos]
+
+		}
+		fmt.Println(row)
+	}
+	fmt.Println()
 
 }
