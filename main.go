@@ -529,7 +529,7 @@ func testBoot() {
 
 func testBRrot() {
 
-	const logN = 5
+	const logN = 7
 	const N = (1 << logN)
 	const in_wid = (1 << 1)
 	const in_size = in_wid * in_wid
@@ -544,6 +544,7 @@ func testBRrot() {
 	sm_out := make([]int, 4*in_size)
 	out_dsr := make([]int, N)     // desired output
 	out_dsr_rev := make([]int, N) // desired output, bitrev
+	sm_out_re := make([]int, 4*4*in_size)
 
 	for i := range sm_input {
 		sm_input[i] = 2*i + 1
@@ -552,8 +553,13 @@ func testBRrot() {
 		sm_out[2*(i/in_wid)*(2*in_wid)+2*(i%in_wid)] = elt
 	}
 
+	for i, elt := range sm_out {
+		sm_out_re[(i/(2*in_wid))*(4*in_wid)+i%(2*in_wid)] = elt
+	}
+
 	arrgvec(sm_input, input, 0)
-	arrgvec(sm_out, out_dsr, 0)
+	// arrgvec(sm_out, out_dsr, 0)
+	arrgvec(sm_out_re, out_dsr, 0)
 
 	for i := range sm_input {
 		sm_input[i] = 2*i + 2
@@ -561,14 +567,17 @@ func testBRrot() {
 	for i, elt := range sm_input {
 		sm_out[2*(i/in_wid)*(2*in_wid)+2*(i%in_wid)] = elt
 	}
+	for i, elt := range sm_out {
+		sm_out_re[(i/(2*in_wid))*(4*in_wid)+i%(2*in_wid)] = elt
+	}
 
 	arrgvec(sm_input, input, 1)
-	arrgvec(sm_out, out_dsr, 1)
+	arrgvec(sm_out_re, out_dsr, 1)
 
 	print_vec("input", input, in_wid, 0)
 	print_vec("input", input, in_wid, 1)
-	print_vec("out", out_dsr, 2*in_wid, 0)
-	print_vec("out", out_dsr, 2*in_wid, 1)
+	print_vec("out", out_dsr, 4*in_wid, 0)
+	print_vec("out", out_dsr, 4*in_wid, 1)
 
 	for i, elt := range input {
 		input_rev[reverseBits(uint32(i), logN)] = elt
@@ -581,8 +590,15 @@ func testBRrot() {
 	fmt.Print("intput: ", input, "\n\n")
 
 	fmt.Print("inputRev: ", input_rev, "\n\n")
+	row := 16 * in_wid
+	for i := 0; i < len(input_rev); i += row {
+		fmt.Println(input_rev[i : i+row])
+	}
 
 	fmt.Print("outDesiredRev: ", out_dsr_rev, "\n\n")
+	for i := 0; i < len(out_dsr_rev); i += row {
+		fmt.Println(out_dsr_rev[i : i+row])
+	}
 
 	fmt.Print("OutDesired: ", out_dsr, "\n\n")
 
