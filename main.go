@@ -529,9 +529,9 @@ func testBoot() {
 
 func testBRrot() {
 
-	const logN = 7
+	const logN = 10
 	const N = (1 << logN)
-	const in_wid = (1 << 1)
+	const in_wid = (1 << 2)
 	const in_size = in_wid * in_wid
 	const batch = N / in_size
 
@@ -545,9 +545,10 @@ func testBRrot() {
 	out_dsr := make([]int, N)     // desired output
 	out_dsr_rev := make([]int, N) // desired output, bitrev
 	sm_out_re := make([]int, 4*4*in_size)
+	test_out_rev := make([]int, N)
 
 	for i := range sm_input {
-		sm_input[i] = 2*i + 1
+		sm_input[i] = 3*i + 1
 	}
 	for i, elt := range sm_input {
 		sm_out[2*(i/in_wid)*(2*in_wid)+2*(i%in_wid)] = elt
@@ -558,11 +559,10 @@ func testBRrot() {
 	}
 
 	arrgvec(sm_input, input, 0)
-	// arrgvec(sm_out, out_dsr, 0)
 	arrgvec(sm_out_re, out_dsr, 0)
 
 	for i := range sm_input {
-		sm_input[i] = 2*i + 2
+		sm_input[i] = 3*i + 2
 	}
 	for i, elt := range sm_input {
 		sm_out[2*(i/in_wid)*(2*in_wid)+2*(i%in_wid)] = elt
@@ -574,10 +574,22 @@ func testBRrot() {
 	arrgvec(sm_input, input, 1)
 	arrgvec(sm_out_re, out_dsr, 1)
 
-	print_vec("input", input, in_wid, 0)
-	print_vec("input", input, in_wid, 1)
-	print_vec("out", out_dsr, 4*in_wid, 0)
-	print_vec("out", out_dsr, 4*in_wid, 1)
+	for i := range sm_input {
+		sm_input[i] = 3*i + 3
+	}
+	for i, elt := range sm_input {
+		sm_out[2*(i/in_wid)*(2*in_wid)+2*(i%in_wid)] = elt
+	}
+	for i, elt := range sm_out {
+		sm_out_re[(i/(2*in_wid))*(4*in_wid)+i%(2*in_wid)] = elt
+	}
+	arrgvec(sm_input, input, 2)
+	arrgvec(sm_out_re, out_dsr, 2)
+
+	print_vec("input (0)", input, in_wid, 0)
+	print_vec("input (1)", input, in_wid, 1)
+	print_vec("out (0)", out_dsr, 4*in_wid, 0)
+	print_vec("out (1)", out_dsr, 4*in_wid, 1)
 
 	for i, elt := range input {
 		input_rev[reverseBits(uint32(i), logN)] = elt
@@ -587,20 +599,46 @@ func testBRrot() {
 		out_dsr_rev[reverseBits(uint32(i), logN)] = elt
 	}
 
-	fmt.Print("intput: ", input, "\n\n")
+	row := 8 * in_wid
 
-	fmt.Print("inputRev: ", input_rev, "\n\n")
-	row := 16 * in_wid
+	fmt.Println("intput: (all)")
+	for i := 0; i < len(input); i += row {
+		fmt.Println(input[i : i+row])
+	}
+
+	fmt.Println("inputRev: (all)")
 	for i := 0; i < len(input_rev); i += row {
 		fmt.Println(input_rev[i : i+row])
 	}
 
-	fmt.Print("outDesiredRev: ", out_dsr_rev, "\n\n")
+	test_out := extend_vec(input_rev, in_wid, 0)
+
+	fmt.Println("testRev: ")
+	for i := 0; i < len(test_out); i += row {
+		fmt.Println(test_out[i : i+row])
+	}
+
+	for i, elt := range test_out {
+		test_out_rev[reverseBits(uint32(i), logN)] = elt
+	}
+
+	print_vec("test (0)", test_out_rev, 2*in_wid, 0)
+	print_vec("test (1)", test_out_rev, 2*in_wid, 1)
+
+	// fmt.Println("test: ")
+	// for i := 0; i < len(test_out_rev); i += row {
+	// 	fmt.Println(test_out_rev[i : i+row])
+	// }
+
+	fmt.Println("outDesiredRev: ")
 	for i := 0; i < len(out_dsr_rev); i += row {
 		fmt.Println(out_dsr_rev[i : i+row])
 	}
 
-	fmt.Print("OutDesired: ", out_dsr, "\n\n")
+	fmt.Println("OutDesired: ")
+	for i := 0; i < len(out_dsr); i += row {
+		fmt.Println(out_dsr[i : i+row])
+	}
 
 }
 
@@ -628,3 +666,59 @@ func print_vec(title string, input []int, in_wid int, pos int) {
 	fmt.Println()
 
 }
+
+func lRot(a []int, rotation int) []int {
+	size := len(a)
+	var newArray []int
+	for i := 0; i < rotation; i++ {
+		newArray = a[1:size]
+		newArray = append(newArray, a[0])
+		a = newArray
+	}
+	return a
+}
+
+func rRot(a []int, rotation int) []int {
+	return lRot(a, len(a)-rotation)
+}
+
+func addSlice(a []int, b []int) []int {
+	c := make([]int, len(a))
+	for i := range a {
+		c[i] = a[i] + b[i]
+
+	}
+	return c
+}
+
+// extend a vector (with in_wid * in_wid elt) inside a full-sized input vector to a strided vector (both are bitreversed)
+// assume that the full vector is filled with sm vectors
+// e.g., 1234 -> 1020 // 0000 // 3040 // 0000 (before bitreversed)
+// 0 <= pos < 4 determines which part of input is extended to output
+func extend_vec(input []int, in_wid int, pos int) []int {
+	output := make([]int, len(input))
+	batch := len(input) / (in_wid * in_wid)
+	min_batch := batch / 4
+	if batch%4 != 0 {
+		panic("batch size not divisible by 4")
+	}
+
+	//TODO: rot by min_batch * pos
+
+	for j := 0; j < in_wid; j++ { // kinds of mov
+		tmp := make([]int, len(input))
+		for b := 0; b < min_batch; b++ {
+			for l := 0; l < in_wid; l++ {
+				tmp[4*in_wid*in_wid*b+in_wid*j+l] = input[4*in_wid*in_wid*b+in_wid*j+l]
+			}
+		}
+		output = addSlice(output, rRot(tmp, j*in_wid))
+	}
+
+	return output
+}
+
+// // embed a vector into larger space (both are bitreversed)
+// func extend_sp() {
+
+// }
