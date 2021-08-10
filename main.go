@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"time"
 
 	"github.com/ldsec/lattigo/v2/ckks"
@@ -537,108 +538,114 @@ func testBRrot() {
 
 	fmt.Print("Batch: ", batch, "\n\n")
 
-	sm_input := make([]int, in_size)
+	sm_input := make([]int, in_size) // each will be packed to input vector
 	input := make([]int, N)
 	input_rev := make([]int, N)
 
-	sm_out := make([]int, 4*in_size)
-	out_dsr := make([]int, N)     // desired output
-	out_dsr_rev := make([]int, N) // desired output, bitrev
-	sm_out_re := make([]int, 4*4*in_size)
-	test_out_rev := make([]int, N)
+	// out_dsr := make([]int, N)     // desired output
+	// out_dsr_rev := make([]int, N) // desired output, bitrev
+	// sm_out_final := make([]int, 4*4*in_size) // to print out the result (ext & ext_sp)
+	test_out := make([]int, N)
 
-	for i := range sm_input {
-		sm_input[i] = 3*i + 1
-	}
-	for i, elt := range sm_input {
-		sm_out[2*(i/in_wid)*(2*in_wid)+2*(i%in_wid)] = elt
-	}
+	// set input and desired output
 
-	for i, elt := range sm_out {
-		sm_out_re[(i/(2*in_wid))*(4*in_wid)+i%(2*in_wid)] = elt
+	for b := 0; b < batch; b++ {
+		for i := range sm_input {
+			sm_input[i] = batch*i + b
+		}
+		arrgvec(sm_input, input, b)
 	}
 
-	arrgvec(sm_input, input, 0)
-	arrgvec(sm_out_re, out_dsr, 0)
+	row := 4 * in_wid
 
-	for i := range sm_input {
-		sm_input[i] = 3*i + 2
+	for b := 0; b < batch; b++ {
+		print_vec("input ("+strconv.Itoa(b)+")", input, in_wid, b)
 	}
-	for i, elt := range sm_input {
-		sm_out[2*(i/in_wid)*(2*in_wid)+2*(i%in_wid)] = elt
-	}
-	for i, elt := range sm_out {
-		sm_out_re[(i/(2*in_wid))*(4*in_wid)+i%(2*in_wid)] = elt
-	}
-
-	arrgvec(sm_input, input, 1)
-	arrgvec(sm_out_re, out_dsr, 1)
-
-	for i := range sm_input {
-		sm_input[i] = 3*i + 3
-	}
-	for i, elt := range sm_input {
-		sm_out[2*(i/in_wid)*(2*in_wid)+2*(i%in_wid)] = elt
-	}
-	for i, elt := range sm_out {
-		sm_out_re[(i/(2*in_wid))*(4*in_wid)+i%(2*in_wid)] = elt
-	}
-	arrgvec(sm_input, input, 2)
-	arrgvec(sm_out_re, out_dsr, 2)
-
-	print_vec("input (0)", input, in_wid, 0)
-	print_vec("input (1)", input, in_wid, 1)
-	print_vec("out (0)", out_dsr, 4*in_wid, 0)
-	print_vec("out (1)", out_dsr, 4*in_wid, 1)
-
 	for i, elt := range input {
 		input_rev[reverseBits(uint32(i), logN)] = elt
 	}
-
-	for i, elt := range out_dsr {
-		out_dsr_rev[reverseBits(uint32(i), logN)] = elt
-	}
-
-	row := 8 * in_wid
-
-	fmt.Println("intput: (all)")
-	for i := 0; i < len(input); i += row {
-		fmt.Println(input[i : i+row])
-	}
-
-	fmt.Println("inputRev: (all)")
+	fmt.Println("inputRev:")
 	for i := 0; i < len(input_rev); i += row {
 		fmt.Println(input_rev[i : i+row])
 	}
+	fmt.Println()
 
-	test_out := extend_vec(input_rev, in_wid, 0)
+	pos := 0
+	// test_out_rev := extend_vec(input_rev, in_wid, pos)
+	test_out_rev := extend_sp(input_rev, in_wid, pos)
+	// test_out_rev := extend_full(input_rev, in_wid, pos, false)
 
-	fmt.Println("testRev: ")
-	for i := 0; i < len(test_out); i += row {
-		fmt.Println(test_out[i : i+row])
+	fmt.Println("testRev: pos(" + strconv.Itoa(pos) + ")")
+	for i := 0; i < len(test_out_rev); i += row {
+		fmt.Println(test_out_rev[i : i+row])
+	}
+	fmt.Println()
+
+	for i, elt := range test_out_rev {
+		test_out[reverseBits(uint32(i), logN)] = elt
+	}
+	for b := 0; b < batch/4; b++ {
+		print_vec("output ("+strconv.Itoa(b)+")", test_out, 2*in_wid, b)
 	}
 
-	for i, elt := range test_out {
-		test_out_rev[reverseBits(uint32(i), logN)] = elt
+	test_out_rev = extend_full(test_out_rev, in_wid, 0, true)
+
+	fmt.Println("testRev: pos(" + strconv.Itoa(pos) + ")")
+	for i := 0; i < len(test_out_rev); i += row {
+		fmt.Println(test_out_rev[i : i+row])
+	}
+	fmt.Println()
+
+	for i, elt := range test_out_rev {
+		test_out[reverseBits(uint32(i), logN)] = elt
+	}
+	for b := 0; b < batch/16; b++ {
+		print_vec("output ("+strconv.Itoa(b)+")", test_out, 4*in_wid, b)
 	}
 
-	print_vec("test (0)", test_out_rev, 2*in_wid, 0)
-	print_vec("test (1)", test_out_rev, 2*in_wid, 1)
+	test_out_rev2 := comprs_full(test_out_rev, 4*in_wid, 0, true)
 
-	// fmt.Println("test: ")
-	// for i := 0; i < len(test_out_rev); i += row {
-	// 	fmt.Println(test_out_rev[i : i+row])
+	fmt.Println("after compressing")
+
+	fmt.Println("testRev: pos(" + strconv.Itoa(pos) + ")")
+	for i := 0; i < len(test_out_rev2); i += row {
+		fmt.Println(test_out_rev2[i : i+row])
+	}
+	fmt.Println()
+
+	for i, elt := range test_out_rev2 {
+		test_out[reverseBits(uint32(i), logN)] = elt
+	}
+	for b := 0; b < batch/4; b++ {
+		print_vec("output ("+strconv.Itoa(b)+")", test_out, 2*in_wid, b)
+	}
+
+	// pos = 1
+	// input_rev = comprs_vec(test_out_rev, 2*in_wid, pos)
+
+	// for i, elt := range input_rev {
+	// 	input[reverseBits(uint32(i), logN)] = elt
+	// }
+	// for b := 0; b < batch; b++ {
+	// 	print_vec("input after compress ("+strconv.Itoa(b)+")", input, in_wid, b)
 	// }
 
-	fmt.Println("outDesiredRev: ")
-	for i := 0; i < len(out_dsr_rev); i += row {
-		fmt.Println(out_dsr_rev[i : i+row])
-	}
+	// print_vec("test (1)", test_out_rev, 2*in_wid, 1)
 
-	fmt.Println("OutDesired: ")
-	for i := 0; i < len(out_dsr); i += row {
-		fmt.Println(out_dsr[i : i+row])
-	}
+	// // fmt.Println("test: ")
+	// // for i := 0; i < len(test_out_rev); i += row {
+	// // 	fmt.Println(test_out_rev[i : i+row])
+	// // }
+
+	// fmt.Println("outDesiredRev: ")
+	// for i := 0; i < len(out_dsr_rev); i += row {
+	// 	fmt.Println(out_dsr_rev[i : i+row])
+	// }
+
+	// fmt.Println("OutDesired: ")
+	// for i := 0; i < len(out_dsr); i += row {
+	// 	fmt.Println(out_dsr[i : i+row])
+	// }
 
 }
 
@@ -696,6 +703,7 @@ func addSlice(a []int, b []int) []int {
 // e.g., 1234 -> 1020 // 0000 // 3040 // 0000 (before bitreversed)
 // 0 <= pos < 4 determines which part of input is extended to output
 func extend_vec(input []int, in_wid int, pos int) []int {
+	pos = int(reverseBits(uint32(pos), 2))
 	output := make([]int, len(input))
 	batch := len(input) / (in_wid * in_wid)
 	min_batch := batch / 4
@@ -703,22 +711,189 @@ func extend_vec(input []int, in_wid int, pos int) []int {
 		panic("batch size not divisible by 4")
 	}
 
-	//TODO: rot by min_batch * pos
-
-	for j := 0; j < in_wid; j++ { // kinds of mov
+	for j := 0; j < in_wid; j++ { // kinds of mov depends on j
 		tmp := make([]int, len(input))
 		for b := 0; b < min_batch; b++ {
 			for l := 0; l < in_wid; l++ {
-				tmp[4*in_wid*in_wid*b+in_wid*j+l] = input[4*in_wid*in_wid*b+in_wid*j+l]
+				idx := 4*in_wid*in_wid*b + pos*in_wid*in_wid + in_wid*j + l
+				tmp[idx] = input[idx]
 			}
 		}
-		output = addSlice(output, rRot(tmp, j*in_wid))
+		rot := j*in_wid - pos*in_wid*in_wid
+		output = addSlice(output, rRot(tmp, rot))
 	}
 
 	return output
 }
 
-// // embed a vector into larger space (both are bitreversed)
-// func extend_sp() {
+// embed a vector into larger space (both are bitreversed)
+// assume that the full vector is filled with sm vectors
+// e.g., 1234 -> 12 00 // 34 00 // 0000 // 0000 (before bitreversed)
+// 0 <= pos < 4 determines which part of input is extended to output
+func extend_sp(input []int, in_wid int, pos int) []int {
+	mid_out := make([]int, len(input))
+	output := make([]int, len(input))
+	batch := len(input) / (in_wid * in_wid)
+	pos = int(reverseBits(uint32(pos), 2))
+	min_batch := batch / 4
+	if batch%4 != 0 {
+		panic("batch size not divisible by 4")
+	}
 
-// }
+	for j := 0; j < in_wid; j++ { // kinds of mov depends on j
+		tmp := make([]int, len(input))
+		for b := 0; b < min_batch; b++ {
+			for i := 0; i < in_wid; i++ {
+				idx := 4*in_wid*in_wid*b + pos*in_wid*in_wid + in_wid*j + i
+				tmp[idx] = input[idx]
+			}
+		}
+		rot := 3*j*in_wid - pos*in_wid*in_wid
+		mid_out = addSlice(mid_out, rRot(tmp, rot))
+	}
+
+	for i := 0; i < in_wid; i++ { // kinds of mov depends on i
+		tmp := make([]int, len(input))
+		for b := 0; b < min_batch; b++ {
+			for j := 0; j < in_wid; j++ {
+				idx := 4*in_wid*in_wid*b + 4*in_wid*j + i
+				tmp[idx] = mid_out[idx]
+			}
+		}
+		rot := i
+		output = addSlice(output, rRot(tmp, rot))
+	}
+
+	return output
+}
+
+// extend_vec then extend_sp (with in_wid * in_wid elt) inside a full-sized input vector to a strided vector (both are bitreversed)
+// assume that the full vector is filled with sm vectors
+// padding = true: sm vector is already inside the 4*len(sm_vector) size vector with zeros
+// e.g., 12 00 // 34 00 // 00 00 // 00 00
+// 0 <= pos < 4 determines which part of input is extended to output
+// padding = false: then, 0 <= pos < 16
+func extend_full(input []int, in_wid int, pos int, padding bool) []int {
+	mid_out := make([]int, len(input))
+	output := make([]int, len(input))
+
+	if padding == false {
+		batch := len(input) / (in_wid * in_wid)
+		pos = int(reverseBits(uint32(pos), 4))
+		min_batch := batch / 16
+		if batch%16 != 0 {
+			panic("batch size not divisible by 16")
+		}
+
+		for j := 0; j < in_wid; j++ { // kinds of mov depends on j
+			tmp := make([]int, len(input))
+			for b := 0; b < min_batch; b++ {
+				for l := 0; l < in_wid; l++ {
+					idx := 16*in_wid*in_wid*b + pos*in_wid*in_wid + in_wid*j + l
+					tmp[idx] = input[idx]
+				}
+			}
+			rot := 7*j*in_wid - pos*in_wid*in_wid
+			mid_out = addSlice(mid_out, rRot(tmp, rot))
+		}
+
+		for i := 0; i < in_wid; i++ { // kinds of mov depends on i
+			tmp := make([]int, len(input))
+			for b := 0; b < min_batch; b++ {
+				for j := 0; j < in_wid; j++ {
+					idx := 16*in_wid*in_wid*b + 8*in_wid*j + i
+					tmp[idx] = mid_out[idx]
+				}
+			}
+			rot := i
+			output = addSlice(output, rRot(tmp, rot))
+		}
+	} else {
+		batch := len(input) / (2 * in_wid * 2 * in_wid)
+		pos = int(reverseBits(uint32(pos), 2))
+		min_batch := batch / 4
+		if batch%4 != 0 {
+			panic("batch size not divisible by 4")
+		}
+
+		for j := 0; j < in_wid; j++ { // kinds of mov depends on j
+			tmp := make([]int, len(input))
+			for b := 0; b < min_batch; b++ {
+				for i := 0; i < in_wid; i++ {
+					idx := 16*in_wid*in_wid*b + 4*in_wid*in_wid*pos + 4*in_wid*j + 2*i
+					tmp[idx] = input[idx]
+				}
+			}
+			rot := 4*in_wid*j - 4*in_wid*in_wid*pos
+			output = addSlice(output, rRot(tmp, rot))
+		}
+	}
+
+	return output
+}
+
+// reverse of extend_vec
+// compress a strided  vector (with in_wid * in_wid elt) inside a full-sized input vector to a smaller vector (in_wid/2 * in_wid/2) (both are bitreversed)
+// assume that the full vector is filled with sm vectors
+// e.g., 1020 // 0000 // 3040 // 0000  -> 1234(before bitreversed)
+// 0 <= pos < 4 determines to which part the output is positioned at the final output
+func comprs_vec(input []int, in_wid int, pos int) []int {
+	pos = int(reverseBits(uint32(pos), 2))
+	output := make([]int, len(input))
+	batch := len(input) / (in_wid * in_wid)
+	min_wid := in_wid / 2
+	if in_wid%2 != 0 {
+		panic("input width not divisible by 2")
+	}
+
+	for j := 0; j < min_wid; j++ { // kinds of mov depends on j
+		tmp := make([]int, len(input))
+		for b := 0; b < batch; b++ {
+			for i := 0; i < min_wid; i++ {
+				idx := 4*min_wid*min_wid*b + in_wid*j + i
+				tmp[idx] = input[idx]
+			}
+		}
+		rot := -j*min_wid + pos*min_wid*min_wid
+		output = addSlice(output, rRot(tmp, rot))
+	}
+
+	return output
+}
+
+// reverse of extend_full
+// padding = true: result sm vector is inside the 4*len(sm_vector) size vector with zeros
+// e.g., 12 00 // 34 00 // 00 00 // 00 00
+// compress a strided vector (with in_wid * in_wid) inside a full-sized input vector to a smaller vector (in_wid/2 * in_wid/2) (both are bitreversed)
+// assume that the full vector is filled with sm vectors
+// 0 <= pos < 4 determines to which part the output is positioned at the final output
+// padding = false: then, 0 <= pos < 16, and result sm vector has no zeros
+func comprs_full(input []int, in_wid int, pos int, padding bool) []int {
+	mid_out := make([]int, len(input))
+	output := make([]int, len(input))
+
+	if !padding {
+		output = mid_out
+	} else {
+		pos = int(reverseBits(uint32(pos), 2))
+		batch := len(input) / (in_wid * in_wid)
+		min_wid := in_wid / 4
+		if in_wid%4 != 0 {
+			panic("input wid not divisible by 4")
+		}
+
+		for j := 0; j < min_wid; j++ { // kinds of mov depends on j
+			tmp := make([]int, len(input))
+			for b := 0; b < batch; b++ {
+				for i := 0; i < min_wid; i++ {
+					idx := 16*min_wid*min_wid*b + 8*min_wid*j + 2*i
+					tmp[idx] = input[idx]
+				}
+			}
+			rot := -4*j*min_wid + 4*pos*min_wid*min_wid
+			output = addSlice(output, rRot(tmp, rot))
+		}
+	}
+
+	return output
+}
