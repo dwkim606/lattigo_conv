@@ -27,6 +27,20 @@ func print_vec(title string, input []int, in_wid int, pos int) {
 
 }
 
+func print_vec_fl(title string, input []float64, in_wid int, pos int) {
+	row := make([]float64, in_wid)
+	step := len(input) / (in_wid * in_wid)
+	fmt.Println(title, ": ")
+	for j := 0; j < in_wid; j++ {
+		for i := range row {
+			row[i] = input[(j*in_wid+i)*step+pos]
+		}
+		fmt.Println(row)
+	}
+	fmt.Println()
+
+}
+
 // print out arrg vec input from pos position (for half vec)
 func print_vec_hf(title string, input []int, in_wid int, pos int) {
 	row := make([]int, in_wid)
@@ -58,8 +72,31 @@ func rRot(a []int, rotation int) []int {
 	return lRot(a, len(a)-rotation)
 }
 
+func lRot_fl(a []float64, rotation int) []float64 {
+	size := len(a)
+	var newArray []float64
+	for i := 0; i < rotation; i++ {
+		newArray = a[1:size]
+		newArray = append(newArray, a[0])
+		a = newArray
+	}
+	return a
+}
+
+func rRot_fl(a []float64, rotation int) []float64 {
+	return lRot_fl(a, len(a)-rotation)
+}
+
 func addSlice(a []int, b []int) []int {
 	c := make([]int, len(a))
+	for i := range a {
+		c[i] = a[i] + b[i]
+	}
+	return c
+}
+
+func addSlice_fl(a []float64, b []float64) []float64 {
+	c := make([]float64, len(a))
 	for i := range a {
 		c[i] = a[i] + b[i]
 	}
@@ -226,6 +263,90 @@ func extend_full(input []int, in_wid int, pos int, padding bool, half bool) []in
 	return output
 }
 
+// for float64
+// will be combined with int
+func extend_full_fl(input []float64, in_wid int, pos int, padding bool, half bool) []float64 {
+	mid_out := make([]float64, len(input))
+	output := make([]float64, len(input))
+	batch := len(input) / (in_wid * in_wid)
+
+	if padding {
+		pos := int(reverseBits(uint32(pos), 2))
+		min_wid := in_wid / 2
+		if in_wid%2 != 0 {
+			panic("in wid not divisible by 2")
+		}
+
+		if half {
+			min_batch := batch / 2
+			if batch%2 != 0 {
+				panic("batch size not divisible by 2")
+			}
+
+			for j := 0; j < min_wid; j++ { // kinds of mov depends on j
+				tmp := make([]float64, len(input))
+				for b := 0; b < min_batch; b++ {
+					for i := 0; i < min_wid; i++ {
+						idx := 4*in_wid*min_wid*b + in_wid*min_wid*pos + in_wid*j + i
+						tmp[idx] = input[idx]
+					}
+				}
+				rot := in_wid*j - in_wid*min_wid*pos
+				output = addSlice_fl(output, rRot_fl(tmp, rot))
+			}
+		} else {
+			min_batch := batch / 4
+			if batch%4 != 0 {
+				panic("batch size not divisible by 4")
+			}
+
+			for j := 0; j < min_wid; j++ { // kinds of mov depends on j
+				tmp := make([]float64, len(input))
+				for b := 0; b < min_batch; b++ {
+					for i := 0; i < min_wid; i++ {
+						idx := 4*in_wid*in_wid*b + in_wid*in_wid*pos + 2*in_wid*j + 2*i
+						tmp[idx] = input[idx]
+					}
+				}
+				rot := 2*in_wid*j - in_wid*in_wid*pos
+				output = addSlice_fl(output, rRot_fl(tmp, rot))
+			}
+		}
+	} else {
+		pos = int(reverseBits(uint32(pos), 4))
+		min_batch := batch / 16
+		if batch%16 != 0 {
+			panic("batch size not divisible by 16")
+		}
+
+		for j := 0; j < in_wid; j++ { // kinds of mov depends on j
+			tmp := make([]float64, len(input))
+			for b := 0; b < min_batch; b++ {
+				for l := 0; l < in_wid; l++ {
+					idx := 16*in_wid*in_wid*b + pos*in_wid*in_wid + in_wid*j + l
+					tmp[idx] = input[idx]
+				}
+			}
+			rot := 7*j*in_wid - pos*in_wid*in_wid
+			mid_out = addSlice_fl(mid_out, rRot_fl(tmp, rot))
+		}
+
+		for i := 0; i < in_wid; i++ { // kinds of mov depends on i
+			tmp := make([]float64, len(input))
+			for b := 0; b < min_batch; b++ {
+				for j := 0; j < in_wid; j++ {
+					idx := 16*in_wid*in_wid*b + 8*in_wid*j + i
+					tmp[idx] = mid_out[idx]
+				}
+			}
+			rot := i
+			output = addSlice_fl(output, rRot_fl(tmp, rot))
+		}
+	}
+
+	return output
+}
+
 // returns the idx and rotations for each idx For extend_full
 // m_idx is mid index if mid rotation is required
 func gen_extend_full(vec_size int, in_wid int, pos int, padding bool, half bool) (r_idx, m_idx map[int][]int) {
@@ -252,7 +373,7 @@ func gen_extend_full(vec_size int, in_wid int, pos int, padding bool, half bool)
 						tmp[idx] = 1
 					}
 				}
-				rot := in_wid*j - in_wid*min_wid*pos
+				rot := -in_wid*j + in_wid*min_wid*pos
 				r_idx[rot] = tmp
 				// output = addSlice(output, rRot(tmp, rot))
 			}
@@ -269,7 +390,7 @@ func gen_extend_full(vec_size int, in_wid int, pos int, padding bool, half bool)
 						tmp[idx] = 1
 					}
 				}
-				rot := 2*in_wid*j - in_wid*in_wid*pos
+				rot := -2*in_wid*j + in_wid*in_wid*pos
 				r_idx[rot] = tmp
 				// output = addSlice(output, rRot(tmp, rot))
 			}
@@ -289,7 +410,7 @@ func gen_extend_full(vec_size int, in_wid int, pos int, padding bool, half bool)
 					tmp[idx] = 1
 				}
 			}
-			rot := 7*j*in_wid - pos*in_wid*in_wid
+			rot := -7*j*in_wid + pos*in_wid*in_wid
 			m_idx[rot] = tmp
 			// mid_out = addSlice(mid_out, rRot(tmp, rot))
 		}
@@ -302,7 +423,7 @@ func gen_extend_full(vec_size int, in_wid int, pos int, padding bool, half bool)
 					tmp[idx] = 1
 				}
 			}
-			rot := i
+			rot := -i
 			r_idx[rot] = tmp
 			// output = addSlice(output, rRot(tmp, rot))
 		}

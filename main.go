@@ -13,16 +13,24 @@ var err error
 
 const log_c_scale = 30
 const log_in_scale = 30
-const log_out_scale = 45
-const logN = 16
+const log_out_scale = 30
 
 func main() {
 
-	// testBRrot()
+	logN := 10
+	in_wid := 8
+	ker_wid := 3
+	print := true
+
+	input := testBRrot(logN, in_wid)
 	// testPoly()
 	// testBoot()
-	testBootFast()
 
+	testBootFast(input, logN, in_wid, ker_wid, print)
+
+	// valuesTest := testBootFast(logN, in_wid, ker_wid, print)
+	// valuesWant := testConv(logN, in_wid, ker_wid, print)
+	// printDebugCfsPlain(valuesTest, valuesWant)
 }
 
 func printDebugCfs(params ckks.Parameters, ciphertext *ckks.Ciphertext, valuesWant []float64, decryptor ckks.Decryptor, encoder ckks.Encoder) (valuesTest []float64) {
@@ -59,6 +67,31 @@ func printDebugCfs(params ckks.Parameters, ciphertext *ckks.Ciphertext, valuesWa
 	fmt.Println()
 
 	return
+}
+
+func printDebugCfsPlain(valuesTest, valuesWant []float64) {
+	total_size := make([]int, 15)
+
+	fmt.Printf("ValuesTest:")
+	for i := range total_size {
+		fmt.Printf("%6.10f, ", valuesTest[i])
+	}
+	fmt.Printf("... \n")
+	fmt.Printf("ValuesWant:")
+	for i := range total_size {
+		fmt.Printf("%6.10f, ", valuesWant[i])
+	}
+	fmt.Printf("... \n")
+
+	valuesWantC := make([]complex128, len(valuesWant))
+	valuesTestC := make([]complex128, len(valuesTest))
+	for i := range valuesWantC {
+		valuesWantC[i] = complex(valuesWant[i], 0)
+		valuesTestC[i] = complex(valuesTest[i], 0)
+	}
+	precStats := ckks.GetPrecisionStatsPlain(valuesWantC, valuesTestC, len(valuesWantC), 0)
+	fmt.Println(precStats.String())
+	fmt.Println()
 }
 
 func printDebug(params ckks.Parameters, ciphertext *ckks.Ciphertext, valuesWant []complex128, decryptor ckks.Decryptor, encoder ckks.Encoder) (valuesTest []complex128) {
@@ -138,13 +171,15 @@ func prt_vec(vec []float64) {
 	fmt.Println()
 }
 
-// print slice as a 2D slice with rowLen row length
-func prt_mat(vec []float64, rowLen int) {
+// print slice as a 2D slice with rowLen row length, only shows (show, show) entries show = 0 : print all
+func prt_mat(vec []float64, rowLen int, show int) {
 	mat_size := len(vec) / rowLen
 	j, k := 1, 1
 	for i := 0; i < len(vec); i += rowLen {
-		fmt.Printf("(%d, %d): ", j, k)
-		prt_vec(vec[i : i+rowLen])
+		if (show == 0) || ((j <= show) && (k <= show)) {
+			fmt.Printf("(%d, %d): ", j, k)
+			prt_vec(vec[i : i+rowLen])
+		}
 		k++
 		if k*k > mat_size {
 			k = 1

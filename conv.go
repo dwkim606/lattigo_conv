@@ -30,8 +30,8 @@ func reverseOrder(input []float64, bitwid int) []float64 {
 }
 
 // Output the vector containing the valid result of our conv algorithm (format is the same as python; (row, col, batch)-format)
-// in_wid, ker_wid, batch all are those from the input of our conv algorithm
-func reshape_conv_out(result []float64, in_wid int, ker_wid int, batch int) []float64 {
+// in_wid, ker_wid, batch all are those from the input of our conv algorithm // st: starting point of read
+func reshape_conv_out(result []float64, in_wid, ker_wid, batch int) []float64 {
 	out_wid := in_wid - ker_wid + 1
 	prt_out := make([]float64, out_wid*out_wid*batch)
 
@@ -88,7 +88,7 @@ func encode_ker(ker_in [][]float64, i int, in_wid int, ker_wid int) []float64 {
 
 // Generate the logN # of plaintexts idx[i] = X^(2^i) and GaloisKeys for each
 // Required for Packing
-func gen_idxNlogs(keygen rlwe.KeyGenerator, sk *rlwe.SecretKey, encoder ckks.Encoder, params ckks.Parameters) (idx []*ckks.Plaintext, pack_eval ckks.Evaluator) {
+func gen_idxNlogs(E_lv int, keygen rlwe.KeyGenerator, sk *rlwe.SecretKey, encoder ckks.Encoder, params ckks.Parameters) (idx []*ckks.Plaintext, pack_eval ckks.Evaluator) {
 	logN := params.LogN()
 	N := params.N()
 	gals := []uint64{}
@@ -97,7 +97,7 @@ func gen_idxNlogs(keygen rlwe.KeyGenerator, sk *rlwe.SecretKey, encoder ckks.Enc
 
 	for i := 0; i < logN; i++ {
 		coeffs[1<<i] = 1.0
-		idx[i] = ckks.NewPlaintext(params, params.MaxLevel(), 1.0)
+		idx[i] = ckks.NewPlaintext(params, E_lv, 1.0)
 		encoder.EncodeCoeffs(coeffs, idx[i])
 		encoder.ToNTT(idx[i])
 		coeffs[1<<i] = 0.0
@@ -143,6 +143,29 @@ func pack_ctxts(pack_eval ckks.Evaluator, ctxts_in []*ckks.Ciphertext, cnum int,
 	}
 
 	return ctxts[0]
+}
+
+// extend ctxt using given rotations so that it outputs a ctxt to be convolved with filter
+func ext_ctxt(eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext, r_idx, m_idx map[int][]int, params ckks.Parameters) (result *ckks.Ciphertext) {
+	st := true
+
+	for rot, elt := range r_idx {
+		tmp := make([]complex128, params.Slots())
+		for i := range elt {
+			tmp[i] = complex(float64(elt[i]), 0)
+		}
+		plain_tmp := encoder.EncodeNTTAtLvlNew(input.Level(), tmp, params.LogSlots())
+
+		if st {
+			result = eval.RotateNew(eval.MulNew(input, plain_tmp), rot)
+			st = false
+		} else {
+			ctxt_tmp := eval.RotateNew(eval.MulNew(input, plain_tmp), rot)
+			eval.Add(result, ctxt_tmp, result)
+		}
+	}
+
+	return result
 }
 
 // // Perform FFT to encode N coefficients into N/2 complex values (that will be encoded with encode)
