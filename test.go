@@ -561,7 +561,8 @@ func testBRrot(logN, in_wid int) []int {
 	// }
 }
 
-func testBootFast(ext_input []int, logN, in_wid, ker_wid int, printResult bool) []float64 {
+// Eval Conv & Boot
+func testBootFast_Conv(ext_input []int, logN, in_wid, ker_wid int, printResult bool) []float64 {
 
 	N := (1 << logN)
 	in_size := in_wid * in_wid
@@ -863,4 +864,56 @@ func testBootFast(ext_input []int, logN, in_wid, ker_wid int, printResult bool) 
 	}
 
 	return cfs_tmp
+}
+
+// Encode Kernel and outputs Plain(ker)
+func prepKer(params ckks.Parameters, encoder ckks.Encoder, encryptor ckks.Encryptor, N, in_wid, ker_wid, ECD_LV int, printResult bool) []*ckks.Plaintext {
+	batch := N / (in_wid * in_wid)
+	ker_size := ker_wid * ker_wid
+
+	batch_real := batch / 16 // num batches at convolution 		// strided conv -> /(4*4)
+	in_wid_out := in_wid * 4 // size of in_wid at convolution 	// strided conv -> *4
+
+	ker_in := make([]float64, batch_real*batch_real*ker_size)
+	for i := range ker_in {
+		ker_in[i] = 1.0 * (float64(len(ker_in)) - float64(i) - 1) // float64(len(ker1_in))
+	}
+	ker1 := make([][]float64, batch_real)
+	reshape_ker(ker_in, ker1)
+
+	pl_ker := make([]*ckks.Plaintext, batch_real)
+	for i := 0; i < batch_real; i++ {
+		pl_ker[i] = ckks.NewPlaintext(params, ECD_LV, params.Scale())
+		encoder.EncodeCoeffs(encode_ker(ker1, i, in_wid_out, ker_wid), pl_ker[i])
+		encoder.ToNTT(pl_ker[i])
+	}
+
+	if printResult {
+		fmt.Println("vec size: ", N)
+		fmt.Println("input width: ", in_wid)
+		fmt.Println("kernel width: ", ker_wid)
+		fmt.Println("num batches (input): ", batch)
+		fmt.Println("num batches (real): ", batch_real)
+		fmt.Println("Ker1_in (1st part): ")
+		prt_vec(ker1[0])
+	}
+
+	return pl_ker
+}
+
+// Eval Conv, then Pack
+func conv_then_pack(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_in *ckks.Ciphertext, pl_ker, plain_idx []*ckks.Plaintext, batch_out int) *ckks.Ciphertext {
+
+	start := time.Now()
+	ctxt_out := make([]*ckks.Ciphertext, batch_out)
+	for i := 0; i < batch_out; i++ {
+		ctxt_out[i] = pack_evaluator.MulNew(ctxt_in, pl_ker[i])
+	}
+
+	ctxt_result := pack_ctxts(pack_evaluator, ctxt_out, batch_out, plain_idx, params)
+	fmt.Println("Result Scale: ", math.Log2(ctxt_result.Scale))
+	fmt.Println("Result LV: ", ctxt_result.Level())
+	fmt.Printf("Done in %s \n", time.Since(start))
+
+	return ctxt_result
 }
