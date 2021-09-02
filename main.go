@@ -71,7 +71,7 @@ func main() {
 	}
 	fmt.Printf("Done in %s \n", time.Since(start))
 
-	ext_input := testBRrot(logN, in_wid) // Takes arranged input (assume intermediate layers)
+	ext_input := testBRrot(logN, in_wid, false) // Takes arranged input (assume intermediate layers)
 
 	input := make([]float64, N)
 	for i := range input {
@@ -84,17 +84,23 @@ func main() {
 	fmt.Printf("Encryption: Done in %s \n", time.Since(start))
 
 	fmt.Println("Input matrix: ")
-	prt_vec(input)
+	// prt_vec(input)
 	int_tmp := make([]int, N)
 	for i := range input {
 		int_tmp[i] = int(float64(N) * input[i])
 	}
-	fmt.Print("Input: \n")
 	for b := 0; b < batch/4; b++ {
 		print_vec("input ("+strconv.Itoa(b)+")", int_tmp, 2*in_wid, b)
 	}
 
-	pl_ker := prepKer(params, encoder, encryptor, N, in_wid, ker_wid, ECD_LV, true)
+	if print {
+		fmt.Println("vec size: ", N)
+		fmt.Println("input width: ", in_wid)
+		fmt.Println("kernel width: ", ker_wid)
+		fmt.Println("num batches (input): ", batch)
+	}
+
+	pl_ker := prepKer(params, encoder, encryptor, in_wid, ker_wid, batch, batch/16, ECD_LV)
 
 	fmt.Print("Boot in: ")
 	fmt.Println()
@@ -108,7 +114,7 @@ func main() {
 	fmt.Println("after Boot: LV = ", ctxt1.Level(), " Scale = ", math.Log2(ctxt1.Scale))
 
 	ctxt1 = ext_ctxt(evaluator, encoder, ctxt1, r_idx, m_idx, params)
-	ctxt2 = ext_ctxt(evaluator, encoder, ctxt2, r_idx, m_idx, params)
+	// ctxt2 = ext_ctxt(evaluator, encoder, ctxt2, r_idx, m_idx, params)
 
 	ciphertext := btp.BootstrappConv_StoC(ctxt1, ctxt2)
 
@@ -130,13 +136,13 @@ func main() {
 	values_test = append(values_tmp1, values_tmp2...)
 	printDebugCfs(params, ciphertext, values_test, decryptor, encoder)
 
-	// Move the ctxt position before convolution
-	xi_tmp := make([]float64, N)
-	xi_tmp[(ker_wid-1)*(4*in_wid+1)] = 1.0
-	xi_plain := ckks.NewPlaintext(params, ECD_LV, 1.0)
-	encoder.EncodeCoeffs(xi_tmp, xi_plain)
-	encoder.ToNTT(xi_plain)
-	evaluator.Mul(ciphertext, xi_plain, ciphertext)
+	// Move the ctxt position before convolution (Not necessary, since we can modify kernel)
+	// xi_tmp := make([]float64, N)
+	// xi_tmp[(ker_wid-1)*(4*in_wid+1)] = 1.0
+	// xi_plain := ckks.NewPlaintext(params, ECD_LV, 1.0)
+	// encoder.EncodeCoeffs(xi_tmp, xi_plain)
+	// encoder.ToNTT(xi_plain)
+	// evaluator.Mul(ciphertext, xi_plain, ciphertext)
 
 	ctxt_result := conv_then_pack(params, pack_evaluator, ciphertext, pl_ker, plain_idx, batch/16)
 
@@ -150,10 +156,6 @@ func main() {
 	start = time.Now()
 	decryptor.Decrypt(ctxt_result, plain_tmp)
 	cfs_tmp := reshape_conv_out(encoder.DecodeCoeffs(plain_tmp), 4*in_wid, ker_wid, batch/16)
-	// cfs_tmp := make([]float64, N)
-	// for i := range cfs_tmp {
-	// 	cfs_tmp[i] = float64(i + 1)
-	// }
 
 	if print {
 		fmt.Print("Result: \n")
@@ -161,6 +163,7 @@ func main() {
 	}
 	fmt.Printf("Done in %s \n", time.Since(start))
 
+	cfs_tmp = encoder.DecodeCoeffs(plain_tmp)
 	int_tmpn := make([]int, N)
 	for i := range cfs_tmp {
 		int_tmpn[i] = int(cfs_tmp[i])

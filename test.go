@@ -65,12 +65,12 @@ func testConv(logN, in_wid, ker_wid int, printResult bool) []float64 {
 		ker1_in[i] = 1.0 * float64(i) / float64(batch*batch*ker_size)
 	}
 	ker1 := make([][]float64, batch)
-	reshape_ker(ker1_in, ker1)
+	reshape_ker(ker1_in, ker1, ker_size)
 
 	pl_ker := make([]*ckks.Plaintext, batch)
 	for i := 0; i < batch; i++ {
 		pl_ker[i] = ckks.NewPlaintext(params, params.MaxLevel(), params.Scale())
-		encoder.EncodeCoeffs(encode_ker(ker1, i, in_wid, ker_wid), pl_ker[i])
+		encoder.EncodeCoeffs(encode_ker(ker1, i, in_wid, batch, ker_wid), pl_ker[i])
 		encoder.ToNTT(pl_ker[i])
 	}
 
@@ -453,13 +453,15 @@ func testBoot() {
 
 }
 
-func testBRrot(logN, in_wid int) []int {
+func testBRrot(logN, in_wid int, print bool) []int {
 
 	N := (1 << logN)
 	in_size := in_wid * in_wid
 	batch := N / in_size
 
-	fmt.Print("Batch: ", batch, "\n\n")
+	if print {
+		fmt.Print("Batch: ", batch, "\n\n")
+	}
 
 	sm_input := make([]int, in_size) // each will be packed to input vector
 	input := make([]int, N)
@@ -483,8 +485,10 @@ func testBRrot(logN, in_wid int) []int {
 
 	// row := 4 * in_wid
 
-	for b := 0; b < 4; b++ {
-		print_vec("input ("+strconv.Itoa(b)+")", input, in_wid, b)
+	if print {
+		for b := 0; b < 4; b++ {
+			print_vec("input ("+strconv.Itoa(b)+")", input, in_wid, b)
+		}
 	}
 	for i, elt := range input {
 		input_rev[reverseBits(uint32(i), logN)] = elt
@@ -509,8 +513,10 @@ func testBRrot(logN, in_wid int) []int {
 	for i, elt := range test_out_rev {
 		test_out[reverseBits(uint32(i), logN)] = elt
 	}
-	for b := 0; b < 1; b++ {
-		print_vec("output ("+strconv.Itoa(b)+")", test_out, 2*in_wid, b)
+	if print {
+		for b := 0; b < 1; b++ {
+			print_vec("output ("+strconv.Itoa(b)+")", test_out, 2*in_wid, b)
+		}
 	}
 
 	return test_out
@@ -641,12 +647,12 @@ func testBootFast_Conv(ext_input []int, logN, in_wid, ker_wid int, printResult b
 		ker1_in[i] = 1.0 * (float64(len(ker1_in)) - float64(i) - 1) // float64(len(ker1_in))
 	}
 	ker1 := make([][]float64, batch_real)
-	reshape_ker(ker1_in, ker1)
+	reshape_ker(ker1_in, ker1, ker_size)
 
 	pl_ker := make([]*ckks.Plaintext, batch_real)
 	for i := 0; i < batch_real; i++ {
 		pl_ker[i] = ckks.NewPlaintext(params, ECD_LV, params.Scale())
-		encoder.EncodeCoeffs(encode_ker(ker1, i, in_wid_out, ker_wid), pl_ker[i])
+		encoder.EncodeCoeffs(encode_ker(ker1, i, in_wid_out, batch_real, ker_wid), pl_ker[i])
 		encoder.ToNTT(pl_ker[i])
 	}
 
@@ -867,35 +873,25 @@ func testBootFast_Conv(ext_input []int, logN, in_wid, ker_wid int, printResult b
 }
 
 // Encode Kernel and outputs Plain(ker)
-func prepKer(params ckks.Parameters, encoder ckks.Encoder, encryptor ckks.Encryptor, N, in_wid, ker_wid, ECD_LV int, printResult bool) []*ckks.Plaintext {
-	batch := N / (in_wid * in_wid)
+// in_wid : width of input (except padding)
+// in_batch / out_batch: batches in 1 ctxt (input / output)
+func prepKer(params ckks.Parameters, encoder ckks.Encoder, encryptor ckks.Encryptor, in_wid, ker_wid, in_batch, out_batch, ECD_LV int) []*ckks.Plaintext {
 	ker_size := ker_wid * ker_wid
+	in_batch_conv := in_batch / 16 // num batches at convolution 		// strided conv -> /(4*4)
+	in_wid_conv := in_wid * 4      // size of in_wid at convolution 	// strided conv -> *4
 
-	batch_real := batch / 16 // num batches at convolution 		// strided conv -> /(4*4)
-	in_wid_out := in_wid * 4 // size of in_wid at convolution 	// strided conv -> *4
-
-	ker_in := make([]float64, batch_real*batch_real*ker_size)
+	ker_in := make([]float64, in_batch*out_batch*ker_size)
 	for i := range ker_in {
 		ker_in[i] = 1.0 * (float64(len(ker_in)) - float64(i) - 1) // float64(len(ker1_in))
 	}
-	ker1 := make([][]float64, batch_real)
-	reshape_ker(ker_in, ker1)
+	ker1 := make([][]float64, out_batch) // ker1[i][j] = j-th kernel for i-th output
+	reshape_ker(ker_in, ker1, ker_size)
 
-	pl_ker := make([]*ckks.Plaintext, batch_real)
-	for i := 0; i < batch_real; i++ {
+	pl_ker := make([]*ckks.Plaintext, out_batch)
+	for i := 0; i < out_batch; i++ {
 		pl_ker[i] = ckks.NewPlaintext(params, ECD_LV, params.Scale())
-		encoder.EncodeCoeffs(encode_ker(ker1, i, in_wid_out, ker_wid), pl_ker[i])
+		encoder.EncodeCoeffs(encode_ker(ker1, i, in_wid_conv, in_batch_conv, ker_wid), pl_ker[i])
 		encoder.ToNTT(pl_ker[i])
-	}
-
-	if printResult {
-		fmt.Println("vec size: ", N)
-		fmt.Println("input width: ", in_wid)
-		fmt.Println("kernel width: ", ker_wid)
-		fmt.Println("num batches (input): ", batch)
-		fmt.Println("num batches (real): ", batch_real)
-		fmt.Println("Ker1_in (1st part): ")
-		prt_vec(ker1[0])
 	}
 
 	return pl_ker

@@ -38,7 +38,7 @@ func reshape_conv_out(result []float64, in_wid, ker_wid, batch int) []float64 {
 	for i := 0; i < batch; i++ {
 		for j := 0; j < out_wid; j++ {
 			for k := 0; k < out_wid; k++ {
-				prt_out[i+batch*(j*out_wid+k)] = result[batch*(in_wid+1)*(ker_wid-1)+i+batch*(j*in_wid+k)]
+				prt_out[i+batch*(j*out_wid+k)] = result[i+batch*(j*in_wid+k)] //[batch*(in_wid+1)*(ker_wid-1)+i+batch*(j*in_wid+k)]
 			}
 		}
 	}
@@ -47,29 +47,27 @@ func reshape_conv_out(result []float64, in_wid, ker_wid, batch int) []float64 {
 }
 
 // Reshape 1-D ker_in (from python) into batch number of ker_outs: ker_out[i][j] = j-th kernel (elements then batch order) for i-th output
-// i.e., ker_out is of the shape (batch, (batch * ker_size))
-func reshape_ker(ker_in []float64, ker_out [][]float64) {
-	bat := len(ker_out)
-	k_sz := len(ker_in) / (bat * bat)
+// i.e., ker_out is of the shape (out_batch, (in_batch * ker_size))
+func reshape_ker(ker_in []float64, ker_out [][]float64, k_sz int) {
+	out_batch := len(ker_out)
+	in_batch := len(ker_in) / (k_sz * out_batch)
 
-	for i := 0; i < bat; i++ {
-		ker_out[i] = make([]float64, k_sz*bat)
-		for j := 0; j < bat; j++ {
+	for i := 0; i < out_batch; i++ {
+		ker_out[i] = make([]float64, k_sz*in_batch)
+		for j := 0; j < in_batch; j++ {
 			for k := 0; k < k_sz; k++ {
-				ker_out[i][j*k_sz+k] = ker_in[i+j*bat+k*bat*bat]
+				ker_out[i][j*k_sz+k] = ker_in[i+j*out_batch+k*in_batch*out_batch]
 			}
 		}
 	}
 }
 
 // Encode ker_outs from reshape_ker into the i-th ker vector output
-func encode_ker(ker_in [][]float64, i int, in_wid int, ker_wid int) []float64 {
-	batch := len(ker_in)
-	vec_size := in_wid * in_wid * batch
-
+func encode_ker(ker_in [][]float64, i, in_wid, in_batch, ker_wid int) []float64 {
+	vec_size := in_wid * in_wid * in_batch
 	tmp := make([]float64, vec_size)
 
-	for j := 0; j < batch; j++ { // j-th input (batch)
+	for j := 0; j < in_batch; j++ { // j-th input (batch)
 		for k := 0; k < ker_wid*ker_wid; k++ {
 			if k == 0 {
 				if j == 0 {
@@ -78,7 +76,7 @@ func encode_ker(ker_in [][]float64, i int, in_wid int, ker_wid int) []float64 {
 					tmp[(vec_size-j)%vec_size] = -ker_in[i][j*ker_wid*ker_wid+(ker_wid*ker_wid-1)] // * scale;
 				}
 			} else {
-				tmp[-j+(in_wid*(k/ker_wid)+k%ker_wid)*batch] = ker_in[i][j*ker_wid*ker_wid+(ker_wid*ker_wid-1-k)] // * scale;
+				tmp[-j+(in_wid*(k/ker_wid)+k%ker_wid)*in_batch] = ker_in[i][j*ker_wid*ker_wid+(ker_wid*ker_wid-1-k)] // * scale;
 			}
 		}
 	}
