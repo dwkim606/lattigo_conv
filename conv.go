@@ -30,15 +30,15 @@ func reverseOrder(input []float64, bitwid int) []float64 {
 }
 
 // Output the vector containing the valid result of our conv algorithm (format is the same as python; (row, col, batch)-format)
-// in_wid, ker_wid, batch all are those from the input of our conv algorithm // st: starting point of read
-func reshape_conv_out(result []float64, in_wid, ker_wid, batch int) []float64 {
-	out_wid := in_wid - ker_wid + 1
-	prt_out := make([]float64, out_wid*out_wid*batch)
+// prt_wid, batch all are those from the output of our conv algorithm (consider padding)
+func reshape_conv_out(result []float64, prt_wid, batch int) []float64 {
+	prt_out := make([]float64, prt_wid*prt_wid*batch)
+	in_wid := 2 * prt_wid
 
 	for i := 0; i < batch; i++ {
-		for j := 0; j < out_wid; j++ {
-			for k := 0; k < out_wid; k++ {
-				prt_out[i+batch*(j*out_wid+k)] = result[i+batch*(j*in_wid+k)] //[batch*(in_wid+1)*(ker_wid-1)+i+batch*(j*in_wid+k)]
+		for j := 0; j < prt_wid; j++ {
+			for k := 0; k < prt_wid; k++ {
+				prt_out[i+batch*(j*prt_wid+k)] = result[i+batch*(j*in_wid+k)] //[batch*(in_wid+1)*(ker_wid-1)+i+batch*(j*in_wid+k)]
 			}
 		}
 	}
@@ -48,7 +48,8 @@ func reshape_conv_out(result []float64, in_wid, ker_wid, batch int) []float64 {
 
 // Reshape 1-D ker_in (from python) into batch number of ker_outs: ker_out[i][j] = j-th kernel (elements then batch order) for i-th output
 // i.e., ker_out is of the shape (out_batch, (in_batch * ker_size))
-func reshape_ker(ker_in []float64, ker_out [][]float64, k_sz int) {
+// trans = true for transposed convolution
+func reshape_ker(ker_in []float64, ker_out [][]float64, k_sz int, trans bool) {
 	out_batch := len(ker_out)
 	in_batch := len(ker_in) / (k_sz * out_batch)
 
@@ -56,30 +57,60 @@ func reshape_ker(ker_in []float64, ker_out [][]float64, k_sz int) {
 		ker_out[i] = make([]float64, k_sz*in_batch)
 		for j := 0; j < in_batch; j++ {
 			for k := 0; k < k_sz; k++ {
-				ker_out[i][j*k_sz+k] = ker_in[i+j*out_batch+k*in_batch*out_batch]
+				if trans {
+					ker_out[i][j*k_sz+(k_sz-k-1)] = ker_in[i+j*out_batch+k*in_batch*out_batch]
+				} else {
+					ker_out[i][j*k_sz+k] = ker_in[i+j*out_batch+k*in_batch*out_batch]
+				}
 			}
 		}
 	}
 }
 
 // Encode ker_outs from reshape_ker into the i-th ker vector output
-func encode_ker(ker_in [][]float64, i, in_wid, in_batch, ker_wid int) []float64 {
+// in_wid, in_batch is those for input (to be convolved) includng padding
+func encode_ker(ker_in [][]float64, pos, i, in_wid, in_batch, ker_wid int) []float64 {
 	vec_size := in_wid * in_wid * in_batch
 	tmp := make([]float64, vec_size)
+	bias := pos * ker_wid * ker_wid * in_batch
+	k_sz := ker_wid * ker_wid
 
+	// allocate each kernel so that 0-th batch and B-1th batch adds together at B-1th position (B = in_batch)
 	for j := 0; j < in_batch; j++ { // j-th input (batch)
-		for k := 0; k < ker_wid*ker_wid; k++ {
-			if k == 0 {
-				if j == 0 {
-					tmp[(vec_size-j)%vec_size] = ker_in[i][j*ker_wid*ker_wid+(ker_wid*ker_wid-1)] // * scale;
-				} else {
-					tmp[(vec_size-j)%vec_size] = -ker_in[i][j*ker_wid*ker_wid+(ker_wid*ker_wid-1)] // * scale;
-				}
-			} else {
-				tmp[-j+(in_wid*(k/ker_wid)+k%ker_wid)*in_batch] = ker_in[i][j*ker_wid*ker_wid+(ker_wid*ker_wid-1-k)] // * scale;
-			}
+		for k := 0; k < k_sz; k++ {
+			tmp[(in_wid*(k/ker_wid)+k%ker_wid)*in_batch+j] = ker_in[i][(in_batch-1-j)*k_sz+(k_sz-1-k)+bias] // * scale;
 		}
 	}
+
+	// for j := 0; j < in_batch; j++ { // j-th input (batch)
+	// 	for k := 0; k < ker_wid*ker_wid; k++ {
+	// 		if k == 0 {
+	// 			if j == 0 {
+	// 				tmp[(vec_size-j)%vec_size] = ker_in[i][j*ker_wid*ker_wid+(ker_wid*ker_wid-1)+bias] // * scale;
+	// 			} else {
+	// 				tmp[(vec_size-j)%vec_size] = -ker_in[i][j*ker_wid*ker_wid+(ker_wid*ker_wid-1)+bias] // * scale;
+	// 			}
+	// 		} else {
+	// 			tmp[-j+(in_wid*(k/ker_wid)+k%ker_wid)*in_batch] = ker_in[i][j*ker_wid*ker_wid+(ker_wid*ker_wid-1-k)+bias] // * scale;
+	// 		}
+	// 	}
+	// }
+
+	// move the kernel to left adj times, so that the result of "transposed" convolution appears at 0-th position
+	// adj := (in_wid+1)*(ker_wid-3)/2 + (in_batch - 1)
+	adj := (in_batch - 1) + (in_batch)*(in_wid+1)*(ker_wid-3)/2
+	ttmp := make([]float64, adj)
+	for i := 0; i < adj; i++ {
+		ttmp[i] = tmp[vec_size-adj+i]
+		tmp[vec_size-adj+i] = -tmp[i]
+	}
+	for i := 0; i < vec_size-2*adj; i++ {
+		tmp[i] = tmp[i+adj]
+	}
+	for i := 0; i < adj; i++ {
+		tmp[i+vec_size-2*adj] = ttmp[i]
+	}
+	// fmt.Println("tmp: ", tmp)
 
 	return tmp
 }
