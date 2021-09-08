@@ -163,11 +163,11 @@ func main() {
 	plain_tmp := ckks.NewPlaintext(params, params.MaxLevel(), params.Scale())
 	start = time.Now()
 	decryptor.Decrypt(ctxt_result, plain_tmp)
-	cfs_tmp := reshape_conv_out(encoder.DecodeCoeffs(plain_tmp), 2*in_wid, st_batch/4)
+	cfs_tmp := reshape_conv_out(encoder.DecodeCoeffs(plain_tmp), 2*in_wid, end_batch)
 
 	if print {
 		fmt.Print("Result: \n")
-		prt_mat(cfs_tmp, st_batch/4, 2*in_wid)
+		prt_mat(cfs_tmp, end_batch, 2*in_wid)
 	}
 	fmt.Printf("Done in %s \n", time.Since(start))
 
@@ -330,14 +330,15 @@ func prt_vec(vec []float64) {
 	fmt.Println()
 }
 
-// print slice as a 2D slice with rowLen row length, only shows (show, show) entries show = 0 : print all
-func prt_mat(vec []float64, rowLen int, show int) {
-	mat_size := len(vec) / rowLen
+// vec = arrgvec with batch batches, each batch is sqr-sized
+// print (i,j)-th position in [batches], only shows (show, show) entries show = 0 : print all
+func prt_mat(vec []float64, batch, show int) {
+	mat_size := len(vec) / batch
 	j, k := 1, 1
-	for i := 0; i < len(vec); i += rowLen {
+	for i := 0; i < len(vec); i += batch {
 		if (show == 0) || (((j == 1) || (j == show)) && ((k <= 3) || (k >= show-3))) {
 			fmt.Printf("(%d, %d): ", j, k)
-			prt_vec(vec[i : i+rowLen])
+			prt_vec(vec[i : i+batch])
 		}
 		k++
 		if k*k > mat_size {

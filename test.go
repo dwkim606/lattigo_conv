@@ -882,12 +882,14 @@ func prepKer(params ckks.Parameters, encoder ckks.Encoder, encryptor ckks.Encryp
 
 	ker_in := make([]float64, in_batch*out_batch*ker_size)
 	for i := range ker_in {
-		ker_in[i] = float64(i) / float64(len(ker_in)) //* (float64(len(ker_in)) - float64(i) - 1) // float64(len(ker1_in))
+		ker_in[i] = float64(i) / float64(len(ker_in)) // float64(i) / float64(len(ker_in)) //* (float64(len(ker_in)) - float64(i) - 1) // float64(len(ker1_in))
 	}
 	ker1 := make([][]float64, out_batch) // ker1[i][j] = j-th kernel for i-th output
 	reshape_ker(ker_in, ker1, ker_size, true)
 
-	// fmt.Println("ker1: ", ker1[0])
+	// prt_mat(ker1[0], 16, 0)
+	// fmt.Println("ker11: ", ker1[0])
+
 	pl_ker := make([][]*ckks.Plaintext, 4) // for strided conv
 	for pos := 0; pos < 4; pos++ {
 		pl_ker[pos] = make([]*ckks.Plaintext, out_batch)
@@ -902,6 +904,7 @@ func prepKer(params ckks.Parameters, encoder ckks.Encoder, encryptor ckks.Encryp
 }
 
 // Eval Conv, then Pack
+// The ciphertexts must be packed into full (without vacant position)
 func conv_then_pack(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_in []*ckks.Ciphertext, pl_ker [][]*ckks.Plaintext, plain_idx []*ckks.Plaintext, batch_out int) *ckks.Ciphertext {
 
 	start := time.Now()

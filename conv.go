@@ -29,7 +29,7 @@ func reverseOrder(input []float64, bitwid int) []float64 {
 	return out
 }
 
-// Output the vector containing the valid result of our conv algorithm (format is the same as python; (row, col, batch)-format)
+// Extract upper left elements of size prt_wid * prt_wid from the input arrg vec with batch batches
 // prt_wid, batch all are those from the output of our conv algorithm (consider padding)
 func reshape_conv_out(result []float64, prt_wid, batch int) []float64 {
 	prt_out := make([]float64, prt_wid*prt_wid*batch)
@@ -58,9 +58,9 @@ func reshape_ker(ker_in []float64, ker_out [][]float64, k_sz int, trans bool) {
 		for j := 0; j < in_batch; j++ {
 			for k := 0; k < k_sz; k++ {
 				if trans {
-					ker_out[i][j*k_sz+(k_sz-k-1)] = ker_in[i+j*out_batch+k*in_batch*out_batch]
+					ker_out[i][j*k_sz+(k_sz-k-1)] = ker_in[j+i*in_batch+k*out_batch*in_batch]
 				} else {
-					ker_out[i][j*k_sz+k] = ker_in[i+j*out_batch+k*in_batch*out_batch]
+					ker_out[i][j*k_sz+k] = ker_in[j+i*in_batch+k*out_batch*in_batch]
 				}
 			}
 		}
@@ -140,7 +140,7 @@ func gen_idxNlogs(E_lv int, keygen rlwe.KeyGenerator, sk *rlwe.SecretKey, encode
 }
 
 // Pack cnum (alwyas Po2) number of ctxts(in_a[i]) into one
-// Each in_a[i] must be arrvec (i.e., sparse with steps)
+// Each in_a[i] must be arrvec (i.e., sparse with steps) with full size
 // Also get the plaintexts idx[i] = X^i from gen_idx
 func pack_ctxts(pack_eval ckks.Evaluator, ctxts_in []*ckks.Ciphertext, cnum int, idx []*ckks.Plaintext, params ckks.Parameters) (ctxt *ckks.Ciphertext) {
 	step := cnum / 2
