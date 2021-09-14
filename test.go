@@ -350,6 +350,7 @@ func testPoly() {
 // Divide coeff gen later
 func evalReLU(params ckks.Parameters, evaluator ckks.Evaluator, ctxt_in *ckks.Ciphertext, prescale complex128) (ctxt_out *ckks.Ciphertext) {
 	// alpha 10 (from minimax)
+	// prescale is multiplied to improve precision (previously done in StoC matmult)
 	coeffs_tmp := []complex128{0.0, 10.8541842577442 * prescale, 0.0, -62.2833925211098 * prescale * prescale * prescale,
 		0.0, 114.369227820443 * prescale * prescale * prescale * prescale * prescale, 0.0, -62.8023496973074 * prescale * prescale * prescale * prescale * prescale * prescale * prescale}
 	coeffsReLU := ckks.NewPoly(coeffs_tmp)
@@ -359,7 +360,7 @@ func evalReLU(params ckks.Parameters, evaluator ckks.Evaluator, ctxt_in *ckks.Ci
 
 	// coeffs_tmp3 := []complex128{0.0, 3.29956739043733, 0.0, -7.84227260291355, 0.0, 12.8907764115564, 0.0, -12.4917112584486, 0.0, 6.94167991428074, 0.0, -2.04298067399942, 0.0, 0.246407138926031}
 	// mult by 0.5 for ReLU Eval
-	coeffs_tmp3 := []complex128{0.0, 3.29956739043733 / 2, 0.0, -7.84227260291355 / 2, 0.0, 12.8907764115564 / 2, 0.0, -12.4917112584486 / 2, 0.0, 6.94167991428074 / 2, 0.0, -2.04298067399942 / 2, 0.0, 0.246407138926031 / 2}
+	coeffs_tmp3 := []complex128{0.0, 3.29956739043733 / 2.0, 0.0, -7.84227260291355 / 2.0, 0.0, 12.8907764115564 / 2.0, 0.0, -12.4917112584486 / 2.0, 0.0, 6.94167991428074 / 2.0, 0.0, -2.04298067399942 / 2.0, 0.0, 0.246407138926031 / 2.0}
 	coeffsReLU3 := ckks.NewPoly(coeffs_tmp3)
 
 	fmt.Printf("Eval: ")
@@ -479,7 +480,7 @@ func testBoot() {
 	// Reason for multpling 1/(2*N) : for higher precision in SineEval & ReLU before StoC (needs to be recovered after/before StoC)
 	// ciphertext1.SetScalingFactor(ciphertext1.Scale * float64(2*params.N()))
 
-	ciphertext2, ciphertext3, _ := btp.BootstrappConv_PreStoC(ciphertext1)
+	ciphertext2, ciphertext3, _ := btp.BootstrappConv_CtoS(ciphertext1)
 	fmt.Printf("Done in %s \n", time.Since(start))
 
 	values_testC := make([]complex128, params.Slots())
@@ -778,7 +779,7 @@ func testBootFast_Conv(ext_input []int, logN, in_wid, ker_wid int, printResult b
 	// Reason for multpling 1/(2*N) : for higher precision in SineEval & ReLU before StoC (needs to be recovered after/before StoC)
 	// ciphertext1.SetScalingFactor(ciphertext1.Scale * float64(2*params.N()))
 
-	ctxt1, ctxt2, _ := btp.BootstrappConv_PreStoC(ctxt_input)
+	ctxt1, ctxt2, _ := btp.BootstrappConv_CtoS(ctxt_input)
 	fmt.Printf("Done in %s \n", time.Since(start))
 	fmt.Println("after Boot: LV = ", ctxt1.Level(), " Scale = ", math.Log2(ctxt1.Scale))
 

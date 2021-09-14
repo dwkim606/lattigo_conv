@@ -19,12 +19,12 @@ const log_out_scale = 30
 
 func main() {
 	print := true
-	logN := 10
-	in_wid := 8
+	logN := 16
+	in_wid := 4
 	ker_wid := 5
 	N := (1 << logN)
 	st_batch := N / (2 * in_wid * 2 * in_wid) // We also consider zero-paddings  // must be adjusted when in_wid is not power of 2
-	end_batch := 1
+	end_batch := 2
 	ECD_LV := 3
 
 	// parameter generation (comment out when do other test)
@@ -69,7 +69,7 @@ func main() {
 	rotations = btpParams.RotationsForBootstrapping(params.LogSlots())
 	rotkeys = kgen.GenRotationKeysForRotations(rotations, true, sk)
 	btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
-	if btp, err = ckks.NewBootstrapper(params, btpParams, btpKey); err != nil {
+	if btp, err = ckks.NewBootstrapper_mod(params, btpParams, btpKey); err != nil {
 		panic(err)
 	}
 	fmt.Printf("Done in %s \n", time.Since(start))
@@ -81,7 +81,7 @@ func main() {
 		input[i] = 1.0 * float64(ext_input[i]) / float64(in_wid*in_wid*st_batch)
 	}
 	start := time.Now()
-	plain_in := ckks.NewPlaintext(params, params.MaxLevel(), params.Scale()) // contain plaintext values
+	plain_in := ckks.NewPlaintext(params, 1, params.Scale()) // contain plaintext values
 	encoder.EncodeCoeffs(input, plain_in)
 	ctxt_in := encryptor.EncryptNew(plain_in)
 	fmt.Printf("Encryption: Done in %s \n", time.Since(start))
@@ -100,9 +100,9 @@ func main() {
 	fmt.Println("Precision of values vs. ciphertext")
 	in_cfs := printDebugCfs(params, ctxt_in, input, decryptor, encoder)
 
-	fmt.Println("Bootstrapping... Ours (Pre StoC):")
+	fmt.Println("Bootstrapping... Ours (until CtoS):")
 	start = time.Now()
-	ctxt1, ctxt2, _ := btp.BootstrappConv_PreStoC(ctxt_in)
+	ctxt1, ctxt2, _ := btp.BootstrappConv_CtoS(ctxt_in)
 	fmt.Printf("Done in %s \n", time.Since(start))
 	fmt.Println("after Boot: LV = ", ctxt1.Level(), " Scale = ", math.Log2(ctxt1.Scale))
 
@@ -124,8 +124,10 @@ func main() {
 	in_cfs_pBoot := append(in_cfs_1_pBoot, in_cfs_2_pBoot...) // After rot(ext) and boot
 
 	in_slots = printDebug(params, ctxt1, in_slots, decryptor, encoder)
+
+	start = time.Now()
 	ctxt1 = evalReLU(params, evaluator, ctxt1, 1.0)
-	fmt.Println("ReLU done.")
+	fmt.Printf("ReLU Done in %s \n", time.Since(start))
 
 	values_ReLU := make([]complex128, len(in_slots))
 	for i := range values_ReLU {
@@ -137,14 +139,19 @@ func main() {
 	// new_ctxt2 := make([]*ckks.Ciphertext, 4)		// do not need if we use po2 inputs dims
 	ciphertext := make([]*ckks.Ciphertext, 4) // after Bootstrapping
 
+	start = time.Now()
 	for pos := 0; pos < 4; pos++ {
 		ext_ctxt1[pos] = ext_ctxt(evaluator, encoder, ctxt1, r_idx[pos], m_idx[pos], params)
 		// new_ctxt2[pos] = ext_ctxt(evaluator, encoder, ctxt2, r_idx[pos], m_idx[pos], params)
 		ciphertext[pos] = btp.BootstrappConv_StoC(ext_ctxt1[pos], ctxt2)
+		evaluator.Rescale(ciphertext[pos], params.Scale(), ciphertext[pos])
 	}
+	fmt.Printf("Boot (StoC) Done in %s \n", time.Since(start))
 
 	fmt.Printf("Boot out: ")
-
+	for i := range in_cfs_pBoot {
+		in_cfs_pBoot[i] = math.Max(0, in_cfs_pBoot[i])
+	}
 	printDebugCfs(params, ciphertext[3], in_cfs_pBoot, decryptor, encoder)
 
 	ctxt_result := conv_then_pack(params, pack_evaluator, ciphertext, pl_ker, plain_idx, end_batch)
@@ -155,10 +162,11 @@ func main() {
 	fmt.Println("=========================================")
 	fmt.Println()
 
-	plain_tmp := ckks.NewPlaintext(params, params.MaxLevel(), params.Scale())
+	plain_out := ckks.NewPlaintext(params, ctxt_result.Level(), params.Scale())
 	start = time.Now()
-	decryptor.Decrypt(ctxt_result, plain_tmp)
-	cfs_tmp := reshape_conv_out(encoder.DecodeCoeffs(plain_tmp), 2*in_wid, end_batch)
+	decryptor.Decrypt(ctxt_result, plain_out)
+	pre_boot := encoder.DecodeCoeffs(plain_out)
+	cfs_tmp := reshape_conv_out(encoder.DecodeCoeffs(plain_out), 2*in_wid, end_batch)
 
 	if print {
 		fmt.Print("Result: \n")
@@ -166,7 +174,7 @@ func main() {
 	}
 	fmt.Printf("Done in %s \n", time.Since(start))
 
-	cfs_tmp = encoder.DecodeCoeffs(plain_tmp)
+	cfs_tmp = encoder.DecodeCoeffs(plain_out)
 	int_tmpn := make([]int, N)
 	for i := range cfs_tmp {
 		int_tmpn[i] = int(cfs_tmp[i])
@@ -175,6 +183,22 @@ func main() {
 	for b := 0; b < end_batch; b++ {
 		print_vec("output ("+strconv.Itoa(b)+")", int_tmpn, 4*in_wid, b)
 	}
+
+	// again boot to see the correctness
+
+	ctxt_result.SetScalingFactor(ctxt_result.Scale * 32)
+	ctxt_boot1, ctxt_boot2, _ := btp.BootstrappConv_CtoS(ctxt_result)
+
+	evaluator.DropLevel(ctxt_boot1, ctxt_boot1.Level()-2)
+	evaluator.DropLevel(ctxt_boot2, ctxt_boot2.Level()-2)
+
+	ctxt_boot := btp.BootstrappConv_StoC(ctxt_boot1, ctxt_boot2)
+	fmt.Println("After boot scale? LV?", math.Log2(ctxt_boot.Scale), ctxt_boot.Level())
+	evaluator.Rescale(ctxt_boot, params.Scale(), ctxt_boot)
+
+	ctxt_boot.SetScalingFactor(ctxt_boot.Scale / 32)
+
+	printDebugCfs(params, ctxt_boot, pre_boot, decryptor, encoder)
 
 	// input := testBRrot(logN, in_wid)
 	// testPoly()

@@ -31,14 +31,15 @@ func reverseOrder(input []float64, bitwid int) []float64 {
 
 // Extract upper left elements of size prt_wid * prt_wid from the input arrg vec with batch batches
 // prt_wid, batch all are those from the output of our conv algorithm (consider padding)
-func reshape_conv_out(result []float64, prt_wid, batch int) []float64 {
-	prt_out := make([]float64, prt_wid*prt_wid*batch)
+func reshape_conv_out(result []float64, prt_wid, out_num int) []float64 {
+	prt_out := make([]float64, prt_wid*prt_wid*out_num)
 	in_wid := 2 * prt_wid
+	batch := len(result) / (in_wid * in_wid)
 
-	for i := 0; i < batch; i++ {
+	for i := 0; i < out_num; i++ {
 		for j := 0; j < prt_wid; j++ {
 			for k := 0; k < prt_wid; k++ {
-				prt_out[i+batch*(j*prt_wid+k)] = result[i+batch*(j*in_wid+k)] //[batch*(in_wid+1)*(ker_wid-1)+i+batch*(j*in_wid+k)]
+				prt_out[i+out_num*(j*prt_wid+k)] = result[i+batch*(j*in_wid+k)] //[batch*(in_wid+1)*(ker_wid-1)+i+batch*(j*in_wid+k)]
 			}
 		}
 	}
@@ -193,6 +194,8 @@ func ext_ctxt(eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext,
 			eval.Add(result, ctxt_tmp, result)
 		}
 	}
+
+	eval.Rescale(result, params.Scale(), result)
 
 	return result
 }
