@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"math"
-	"strconv"
 	"time"
 
 	"github.com/ldsec/lattigo/v2/ckks"
@@ -19,13 +18,15 @@ const log_out_scale = 30
 
 func main() {
 	print := true
-	logN := 16
-	in_wid := 4
+	logN := 12
+	in_wid := [4]int{4, 8, 16, 32}
+	max_batch := [4]int{64, 16, 4, 1}
+	batch := [4]int{16, 4, 2, 1}
 	ker_wid := 5
 	N := (1 << logN)
-	st_batch := N / (2 * in_wid * 2 * in_wid) // We also consider zero-paddings  // must be adjusted when in_wid is not power of 2
-	end_batch := 2
-	ECD_LV := 3
+	// st_batch := N / (2 * in_wid * 2 * in_wid) // We also consider zero-paddings  // must be adjusted when in_wid is not power of 2
+	// end_batch := 4
+	ECD_LV := 1
 
 	// parameter generation (comment out when do other test)
 	var btp *ckks.Bootstrapper
@@ -42,11 +43,33 @@ func main() {
 	r_idx := make([]map[int][]int, 4)
 	m_idx := make([]map[int][]int, 4)
 	for pos := 0; pos < 4; pos++ {
-		r_idx[pos], m_idx[pos] = gen_extend_full(N/2, 2*in_wid, pos, true, true)
+		r_idx[pos], m_idx[pos] = gen_extend_full(N/2, in_wid[1], pos, true, true)
 		for k := range r_idx[pos] {
 			rotations = append(rotations, k)
 		}
 		for k := range m_idx[pos] {
+			rotations = append(rotations, k)
+		}
+	}
+	r_idx1 := make([]map[int][]int, 4)
+	m_idx1 := make([]map[int][]int, 4)
+	for pos := 0; pos < 4; pos++ {
+		r_idx1[pos], m_idx1[pos] = gen_extend_full(N/2, in_wid[2], pos, true, true)
+		for k := range r_idx1[pos] {
+			rotations = append(rotations, k)
+		}
+		for k := range m_idx1[pos] {
+			rotations = append(rotations, k)
+		}
+	}
+	r_idx2 := make([]map[int][]int, 4)
+	m_idx2 := make([]map[int][]int, 4)
+	for pos := 0; pos < 4; pos++ {
+		r_idx2[pos], m_idx2[pos] = gen_extend_full(N/2, in_wid[3], pos, true, true)
+		for k := range r_idx2[pos] {
+			rotations = append(rotations, k)
+		}
+		for k := range m_idx2[pos] {
 			rotations = append(rotations, k)
 		}
 	}
@@ -74,11 +97,11 @@ func main() {
 	}
 	fmt.Printf("Done in %s \n", time.Since(start))
 
-	ext_input := testBRrot(logN, in_wid, false) // Takes arranged input (assume intermediate layers)  // print only outputs first (st_batch) batches
+	ext_input := testBRrot(logN, in_wid[0], batch[0], false) // Takes arranged input (assume intermediate layers)  // print only outputs first (st_batch) batches
 
 	input := make([]float64, N)
 	for i := range input {
-		input[i] = 1.0 * float64(ext_input[i]) / float64(in_wid*in_wid*st_batch)
+		input[i] = 1.0 * float64(ext_input[i]) / float64(in_wid[0]*in_wid[0]*batch[0])
 	}
 	start := time.Now()
 	plain_in := ckks.NewPlaintext(params, 1, params.Scale()) // contain plaintext values
@@ -90,10 +113,10 @@ func main() {
 		fmt.Println("vec size: ", N)
 		fmt.Println("input width: ", in_wid)
 		fmt.Println("kernel width: ", ker_wid)
-		fmt.Println("num batches (in 1 ctxt with padding): ", st_batch)
+		fmt.Println("num batches (in 1 ctxt with padding): ", max_batch[0])
 	}
 
-	pl_ker := prepKer(params, encoder, encryptor, in_wid, ker_wid, st_batch, end_batch, ECD_LV)
+	pl_ker := prepKer(params, encoder, encryptor, in_wid[0], ker_wid, max_batch[0], max_batch[1], batch[0], batch[1], ECD_LV)
 
 	fmt.Print("Boot in: ")
 	fmt.Println()
@@ -115,8 +138,8 @@ func main() {
 		in_cfs_2_pBoot[i] = in_cfs[reverseBits(uint32(i), params.LogSlots())+uint32(params.Slots())]
 		in_slots[i] = complex(in_cfs_1_pBoot[i], 0)
 	}
-	ext1_tmp := extend_full_fl(in_cfs_1_pBoot, 2*in_wid, 3, true, true)
-	ext2_tmp := extend_full_fl(in_cfs_2_pBoot, 2*in_wid, 3, true, true)
+	ext1_tmp := extend_full_fl(in_cfs_1_pBoot, in_wid[1], 3, true, true)
+	ext2_tmp := extend_full_fl(in_cfs_2_pBoot, in_wid[1], 3, true, true)
 	for i := range in_cfs_1_pBoot {
 		in_cfs_1_pBoot[i] = ext1_tmp[reverseBits(uint32(i), params.LogSlots())]
 		in_cfs_2_pBoot[i] = ext2_tmp[reverseBits(uint32(i), params.LogSlots())]
@@ -126,6 +149,9 @@ func main() {
 	in_slots = printDebug(params, ctxt1, in_slots, decryptor, encoder)
 
 	start = time.Now()
+	// evaluator.MultByConst(ctxt1, 1.000000001, ctxt1)
+	// evaluator.DropLevel(ctxt1, 10)
+
 	ctxt1 = evalReLU(params, evaluator, ctxt1, 1.0)
 	fmt.Printf("ReLU Done in %s \n", time.Since(start))
 
@@ -136,13 +162,15 @@ func main() {
 	printDebug(params, ctxt1, values_ReLU, decryptor, encoder)
 
 	ext_ctxt1 := make([]*ckks.Ciphertext, 4) // for extend (rotation) of ctxt_in
-	// new_ctxt2 := make([]*ckks.Ciphertext, 4)		// do not need if we use po2 inputs dims
+	// ext_ctxt2 := make([]*ckks.Ciphertext, 4)  // do not need if we use po2 inputs dims
 	ciphertext := make([]*ckks.Ciphertext, 4) // after Bootstrapping
 
+	evaluator.DropLevel(ctxt2, ctxt2.Level()-2)
 	start = time.Now()
 	for pos := 0; pos < 4; pos++ {
 		ext_ctxt1[pos] = ext_ctxt(evaluator, encoder, ctxt1, r_idx[pos], m_idx[pos], params)
-		// new_ctxt2[pos] = ext_ctxt(evaluator, encoder, ctxt2, r_idx[pos], m_idx[pos], params)
+		// fmt.Println(ext_ctxt1[pos].Level(), ctxt2.Level(), ext_ctxt1[pos].Scale, ctxt2.Scale)
+		// ext_ctxt2[pos] = ext_ctxt(evaluator, encoder, ctxt2, r_idx[pos], m_idx[pos], params)
 		ciphertext[pos] = btp.BootstrappConv_StoC(ext_ctxt1[pos], ctxt2)
 		evaluator.Rescale(ciphertext[pos], params.Scale(), ciphertext[pos])
 	}
@@ -154,7 +182,7 @@ func main() {
 	}
 	printDebugCfs(params, ciphertext[3], in_cfs_pBoot, decryptor, encoder)
 
-	ctxt_result := conv_then_pack(params, pack_evaluator, ciphertext, pl_ker, plain_idx, end_batch)
+	ctxt_result := conv_then_pack(params, pack_evaluator, ciphertext, pl_ker, plain_idx, max_batch[1])
 
 	fmt.Println()
 	fmt.Println("=========================================")
@@ -166,39 +194,223 @@ func main() {
 	start = time.Now()
 	decryptor.Decrypt(ctxt_result, plain_out)
 	pre_boot := encoder.DecodeCoeffs(plain_out)
-	cfs_tmp := reshape_conv_out(encoder.DecodeCoeffs(plain_out), 2*in_wid, end_batch)
+	cfs_tmp := reshape_conv_out(encoder.DecodeCoeffs(plain_out), in_wid[1], max_batch[1])
 
 	if print {
 		fmt.Print("Result: \n")
-		prt_mat(cfs_tmp, end_batch, 2*in_wid)
+		prt_mat(cfs_tmp, max_batch[1], in_wid[1])
 	}
+	fmt.Printf("(Layer 1) Done in %s \n", time.Since(start))
+
+	// // To see each matrix
+	// cfs_tmp = encoder.DecodeCoeffs(plain_out)
+	// int_tmpn := make([]int, N)
+	// for i := range cfs_tmp {
+	// 	int_tmpn[i] = int(cfs_tmp[i])
+	// }
+	// fmt.Print("Output: \n")
+	// for b := 0; b < batch[1]; b++ {
+	// 	print_vec("output ("+strconv.Itoa(b)+")", int_tmpn, in_wid[2], b)
+	// }
+
+	// // Layer 1 done
+
+	fmt.Println()
+	fmt.Println("=========================================")
+	fmt.Println("              LAYER 2	                 ")
+	fmt.Println("=========================================")
+	fmt.Println()
+
+	pl_ker = prepKer(params, encoder, encryptor, in_wid[1], ker_wid, max_batch[1], max_batch[2], batch[1], batch[2], ECD_LV)
+
+	// fmt.Print("Boot in: ")
+	// fmt.Println()
+	// fmt.Println("Precision of values vs. ciphertext")
+	// in_cfs = printDebugCfs(params, ctxt_result, pre_boot, decryptor, encoder)
+	in_cfs = pre_boot
+	for i := range in_cfs {
+		in_cfs[i] = in_cfs[i] / 64
+	}
+	ctxt_in.Copy(ctxt_result)
+	ctxt_in.SetScalingFactor(ctxt_in.Scale * 64)
+
+	fmt.Println("Bootstrapping... Ours (until CtoS):")
+	start = time.Now()
+	ctxt1, _, _ = btp.BootstrappConv_CtoS(ctxt_in)
 	fmt.Printf("Done in %s \n", time.Since(start))
 
-	cfs_tmp = encoder.DecodeCoeffs(plain_out)
-	int_tmpn := make([]int, N)
-	for i := range cfs_tmp {
-		int_tmpn[i] = int(cfs_tmp[i])
+	// Only for checking the correctness
+	for i := range in_cfs_1_pBoot {
+		in_cfs_1_pBoot[i] = in_cfs[reverseBits(uint32(i), params.LogSlots())] // first part of coeffs
+		in_cfs_2_pBoot[i] = 0                                                 // in_cfs[reverseBits(uint32(i), params.LogSlots())+uint32(params.Slots())]
+		in_slots[i] = complex(in_cfs_1_pBoot[i], 0)
 	}
-	fmt.Print("Output: \n")
-	for b := 0; b < end_batch; b++ {
-		print_vec("output ("+strconv.Itoa(b)+")", int_tmpn, 4*in_wid, b)
+	ext1_tmp = extend_full_fl(in_cfs_1_pBoot, in_wid[2], 3, true, true)
+	ext2_tmp = extend_full_fl(in_cfs_2_pBoot, in_wid[2], 3, true, true)
+	for i := range in_cfs_1_pBoot {
+		in_cfs_1_pBoot[i] = ext1_tmp[reverseBits(uint32(i), params.LogSlots())]
+		in_cfs_2_pBoot[i] = ext2_tmp[reverseBits(uint32(i), params.LogSlots())]
 	}
+	in_cfs_pBoot = append(in_cfs_1_pBoot, in_cfs_2_pBoot...) // After rot(ext) and boot
+	in_slots = printDebug(params, ctxt1, in_slots, decryptor, encoder)
 
-	// again boot to see the correctness
+	start = time.Now()
+	// evaluator.MultByConst(ctxt1, 1.000000001, ctxt1)
+	// evaluator.DropLevel(ctxt1, 10)
+	ctxt1 = evalReLU(params, evaluator, ctxt1, 1.0)
+	fmt.Printf("ReLU Done in %s \n", time.Since(start))
 
-	ctxt_result.SetScalingFactor(ctxt_result.Scale * 32)
-	ctxt_boot1, ctxt_boot2, _ := btp.BootstrappConv_CtoS(ctxt_result)
+	for i := range values_ReLU {
+		values_ReLU[i] = complex(math.Max(0, real(in_slots[i])), 0)
+	}
+	printDebug(params, ctxt1, values_ReLU, decryptor, encoder)
 
-	evaluator.DropLevel(ctxt_boot1, ctxt_boot1.Level()-2)
-	evaluator.DropLevel(ctxt_boot2, ctxt_boot2.Level()-2)
+	start = time.Now()
+	for pos := 0; pos < 4; pos++ {
+		ext_ctxt1[pos] = ext_ctxt(evaluator, encoder, ctxt1, r_idx1[pos], m_idx1[pos], params)
+		// ext_ctxt2[pos] = ext_ctxt(evaluator, encoder, ctxt2, r_idx1[pos], m_idx1[pos], params)
+		ciphertext[pos] = btp.BootstrappConv_StoC(ext_ctxt1[pos], ctxt2)
+		evaluator.Rescale(ciphertext[pos], params.Scale(), ciphertext[pos])
+	}
+	fmt.Printf("Boot (StoC) Done in %s \n", time.Since(start))
 
-	ctxt_boot := btp.BootstrappConv_StoC(ctxt_boot1, ctxt_boot2)
-	fmt.Println("After boot scale? LV?", math.Log2(ctxt_boot.Scale), ctxt_boot.Level())
-	evaluator.Rescale(ctxt_boot, params.Scale(), ctxt_boot)
+	fmt.Printf("Boot out: ")
+	for i := range in_cfs_pBoot {
+		in_cfs_pBoot[i] = math.Max(0, in_cfs_pBoot[i])
+	}
+	printDebugCfs(params, ciphertext[3], in_cfs_pBoot, decryptor, encoder)
 
-	ctxt_boot.SetScalingFactor(ctxt_boot.Scale / 32)
+	ctxt_result = conv_then_pack(params, pack_evaluator, ciphertext, pl_ker, plain_idx, max_batch[2])
+	// ctxt_result = conv_then_pack(params, pack_evaluator, ciphertext, pl_ker, plain_idx, batch[2])
 
-	printDebugCfs(params, ctxt_boot, pre_boot, decryptor, encoder)
+	fmt.Println()
+	fmt.Println("=========================================")
+	fmt.Println("              DECRYPTION                 ")
+	fmt.Println("=========================================")
+	fmt.Println()
+
+	start = time.Now()
+	decryptor.Decrypt(ctxt_result, plain_out)
+	pre_boot = encoder.DecodeCoeffs(plain_out)
+	cfs_tmp = reshape_conv_out(encoder.DecodeCoeffs(plain_out), in_wid[2], max_batch[2])
+
+	if print {
+		fmt.Print("Result: \n")
+		prt_mat(cfs_tmp, max_batch[2], in_wid[2])
+	}
+	fmt.Printf("(Layer 2) Done in %s \n", time.Since(start))
+
+	fmt.Println()
+	fmt.Println("=========================================")
+	fmt.Println("              LAYER 3	                 ")
+	fmt.Println("=========================================")
+	fmt.Println()
+
+	pl_ker = prepKer(params, encoder, encryptor, in_wid[2], ker_wid, max_batch[2], max_batch[3], batch[2], batch[3], ECD_LV)
+
+	// fmt.Print("Boot in: ")
+	// fmt.Println()
+	// fmt.Println("Precision of values vs. ciphertext")
+	// in_cfs = printDebugCfs(params, ctxt_result, pre_boot, decryptor, encoder)
+	in_cfs = pre_boot
+	for i := range in_cfs {
+		in_cfs[i] = in_cfs[i] / 16
+	}
+	ctxt_in.Copy(ctxt_result)
+	ctxt_in.SetScalingFactor(ctxt_in.Scale * 16)
+
+	fmt.Println("Bootstrapping... Ours (until CtoS):")
+	start = time.Now()
+	ctxt1, _, _ = btp.BootstrappConv_CtoS(ctxt_in)
+	fmt.Printf("Done in %s \n", time.Since(start))
+
+	// Only for checking the correctness
+	for i := range in_cfs_1_pBoot {
+		in_cfs_1_pBoot[i] = in_cfs[reverseBits(uint32(i), params.LogSlots())] // first part of coeffs
+		in_cfs_2_pBoot[i] = 0                                                 // in_cfs[reverseBits(uint32(i), params.LogSlots())+uint32(params.Slots())]
+		in_slots[i] = complex(in_cfs_1_pBoot[i], 0)
+	}
+	ext1_tmp = extend_full_fl(in_cfs_1_pBoot, in_wid[3], 3, true, true)
+	ext2_tmp = extend_full_fl(in_cfs_2_pBoot, in_wid[3], 3, true, true)
+	for i := range in_cfs_1_pBoot {
+		in_cfs_1_pBoot[i] = ext1_tmp[reverseBits(uint32(i), params.LogSlots())]
+		in_cfs_2_pBoot[i] = ext2_tmp[reverseBits(uint32(i), params.LogSlots())]
+	}
+	in_cfs_pBoot = append(in_cfs_1_pBoot, in_cfs_2_pBoot...) // After rot(ext) and boot
+	in_slots = printDebug(params, ctxt1, in_slots, decryptor, encoder)
+
+	start = time.Now()
+	// evaluator.MultByConst(ctxt1, 1.000000001, ctxt1)
+	// evaluator.DropLevel(ctxt1, 10)
+
+	ctxt1 = evalReLU(params, evaluator, ctxt1, 1.0)
+	fmt.Printf("ReLU Done in %s \n", time.Since(start))
+
+	for i := range values_ReLU {
+		values_ReLU[i] = complex(math.Max(0, real(in_slots[i])), 0)
+	}
+	printDebug(params, ctxt1, values_ReLU, decryptor, encoder)
+
+	start = time.Now()
+	for pos := 0; pos < 4; pos++ {
+		ext_ctxt1[pos] = ext_ctxt(evaluator, encoder, ctxt1, r_idx2[pos], m_idx2[pos], params)
+		// ext_ctxt2[pos] = ext_ctxt(evaluator, encoder, ctxt2, r_idx2[pos], m_idx2[pos], params)
+		ciphertext[pos] = btp.BootstrappConv_StoC(ext_ctxt1[pos], ctxt2)
+		evaluator.Rescale(ciphertext[pos], params.Scale(), ciphertext[pos])
+	}
+	fmt.Printf("Boot (StoC) Done in %s \n", time.Since(start))
+
+	fmt.Printf("Boot out: ")
+	for i := range in_cfs_pBoot {
+		in_cfs_pBoot[i] = math.Max(0, in_cfs_pBoot[i])
+	}
+	printDebugCfs(params, ciphertext[3], in_cfs_pBoot, decryptor, encoder)
+
+	ctxt_result = conv_then_pack(params, pack_evaluator, ciphertext, pl_ker, plain_idx, max_batch[3])
+	// ctxt_result = conv_then_pack(params, pack_evaluator, ciphertext, pl_ker, plain_idx, batch[2])
+
+	fmt.Println()
+	fmt.Println("=========================================")
+	fmt.Println("              DECRYPTION                 ")
+	fmt.Println("=========================================")
+	fmt.Println()
+
+	start = time.Now()
+	decryptor.Decrypt(ctxt_result, plain_out)
+	pre_boot = encoder.DecodeCoeffs(plain_out)
+	cfs_tmp = reshape_conv_out(encoder.DecodeCoeffs(plain_out), in_wid[3], max_batch[3])
+
+	if print {
+		fmt.Print("Result: \n")
+		prt_mat(cfs_tmp, max_batch[3], in_wid[3])
+	}
+	fmt.Printf("(Layer 3) Done in %s \n", time.Since(start))
+
+	// // To see each matrix
+	// cfs_tmp = encoder.DecodeCoeffs(plain_out)
+	// int_tmpn := make([]int, N)
+	// for i := range cfs_tmp {
+	// 	int_tmpn[i] = int(cfs_tmp[i])
+	// }
+	// fmt.Print("Output: \n")
+	// for b := 0; b < batch[2]; b++ {
+	// 	print_vec("output ("+strconv.Itoa(b)+")", int_tmpn, in_wid[3], b)
+	// }
+
+	// // again boot to see the correctness
+	// ctxt_result.SetScalingFactor(ctxt_result.Scale * 32)
+	// ctxt_boot1, ctxt_boot2, _ := btp.BootstrappConv_CtoS(ctxt_result)
+
+	// evaluator.DropLevel(ctxt_boot1, ctxt_boot1.Level()-2)
+	// evaluator.DropLevel(ctxt_boot2, ctxt_boot2.Level()-2)
+
+	// ctxt_boot := btp.BootstrappConv_StoC(ctxt_boot1, ctxt_boot2)
+	// fmt.Println("After boot scale? LV?", math.Log2(ctxt_boot.Scale), ctxt_boot.Level())
+	// evaluator.Rescale(ctxt_boot, params.Scale(), ctxt_boot)
+
+	// ctxt_boot.SetScalingFactor(ctxt_boot.Scale / 32)
+
+	// printDebugCfs(params, ctxt_boot, pre_boot, decryptor, encoder)
 
 	// input := testBRrot(logN, in_wid)
 	// testPoly()

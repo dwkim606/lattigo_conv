@@ -500,11 +500,12 @@ func testBoot() {
 
 }
 
-func testBRrot(logN, in_wid int, print bool) []int {
+// set input as in_wid * in_wid * batch, then zero padding other values.
+func testBRrot(logN, in_wid, batch int, print bool) []int {
 
 	N := (1 << logN)
 	in_size := in_wid * in_wid
-	batch := N / (4 * in_size)
+	max_batch := N / (4 * in_size)
 
 	if print {
 		fmt.Print("Batch: ", batch, "\n\n")
@@ -523,12 +524,34 @@ func testBRrot(logN, in_wid int, print bool) []int {
 
 	// set input and desired output
 
-	for b := 0; b < batch; b++ {
-		for i := range sm_input {
-			sm_input[i] = batch*i + b
+	for b := 0; b < max_batch; b++ {
+		if b < batch {
+			for i := range sm_input {
+				sm_input[i] = batch*i + b
+			}
+		} else {
+			for i := range sm_input {
+				sm_input[i] = 0
+			}
 		}
+
 		arrgvec(sm_input, input, b)
 	}
+
+	// // for smaller input
+	// for b := 0; b < max_batch; b++ {
+	// 	if b%(max_batch/batch) == 0 {
+	// 		for i := range sm_input {
+	// 			sm_input[i] = batch*i + (b * batch / max_batch)
+	// 		}
+	// 	} else {
+	// 		for i := range sm_input {
+	// 			sm_input[i] = 0
+	// 		}
+	// 	}
+
+	// 	arrgvec(sm_input, input, b)
+	// }
 
 	// row := 4 * in_wid
 
@@ -922,14 +945,23 @@ func testBootFast_Conv(ext_input []int, logN, in_wid, ker_wid int, printResult b
 // Encode Kernel and outputs Plain(ker)
 // in_wid : width of input (except padding)
 // in_batch / out_batch: batches in 1 ctxt (input / output) consider padding
-func prepKer(params ckks.Parameters, encoder ckks.Encoder, encryptor ckks.Encryptor, in_wid, ker_wid, in_batch, out_batch, ECD_LV int) [][]*ckks.Plaintext {
+func prepKer(params ckks.Parameters, encoder ckks.Encoder, encryptor ckks.Encryptor, in_wid, ker_wid, in_batch, out_batch, in_batch_real, out_batch_real, ECD_LV int) [][]*ckks.Plaintext {
 	ker_size := ker_wid * ker_wid
 	in_batch_conv := in_batch / 4 // num batches at convolution 		// strided conv -> /(4)
 	in_wid_conv := in_wid * 4     // size of in_wid at convolution 	// strided conv -> *4
 
 	ker_in := make([]float64, in_batch*out_batch*ker_size)
+	k := 0.0
 	for i := range ker_in {
-		ker_in[i] = float64(i) / float64(len(ker_in)) // float64(i) / float64(len(ker_in)) //* (float64(len(ker_in)) - float64(i) - 1) // float64(len(ker1_in))
+		if ((i % in_batch) < in_batch_real) && (((i % (in_batch * out_batch)) / in_batch) < out_batch_real) {
+			ker_in[i] = k / float64(in_batch_real*out_batch_real*ker_size)
+			k++
+		} else {
+			ker_in[i] = 0.0
+		}
+		// ker_in[i] = k + 1
+
+		// ker_in[i] = float64(i) / float64(in_batch_real*out_batch_real*ker_size) // float64(i) / float64(len(ker_in)) //* (float64(len(ker_in)) - float64(i) - 1) // float64(len(ker1_in))
 	}
 	ker1 := make([][]float64, out_batch) // ker1[i][j] = j-th kernel for i-th output
 	reshape_ker(ker_in, ker1, ker_size, true)
@@ -960,7 +992,6 @@ func conv_then_pack(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_
 		ctxt_out[i] = pack_evaluator.MulNew(ctxt_in[0], pl_ker[0][i])
 		for pos := 1; pos < 4; pos++ {
 			pack_evaluator.Add(ctxt_out[i], pack_evaluator.MulNew(ctxt_in[pos], pl_ker[pos][i]), ctxt_out[i])
-			// ctxt_out[i] += pack_evaluator.MulNew(ctxt_in[pos], pl_ker[pos][i]) // also need to modify prepKer's Encode_ker
 		}
 	}
 
@@ -971,3 +1002,31 @@ func conv_then_pack(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_
 
 	return ctxt_result
 }
+
+// // Eval Conv, then Pack
+// // The ciphertexts must be packed into full (without vacant position)
+// // For multiple output ciphertexts
+// func conv_then_pack_mult(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_in []*ckks.Ciphertext, pl_ker [][]*ckks.Plaintext, plain_idx []*ckks.Plaintext, cnum_in, cnum_out, batch_out int) *ckks.Ciphertext {
+
+// 	start := time.Now()
+// 	ctxt_out := make([]*ckks.Ciphertext, batch_out)
+
+// 	for in := 0; in < cnum_in; in++ {
+
+// 		for i := 0; i < batch_out; i++ {
+// 			ctxt_out[i] = pack_evaluator.MulNew(ctxt_in[0], pl_ker[0][i])
+// 			for pos := 1; pos < 4; pos++ {
+// 				pack_evaluator.Add(ctxt_out[i], pack_evaluator.MulNew(ctxt_in[pos], pl_ker[pos][i]), ctxt_out[i])
+// 				// ctxt_out[i] += pack_evaluator.MulNew(ctxt_in[pos], pl_ker[pos][i]) // also need to modify prepKer's Encode_ker
+// 			}
+// 		}
+
+// 	}
+
+// 	ctxt_result := pack_ctxts(pack_evaluator, ctxt_out, batch_out, plain_idx, params)
+// 	fmt.Println("Result Scale: ", math.Log2(ctxt_result.Scale))
+// 	fmt.Println("Result LV: ", ctxt_result.Level())
+// 	fmt.Printf("Done in %s \n", time.Since(start))
+
+// 	return ctxt_result
+// }
