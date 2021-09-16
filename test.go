@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
+	"os"
 	"strconv"
 	"time"
 
@@ -11,6 +14,46 @@ import (
 	"github.com/ldsec/lattigo/v2/rlwe"
 	"github.com/ldsec/lattigo/v2/utils"
 )
+
+func check(e error) {
+	if e != nil {
+		panic(e)
+	}
+}
+
+func readTxt(name_file string) []float64 {
+
+	file, err := os.Open(name_file)
+	check(err)
+	scanner := bufio.NewScanner(file)
+	scanner.Split(bufio.ScanWords)
+
+	var input []float64
+	for scanner.Scan() {
+		add, _ := strconv.ParseFloat(scanner.Text(), 64)
+		input = append(input, add)
+	}
+	file.Close()
+	// fmt.Print(input)
+
+	return input
+
+}
+
+func writeTxt(name_file string, input []float64) {
+	file, err := os.OpenFile(name_file, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatalf("failed creating file: %s", err)
+	}
+
+	datawriter := bufio.NewWriter(file)
+	for _, data := range input {
+		_, _ = datawriter.WriteString(strconv.FormatFloat(data, 'e', -1, 64) + "\n")
+	}
+
+	datawriter.Flush()
+	file.Close()
+}
 
 func testConv(logN, in_wid, ker_wid int, printResult bool) []float64 {
 
@@ -348,19 +391,26 @@ func testPoly() {
 }
 
 // Divide coeff gen later
-func evalReLU(params ckks.Parameters, evaluator ckks.Evaluator, ctxt_in *ckks.Ciphertext, prescale complex128) (ctxt_out *ckks.Ciphertext) {
+// alpha: for leaky relu
+func evalReLU(params ckks.Parameters, evaluator ckks.Evaluator, ctxt_in *ckks.Ciphertext, alpha float64) (ctxt_out *ckks.Ciphertext) {
 	// alpha 10 (from minimax)
 	// prescale is multiplied to improve precision (previously done in StoC matmult)
-	coeffs_tmp := []complex128{0.0, 10.8541842577442 * prescale, 0.0, -62.2833925211098 * prescale * prescale * prescale,
-		0.0, 114.369227820443 * prescale * prescale * prescale * prescale * prescale, 0.0, -62.8023496973074 * prescale * prescale * prescale * prescale * prescale * prescale * prescale}
+	// coeffs_tmp := []complex128{0.0, 10.8541842577442 * prescale, 0.0, -62.2833925211098 * prescale * prescale * prescale,
+	// 	0.0, 114.369227820443 * prescale * prescale * prescale * prescale * prescale, 0.0, -62.8023496973074 * prescale * prescale * prescale * prescale * prescale * prescale * prescale}
+	coeffs_tmp := []complex128{0.0, 10.8541842577442, 0.0, -62.2833925211098, 0.0, 114.369227820443, 0.0, -62.8023496973074}
 	coeffsReLU := ckks.NewPoly(coeffs_tmp)
 
 	coeffs_tmp2 := []complex128{0.0, 4.13976170985111, 0.0, -5.84997640211679, 0.0, 2.94376255659280, 0.0, -0.454530437460152}
 	coeffsReLU2 := ckks.NewPoly(coeffs_tmp2)
 
 	// coeffs_tmp3 := []complex128{0.0, 3.29956739043733, 0.0, -7.84227260291355, 0.0, 12.8907764115564, 0.0, -12.4917112584486, 0.0, 6.94167991428074, 0.0, -2.04298067399942, 0.0, 0.246407138926031}
-	// mult by 0.5 for ReLU Eval
-	coeffs_tmp3 := []complex128{0.0, 3.29956739043733 / 2.0, 0.0, -7.84227260291355 / 2.0, 0.0, 12.8907764115564 / 2.0, 0.0, -12.4917112584486 / 2.0, 0.0, 6.94167991428074 / 2.0, 0.0, -2.04298067399942 / 2.0, 0.0, 0.246407138926031 / 2.0}
+	// leakyRelu = x (bconst * s(x) + aconst)
+	aconst := (alpha + 1) / 2.0
+	bconst := (1 - alpha) / 2.0
+	coeffs_tmp3 := []complex128{0.0, 3.29956739043733, 0.0, -7.84227260291355, 0.0, 12.8907764115564, 0.0, -12.4917112584486, 0.0, 6.94167991428074, 0.0, -2.04298067399942, 0.0, 0.246407138926031}
+	for i := range coeffs_tmp3 {
+		coeffs_tmp3[i] = coeffs_tmp3[i] * complex(bconst, 0.0)
+	}
 	coeffsReLU3 := ckks.NewPoly(coeffs_tmp3)
 
 	fmt.Printf("Eval: ")
@@ -369,7 +419,7 @@ func evalReLU(params ckks.Parameters, evaluator ckks.Evaluator, ctxt_in *ckks.Ci
 	ctxt_sign, _ = evaluator.EvaluatePoly(ctxt_sign, coeffsReLU2, params.Scale())
 	ctxt_sign, _ = evaluator.EvaluatePoly(ctxt_sign, coeffsReLU3, params.Scale())
 
-	ctxt_out = evaluator.AddConstNew(ctxt_sign, 0.5)
+	ctxt_out = evaluator.AddConstNew(ctxt_sign, aconst)
 
 	// Modify c3 scale so that the mult result after rescale has desired scale
 	// constPlain := ckks.NewPlaintext(params, ciphertext3.Level(), float64(params.Q()[ciphertext1.Level()])/(ciphertext3.Scale))
@@ -498,6 +548,65 @@ func testBoot() {
 	}
 	printDebug(params, ciphertext3, values_testC, decryptor, encoder)
 
+}
+
+// zero padding (extend) the given input
+// assume that 4 * len(input) =< N, and
+func inputExt(input []float64, logN, in_wid int, print bool) []float64 {
+	N := 1 << logN
+	in_size := in_wid * in_wid
+	batch := len(input) / in_size
+	max_batch := N / (4 * in_size)
+
+	sm_input := make([]int, in_size) // each will be packed to tmp vector
+	tmp := make([]int, N)
+	tmp_rev := make([]int, N)
+	test_out := make([]int, N)
+	test_out_fl := make([]float64, N)
+
+	// set input and desired output
+
+	for b := 0; b < max_batch; b++ {
+		if b < batch {
+			for i := range sm_input {
+				sm_input[i] = batch*i + b + 1
+			}
+		} else {
+			for i := range sm_input {
+				sm_input[i] = 0
+			}
+		}
+
+		arrgvec(sm_input, tmp, b)
+	}
+
+	// if print {
+	// 	for b := 0; b < 4; b++ {
+	// 		print_vec("input ("+strconv.Itoa(b)+")", tmp, in_wid, b)
+	// 	}
+	// }
+	for i, elt := range tmp {
+		tmp_rev[reverseBits(uint32(i), logN)] = elt
+	}
+
+	test_out_rev := extend_sp(tmp_rev, in_wid, 0)
+
+	for i, elt := range test_out_rev {
+		test_out[reverseBits(uint32(i), logN)] = elt
+	}
+	// if print {
+	// 	for b := 0; b < 1; b++ {
+	// 		print_vec("output ("+strconv.Itoa(b)+")", test_out, 2*in_wid, b)
+	// 	}
+	// }
+
+	for i, elt := range test_out {
+		if elt != 0 {
+			test_out_fl[i] = input[elt-1]
+		}
+	}
+
+	return test_out_fl
 }
 
 // set input as in_wid * in_wid * batch, then zero padding other values.
@@ -940,6 +1049,51 @@ func testBootFast_Conv(ext_input []int, logN, in_wid, ker_wid int, printResult b
 	}
 
 	return cfs_tmp
+}
+
+// Encode Kernel and outputs Plain(ker)
+// in_wid : width of input (except padding)
+// in_batch / out_batch: batches in 1 ctxt (input / output) consider padding
+// prepKer with input kernel
+// a: coefficient to be multiplied (for BN)
+func prepKer_in(params ckks.Parameters, encoder ckks.Encoder, encryptor ckks.Encryptor, in_ker []float64, a []float64, in_wid, ker_wid, in_batch, out_batch, in_batch_real, out_batch_real, ECD_LV int) [][]*ckks.Plaintext {
+	ker_size := ker_wid * ker_wid
+	in_batch_conv := in_batch / 4 // num batches at convolution 		// strided conv -> /(4)
+	in_wid_conv := in_wid * 4     // size of in_wid at convolution 	// strided conv -> *4
+
+	ker_in := make([]float64, in_batch*out_batch*ker_size)
+	k := 0
+	for i := range ker_in {
+		if ((i % in_batch) < in_batch_real) && (((i % (in_batch * out_batch)) / in_batch) < out_batch_real) {
+			ker_in[i] = in_ker[k] //* a[((i%(in_batch*out_batch))/in_batch)]
+			k++
+		} else {
+			ker_in[i] = 0.0
+		}
+	}
+	ker1 := make([][]float64, out_batch) // ker1[i][j] = j-th kernel for i-th output
+	reshape_ker(ker_in, ker1, ker_size, true)
+
+	for i := 0; i < out_batch_real; i++ {
+		for j := range ker1[i] {
+			ker1[i][j] = ker1[i][j] * a[i]
+		}
+	}
+
+	// prt_mat(ker1[0], 16, 0)
+	// fmt.Println("ker11: ", ker1[0])
+
+	pl_ker := make([][]*ckks.Plaintext, 4) // for strided conv
+	for pos := 0; pos < 4; pos++ {
+		pl_ker[pos] = make([]*ckks.Plaintext, out_batch)
+		for i := 0; i < out_batch; i++ {
+			pl_ker[pos][i] = ckks.NewPlaintext(params, ECD_LV, params.Scale())
+			encoder.EncodeCoeffs(encode_ker(ker1, pos, i, in_wid_conv, in_batch_conv, ker_wid), pl_ker[pos][i])
+			encoder.ToNTT(pl_ker[pos][i])
+		}
+	}
+
+	return pl_ker
 }
 
 // Encode Kernel and outputs Plain(ker)
