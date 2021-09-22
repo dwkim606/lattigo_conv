@@ -101,11 +101,38 @@ func main() {
 	}
 	fmt.Printf("Done in %s \n", time.Since(start))
 
-	for iter := 1; iter < 16; iter++ {
+	for iter := 1; iter < 2; iter++ {
 		name_iter := fmt.Sprintf("%04d", iter)
 
 		input := readTxt("./inputs/input_" + name_iter + ".txt")
 		ext_input := inputExt(input, logN, in_wid[0], false) // Takes arranged input (assume intermediate layers)  // print only outputs first (st_batch) batches
+
+		circ_rows := readTxt("./varaibles/rows.txt")
+		circ_mat := make([][]float64, 8)
+		plain_mat := make([]*ckks.Plaintext, 8)
+		for i := 0; i < len(circ_mat); i++ {
+			circ_mat[i] = encode_circ(circ_rows[N/2*i:N/2*(i+1)], 16, N)
+			plain_mat[i] = ckks.NewPlaintext(params, ECD_LV, params.Scale())
+			encoder.EncodeCoeffs(circ_mat[i], plain_mat[i])
+			encoder.ToNTT(plain_mat[i])
+		}
+
+		test_input := readTxt("./inputs/vec_input_" + name_iter + ".txt")
+		enc_test_input := make([]*ckks.Ciphertext, 8)
+		test_tmp := ckks.NewPlaintext(params, ECD_LV, params.Scale())
+		for i := 0; i < len(enc_test_input); i++ {
+			encoder.EncodeCoeffs(encode_circ_in(test_input, i, 16, N), test_tmp)
+			enc_test_input[i] = encryptor.EncryptNew(test_tmp)
+		}
+
+		var test_result *ckks.Ciphertext
+		for i := 0; i < len(enc_test_input); i++ {
+			if i == 0 {
+				test_result = evaluator.MulNew(enc_test_input[i], plain_mat[i])
+			} else {
+				evaluator.Add(test_result, evaluator.MulNew(enc_test_input[i], plain_mat[i]), test_result)
+			}
+		}
 
 		// input := make([]float64, N)
 		// for i := range input {

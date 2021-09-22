@@ -200,6 +200,37 @@ func ext_ctxt(eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext,
 	return result
 }
 
+// block: block size
+// N: output vector size (# coeffs)
+// Assume 2*len(vec_int) = N
+func encode_circ(vec_in []float64, block, N int) []float64 {
+	result := make([]float64, N)
+	batch := N / (2 * block) // space between each input of result vectors
+
+	for i := 0; i < batch; i++ {
+		for j := 0; j < block; j++ {
+			result[i+j*batch] = vec_in[i*block+j]
+			result[N/2+(i+j*batch)] = -vec_in[i*block+j]
+		}
+	}
+
+	return result
+}
+
+// block: block size
+// N: output vector size (# coeffs)
+// input is divided into blocks, pos: pos-th block
+func encode_circ_in(vec_in []float64, pos, block, N int) []float64 {
+	result := make([]float64, N)
+	batch := N / (2 * block) // space between each input of result vector
+
+	for i := 0; i < block; i++ {
+		result[batch*i] = vec_in[pos*block+i]
+	}
+
+	return result
+}
+
 // // Perform FFT to encode N coefficients into N/2 complex values (that will be encoded with encode)
 // // Always assume that coeffs are of size N
 // func cencode(cfsEncoder ckks.EncoderBigComplex, coeffs []float64) (cvals []complex128) {
