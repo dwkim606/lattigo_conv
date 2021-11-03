@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"math"
+)
 
 // distribute input to the output starting from pos position
 func arrgvec(input []int, output []int, pos int) {
@@ -101,6 +104,129 @@ func addSlice_fl(a []float64, b []float64) []float64 {
 		c[i] = a[i] + b[i]
 	}
 	return c
+}
+
+// zero padding (extend) the given input
+// assume that 4 * len(input) =< N, and
+func inputExt(input []float64, logN, in_wid int, print bool) []float64 {
+	N := 1 << logN
+	in_size := in_wid * in_wid
+	batch := len(input) / in_size
+	max_batch := N / (4 * in_size)
+
+	sm_input := make([]int, in_size) // each will be packed to tmp vector
+	tmp := make([]int, N)
+	tmp_rev := make([]int, N)
+	test_out := make([]int, N)
+	test_out_fl := make([]float64, N)
+
+	// set input and desired output
+
+	for b := 0; b < max_batch; b++ {
+		if b < batch {
+			for i := range sm_input {
+				sm_input[i] = batch*i + b + 1
+			}
+		} else {
+			for i := range sm_input {
+				sm_input[i] = 0
+			}
+		}
+
+		arrgvec(sm_input, tmp, b)
+	}
+
+	// if print {
+	// 	for b := 0; b < 4; b++ {
+	// 		print_vec("input ("+strconv.Itoa(b)+")", tmp, in_wid, b)
+	// 	}
+	// }
+	for i, elt := range tmp {
+		tmp_rev[reverseBits(uint32(i), logN)] = elt
+	}
+
+	test_out_rev := extend_sp(tmp_rev, in_wid, 0)
+
+	for i, elt := range test_out_rev {
+		test_out[reverseBits(uint32(i), logN)] = elt
+	}
+	// if print {
+	// 	for b := 0; b < 1; b++ {
+	// 		print_vec("output ("+strconv.Itoa(b)+")", test_out, 2*in_wid, b)
+	// 	}
+	// }
+
+	for i, elt := range test_out {
+		if elt != 0 {
+			test_out_fl[i] = input[elt-1]
+		}
+	}
+
+	return test_out_fl
+}
+
+// (bit-reversed) input vector (upper or lower part) has sm vectors (with in_wid * in_wid elt, along with non-valid elements at pad)
+// Keep only the valid values, i.e. remove padded values
+// e.g., 1* // ** -> 10 // 00 (before bitreversed, pad = 1)
+// Only for Test
+func keep_vec(input []int, in_wid, pad, pos int) []int {
+	bits := int(math.Logb(float64(len(input))))
+	output := make([]int, len(input))
+
+	tmp := gen_keep_vec(bits+1, in_wid, pad, pos)
+
+	for i := range output {
+		output[i] = input[i] * tmp[i]
+	}
+
+	return output
+}
+
+// Only for Test
+func keep_vec_fl(input []float64, in_wid, pad, pos int) []float64 {
+	bits := int(math.Logb(float64(len(input))))
+	output := make([]float64, len(input))
+
+	tmp := gen_keep_vec(bits+1, in_wid, pad, pos)
+
+	for i := range output {
+		output[i] = input[i] * float64(tmp[i])
+	}
+
+	return output
+}
+
+// returns the idx for keep_vec
+// N: length of input (upper + lower)
+// pos = 0 -> upper part, pos = 1 -> lower part
+func gen_keep_vec(logN, in_wid, pad, pos int) (idx []int) {
+	N2 := 1 << (logN - 1)
+	idx = make([]int, N2)
+	batch := 2 * N2 / (in_wid * in_wid)
+
+	if pos == 0 {
+		for i := 0; i < in_wid/2; i++ {
+			for j := 0; j < in_wid-pad; j++ {
+				for b := 0; b < batch; b++ {
+					id := int(reverseBits(uint32(in_wid*batch*i+batch*j+b), logN-1))
+					idx[id] = 1
+				}
+			}
+		}
+	} else if pos == 1 {
+		for i := 0; i < in_wid/2-pad; i++ {
+			for j := 0; j < in_wid-pad; j++ {
+				for b := 0; b < batch; b++ {
+					id := int(reverseBits(uint32(in_wid*batch*i+batch*j+b), logN-1))
+					idx[id] = 1
+				}
+			}
+		}
+	} else {
+		panic(err)
+	}
+
+	return idx
 }
 
 // extend a vector (with in_wid * in_wid elt) to a strided vector (2 in_wid * 2 in_wid) (both are bitreversed) // No padding

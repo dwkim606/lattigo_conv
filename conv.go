@@ -70,7 +70,7 @@ func reshape_ker(ker_in []float64, ker_out [][]float64, k_sz int, trans bool) {
 
 // Encode ker_outs from reshape_ker into the i-th ker vector output
 // in_wid, in_batch is those for input (to be convolved) includng padding
-func encode_ker(ker_in [][]float64, pos, i, in_wid, in_batch, ker_wid int) []float64 {
+func encode_ker(ker_in [][]float64, pos, i, in_wid, in_batch, ker_wid int, trans bool) []float64 {
 	vec_size := in_wid * in_wid * in_batch
 	tmp := make([]float64, vec_size)
 	bias := pos * ker_wid * ker_wid * in_batch
@@ -99,19 +99,21 @@ func encode_ker(ker_in [][]float64, pos, i, in_wid, in_batch, ker_wid int) []flo
 
 	// move the kernel to left adj times, so that the result of "transposed" convolution appears at 0-th position
 	// adj := (in_wid+1)*(ker_wid-3)/2 + (in_batch - 1)
-	adj := (in_batch - 1) + (in_batch)*(in_wid+1)*(ker_wid-3)/2
-	ttmp := make([]float64, adj)
-	for i := 0; i < adj; i++ {
-		ttmp[i] = tmp[vec_size-adj+i]
-		tmp[vec_size-adj+i] = -tmp[i]
+	if trans {
+		adj := (in_batch - 1) + (in_batch)*(in_wid+1)*(ker_wid-3)/2
+		ttmp := make([]float64, adj)
+		for i := 0; i < adj; i++ {
+			ttmp[i] = tmp[vec_size-adj+i]
+			tmp[vec_size-adj+i] = -tmp[i]
+		}
+		for i := 0; i < vec_size-2*adj; i++ {
+			tmp[i] = tmp[i+adj]
+		}
+		for i := 0; i < adj; i++ {
+			tmp[i+vec_size-2*adj] = ttmp[i]
+		}
+		// fmt.Println("tmp: ", tmp)
 	}
-	for i := 0; i < vec_size-2*adj; i++ {
-		tmp[i] = tmp[i+adj]
-	}
-	for i := 0; i < adj; i++ {
-		tmp[i+vec_size-2*adj] = ttmp[i]
-	}
-	// fmt.Println("tmp: ", tmp)
 
 	return tmp
 }
@@ -194,6 +196,21 @@ func ext_ctxt(eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext,
 			eval.Add(result, ctxt_tmp, result)
 		}
 	}
+
+	eval.Rescale(result, params.Scale(), result)
+
+	return result
+}
+
+// keep ctxt using given idx so that it outputs a ctxt to be convolved with filter
+func keep_ctxt(params ckks.Parameters, eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext, idx []int) (result *ckks.Ciphertext) {
+
+	tmp := make([]complex128, params.Slots())
+	for i := range idx {
+		tmp[i] = complex(float64(idx[i]), 0)
+	}
+	plain_tmp := encoder.EncodeNTTAtLvlNew(input.Level(), tmp, params.LogSlots())
+	result = eval.MulNew(input, plain_tmp)
 
 	eval.Rescale(result, params.Scale(), result)
 
