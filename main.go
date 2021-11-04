@@ -1,11 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"log"
 	"math"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/ldsec/lattigo/v2/ckks"
+	"github.com/ldsec/lattigo/v2/rlwe"
 )
 
 var start time.Time
@@ -15,11 +20,141 @@ const log_c_scale = 30
 const log_in_scale = 30
 const log_out_scale = 30
 
+const pow = 4
+
+type context struct {
+	logN           int
+	N              int
+	pad            int
+	ECD_LV         int
+	in_wids        []int           // possible input widths
+	ext_idx        map[int][][]int // ext_idx for keep_vec (saved for each possible input width)
+	pl_idx         []*ckks.Plaintext
+	params         ckks.Parameters
+	encoder        ckks.Encoder
+	encryptor      ckks.Encryptor
+	decryptor      ckks.Decryptor
+	evaluator      ckks.Evaluator
+	pack_evaluator ckks.Evaluator
+	btp            *ckks.Bootstrapper
+}
+
+func newContext(logN, pad, ECD_LV int, in_wids []int) *context {
+	cont := context{N: (1 << logN), logN: logN, pad: pad, ECD_LV: ECD_LV}
+	cont.in_wids = make([]int, len(in_wids))
+	copy(cont.in_wids, in_wids)
+
+	btpParams := ckks.DefaultBootstrapParams[6]
+	cont.params, err = btpParams.Params()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("CKKS parameters: logN = %d, logSlots = %d, h = %d, logQP = %d, levels = %d, scale= 2^%f, sigma = %f \n",
+		cont.params.LogN(), cont.params.LogSlots(), btpParams.H, cont.params.LogQP(), cont.params.QCount(), math.Log2(cont.params.Scale()), cont.params.Sigma())
+
+	// Generate ext_idx for extracting valid values from conv with "same" padding
+
+	cont.ext_idx = make(map[int][][]int)
+	for _, elt := range cont.in_wids {
+		cont.ext_idx[elt] = make([][]int, 2)
+		for i := 0; i < 2; i++ {
+			cont.ext_idx[elt][i] = gen_keep_vec(cont.logN, elt, cont.pad, i)
+		}
+	}
+
+	// Scheme context and keys for evaluation (no Boot)
+	kgen := ckks.NewKeyGenerator(cont.params)
+	sk, _ := kgen.GenKeyPairSparse(btpParams.H)
+	rlk := kgen.GenRelinearizationKey(sk, 2)
+	cont.encoder = ckks.NewEncoder(cont.params)
+	cont.decryptor = ckks.NewDecryptor(cont.params, sk)
+	cont.encryptor = ckks.NewEncryptor(cont.params, sk)
+	cont.evaluator = ckks.NewEvaluator(cont.params, rlwe.EvaluationKey{Rlk: rlk})
+
+	cont.pl_idx, cont.pack_evaluator = gen_idxNlogs(cont.ECD_LV, kgen, sk, cont.encoder, cont.params)
+
+	fmt.Println("Generating bootstrapping keys...")
+	start = time.Now()
+	rotations := btpParams.RotationsForBootstrapping(cont.params.LogSlots())
+	rotkeys := kgen.GenRotationKeysForRotations(rotations, true, sk)
+	btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
+	if cont.btp, err = ckks.NewBootstrapper_mod(cont.params, btpParams, btpKey); err != nil {
+		panic(err)
+	}
+	fmt.Printf("Done in %s \n", time.Since(start))
+
+	return &cont
+}
+
 func main() {
 
-	testConv_BNRelu(8, 3, 1, true)
+	logN := 8
+	in_wids := []int{8, 4}
+	ker_wid := 3
+	input_pad := (ker_wid - 1) / 2
+	ECD_LV := 1
+	cont := newContext(logN, input_pad, ECD_LV, in_wids)
 
-	// testConv_noBoot(16, 8, 7, false)
+	ker_size := ker_wid * ker_wid
+	in_wid := in_wids[0]
+	batch := cont.N / (in_wid * in_wid)
+	alpha := 0.0 // 0.3 => leakyrelu
+
+	input := make([]float64, cont.N)
+
+	k := 0.0
+	for i := 0; i < in_wid; i++ {
+		for j := 0; j < in_wid; j++ {
+			for b := 0; b < batch; b++ {
+				if (i < in_wid-input_pad) && (j < in_wid-input_pad) {
+					input[i*in_wid*batch+j*batch+b] = k
+					k += (1.0 / float64(batch*(in_wid-input_pad)*(in_wid-input_pad)))
+				}
+			}
+		}
+	}
+	ker_in := make([]float64, batch*batch*ker_size)
+	for i := range ker_in {
+		ker_in[i] = 1.0 * float64(i) / float64(batch*batch*ker_size)
+	}
+	bn_a := make([]float64, batch)
+	bn_b := make([]float64, batch)
+	for i := range bn_a {
+		bn_a[i] = 0.1 // * float64(i) / float64(batch)
+		bn_b[i] = 0.0 * float64(i) / float64(batch)
+	}
+
+	fmt.Println("vec size: ", cont.N)
+	fmt.Println("input width: ", in_wid)
+	fmt.Println("kernel width: ", ker_wid)
+	fmt.Println("num batches: ", batch)
+	fmt.Println("Input matrix: ")
+	prt_vec(input)
+
+	start = time.Now()
+	pl_input := ckks.NewPlaintext(cont.params, cont.ECD_LV, cont.params.Scale()) // contain plaintext values
+	cont.encoder.EncodeCoeffs(input, pl_input)
+	ct_input := cont.encryptor.EncryptNew(pl_input)
+	fmt.Printf("Encryption done in %s \n", time.Since(start))
+
+	// ResNet Block 1
+	// modify evalconv_BNRelu so that it outputs ct_layer1, ct_layer1_ (= apply b_a at rotation)
+	ct_layer1 := evalConv_BNRelu(cont, ct_input, ker_in, bn_a, bn_b, alpha, in_wid, ker_wid, false)
+	ct_layer1_ := evalConv_BNRelu(cont, ct_input, ker_in, bn_a, bn_b, alpha, in_wid, ker_wid, false)
+	ct_layer2 := evalConv_BNRelu(cont, ct_layer1, ker_in, bn_a, bn_b, alpha, in_wid, ker_wid, false)
+
+	ct_layer22 := evalConv_BN(cont, ct_layer2, ker_in, bn_a, bn_b, in_wid, ker_wid, false)
+	ct_layer22_ := evalConv_BN(cont, ct_layer2, ker_in, bn_a, bn_b, in_wid, ker_wid, false) // bn_a set to 1.0
+	cont.evaluator.ScaleUp(ct_layer1_, ct_layer22.Scale/ct_layer1_.Scale, ct_layer1_)
+	cont.evaluator.ScaleUp(ct_layer1, ct_layer22_.Scale/ct_layer1.Scale, ct_layer1)
+
+	ct_out2 := cont.evaluator.AddNew(ct_layer1_, ct_layer22)
+	ct_out1 := cont.evaluator.AddNew(ct_layer1, ct_layer22_)
+
+	_, _ = ct_out1, ct_out2
+	// testConv_BNRelu(8, 5, 2, true)
+
+	// testConv_noBoot(7, 8, 7, true)
 
 	// testDCGAN()
 
@@ -214,4 +349,44 @@ func prt_mat(vec []float64, batch, show int) {
 			j++
 		}
 	}
+}
+
+func check(e error) {
+	if e != nil {
+		panic(e)
+	}
+}
+
+func readTxt(name_file string) []float64 {
+
+	file, err := os.Open(name_file)
+	check(err)
+	scanner := bufio.NewScanner(file)
+	scanner.Split(bufio.ScanWords)
+
+	var input []float64
+	for scanner.Scan() {
+		add, _ := strconv.ParseFloat(scanner.Text(), 64)
+		input = append(input, add)
+	}
+	file.Close()
+	// fmt.Print(input)
+
+	return input
+
+}
+
+func writeTxt(name_file string, input []float64) {
+	file, err := os.OpenFile(name_file, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatalf("failed creating file: %s", err)
+	}
+
+	datawriter := bufio.NewWriter(file)
+	for _, data := range input {
+		_, _ = datawriter.WriteString(strconv.FormatFloat(data, 'e', -1, 64) + "\n")
+	}
+
+	datawriter.Flush()
+	file.Close()
 }

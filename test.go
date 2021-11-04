@@ -1,59 +1,14 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	"log"
 	"math"
-	"math/rand"
-	"os"
 	"strconv"
 	"time"
 
 	"github.com/ldsec/lattigo/v2/ckks"
 	"github.com/ldsec/lattigo/v2/rlwe"
-	"github.com/ldsec/lattigo/v2/utils"
 )
-
-func check(e error) {
-	if e != nil {
-		panic(e)
-	}
-}
-
-func readTxt(name_file string) []float64 {
-
-	file, err := os.Open(name_file)
-	check(err)
-	scanner := bufio.NewScanner(file)
-	scanner.Split(bufio.ScanWords)
-
-	var input []float64
-	for scanner.Scan() {
-		add, _ := strconv.ParseFloat(scanner.Text(), 64)
-		input = append(input, add)
-	}
-	file.Close()
-	// fmt.Print(input)
-
-	return input
-
-}
-
-func writeTxt(name_file string, input []float64) {
-	file, err := os.OpenFile(name_file, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Fatalf("failed creating file: %s", err)
-	}
-
-	datawriter := bufio.NewWriter(file)
-	for _, data := range input {
-		_, _ = datawriter.WriteString(strconv.FormatFloat(data, 'e', -1, 64) + "\n")
-	}
-
-	datawriter.Flush()
-	file.Close()
-}
 
 func testDCGAN() {
 
@@ -209,7 +164,7 @@ func testDCGAN() {
 			}
 		}
 
-		pl_ker := prepKer_in(params, encoder, encryptor, ker1, a1, in_wid[0], ker_wid, max_batch[0], max_batch[1], batch[0], batch[1], ECD_LV)
+		pl_ker := prepKer_in_trans(params, encoder, encryptor, ker1, a1, in_wid[0], ker_wid, max_batch[0], max_batch[1], batch[0], batch[1], ECD_LV)
 
 		fmt.Print("Boot in: ")
 		fmt.Println()
@@ -278,7 +233,7 @@ func testDCGAN() {
 		// }
 		printDebugCfs(params, ciphertext[3], in_cfs_pBoot, decryptor, encoder)
 
-		ctxt_result := conv_then_pack(params, pack_evaluator, ciphertext, pl_ker, plain_idx, max_batch[1])
+		ctxt_result := conv_then_pack_trans(params, pack_evaluator, ciphertext, pl_ker, plain_idx, max_batch[1])
 
 		// for Batch Normalization (BN)
 		plain_in = ckks.NewPlaintext(params, ctxt_result.Level(), ctxt_result.Scale) // contain plaintext values
@@ -335,7 +290,7 @@ func testDCGAN() {
 			}
 		}
 
-		pl_ker = prepKer_in(params, encoder, encryptor, ker2, a2, in_wid[1], ker_wid, max_batch[1], max_batch[2], batch[1], batch[2], ECD_LV)
+		pl_ker = prepKer_in_trans(params, encoder, encryptor, ker2, a2, in_wid[1], ker_wid, max_batch[1], max_batch[2], batch[1], batch[2], ECD_LV)
 
 		// fmt.Print("Boot in: ")
 		// fmt.Println()
@@ -410,7 +365,7 @@ func testDCGAN() {
 		}
 		printDebugCfs(params, ciphertext[0], in_cfs_pBoot, decryptor, encoder)
 
-		ctxt_result = conv_then_pack(params, pack_evaluator, ciphertext, pl_ker, plain_idx, max_batch[2])
+		ctxt_result = conv_then_pack_trans(params, pack_evaluator, ciphertext, pl_ker, plain_idx, max_batch[2])
 
 		// for BN
 		plain_in = ckks.NewPlaintext(params, ctxt_result.Level(), ctxt_result.Scale) // contain plaintext values
@@ -445,7 +400,7 @@ func testDCGAN() {
 		for i := range a3 {
 			a3[i] = 1
 		}
-		pl_ker = prepKer_in(params, encoder, encryptor, ker3, a3, in_wid[2], ker_wid, max_batch[2], max_batch[3], batch[2], batch[3], ECD_LV)
+		pl_ker = prepKer_in_trans(params, encoder, encryptor, ker3, a3, in_wid[2], ker_wid, max_batch[2], max_batch[3], batch[2], batch[3], ECD_LV)
 
 		// fmt.Print("Boot in: ")
 		// fmt.Println()
@@ -519,7 +474,7 @@ func testDCGAN() {
 		}
 		printDebugCfs(params, ciphertext[0], in_cfs_pBoot, decryptor, encoder)
 
-		ctxt_result = conv_then_pack(params, pack_evaluator, ciphertext, pl_ker, plain_idx, max_batch[3])
+		ctxt_result = conv_then_pack_trans(params, pack_evaluator, ciphertext, pl_ker, plain_idx, max_batch[3])
 		// ctxt_result = conv_then_pack(params, pack_evaluator, ciphertext, pl_ker, plain_idx, batch[2])
 
 		start = time.Now()
@@ -546,109 +501,9 @@ func testDCGAN() {
 	}
 }
 
-func testCyc(logN, iter int, printResult bool) {
-
-	N := (1 << logN)
-	ECD_LV := 1
-
-	// Schemes parameters are created from scratch
-	params, err := ckks.NewParametersFromLiteral(ckks.ParametersLiteral{
-		LogN:     logN,
-		LogQ:     []int{log_out_scale + log_c_scale, log_in_scale},
-		LogP:     []int{60},
-		Sigma:    rlwe.DefaultSigma,
-		LogSlots: logN - 1,
-		Scale:    float64(1 << log_in_scale),
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println()
-	fmt.Println("=========================================")
-	fmt.Println("         INSTANTIATING SCHEME            ")
-	fmt.Println("=========================================")
-	fmt.Println()
-
-	start = time.Now()
-
-	kgen := ckks.NewKeyGenerator(params)
-	sk := kgen.GenSecretKey()
-
-	encryptor := ckks.NewEncryptor(params, sk)
-	decryptor := ckks.NewDecryptor(params, sk)
-	encoder := ckks.NewEncoder(params)
-	rlk := kgen.GenRelinearizationKey(sk, 2)
-	evaluator := ckks.NewEvaluator(params, rlwe.EvaluationKey{Rlk: rlk})
-
-	fmt.Printf("Done in %s \n", time.Since(start))
-
-	fmt.Println()
-	fmt.Printf("CKKS parameters: logN = %d, logSlots = %d, logQP = %d, levels = %d, scale= %f, sigma = %f \n",
-		params.LogN(), params.LogSlots(), params.LogQP(), params.MaxLevel()+1, params.Scale(), params.Sigma())
-
-	fmt.Println()
-	fmt.Println("=========================================")
-	fmt.Println("   PLAINTEXT CREATION & ENCRYPTION       ")
-	fmt.Println("=========================================")
-	fmt.Println()
-
-	start = time.Now()
-
-	name_iter := fmt.Sprintf("%04d", iter)
-
-	circ_rows := readTxt("./variables/rows.txt")
-	circ_mat := make([][]float64, 8)
-	plain_mat := make([]*ckks.Plaintext, 8)
-	for i := 0; i < len(circ_mat); i++ {
-		circ_mat[i] = encode_circ(circ_rows[N/2*i:N/2*(i+1)], 16, N)
-		plain_mat[i] = ckks.NewPlaintext(params, ECD_LV, params.Scale())
-		encoder.EncodeCoeffs(circ_mat[i], plain_mat[i])
-		encoder.ToNTT(plain_mat[i])
-	}
-
-	test_input := readTxt("./inputs/vec_input_" + name_iter + ".txt")
-	enc_test_input := make([]*ckks.Ciphertext, 8)
-	test_tmp := ckks.NewPlaintext(params, ECD_LV, params.Scale())
-	for i := 0; i < len(enc_test_input); i++ {
-		encoder.EncodeCoeffs(encode_circ_in(test_input, i, 16, N), test_tmp)
-		enc_test_input[i] = encryptor.EncryptNew(test_tmp)
-	}
-
-	fmt.Printf("Done in %s \n", time.Since(start))
-	fmt.Println("vec size: ", N)
-	fmt.Println("Input matrix: ")
-	prt_vec(test_input)
-	fmt.Println("Matrix rows (1st part): ")
-	for i := 0; i < len(circ_mat); i++ {
-		prt_vec(circ_rows[N/2*i : N/2*(i+1)])
-	}
-
-	fmt.Println()
-	fmt.Println("=========================================")
-	fmt.Println("              DECRYPTION                 ")
-	fmt.Println("=========================================")
-	fmt.Println()
-
-	start = time.Now()
-	var test_result *ckks.Ciphertext
-	for i := 0; i < len(enc_test_input); i++ {
-		if i == 0 {
-			test_result = evaluator.MulNew(enc_test_input[i], plain_mat[i])
-		} else {
-			evaluator.Add(test_result, evaluator.MulNew(enc_test_input[i], plain_mat[i]), test_result)
-		}
-	}
-
-	decryptor.Decrypt(test_result, test_tmp)
-	test_out := encoder.DecodeCoeffs(test_tmp)
-	fmt.Print("Result: \n")
-	fmt.Println(test_out)
-
-	fmt.Printf("Done in %s \n", time.Since(start))
-}
-
-// Fast Conv without boot, Assume full batch
+// Fast Conv without boot, Assume full batch with Po2 in_wid & N
+// Normal Conv without output modification (e.g., trimming or expanding)
+// Assume that the input is 0 padded according to kernel size: only in_wid - (ker_wid-1)/2 elements in row and columns are nonzero
 func testConv_noBoot(logN, in_wid, ker_wid int, printResult bool) []float64 {
 	N := (1 << logN)
 	in_size := in_wid * in_wid
@@ -687,23 +542,31 @@ func testConv_noBoot(logN, in_wid, ker_wid int, printResult bool) []float64 {
 		params.LogN(), params.LogSlots(), params.LogQP(), params.MaxLevel()+1, params.Scale(), params.Sigma())
 
 	input := make([]float64, N)
-	for i := range input {
-		input[i] = 1.0 * float64(i) / float64(N)
+	pad := (ker_wid - 1) / 2
+	k := 0.0
+	for i := 0; i < in_wid; i++ {
+		for j := 0; j < in_wid; j++ {
+			for b := 0; b < batch; b++ {
+				if (i < in_wid-pad) && (j < in_wid-pad) {
+					input[i*in_wid*batch+j*batch+b] = k
+					k += 1.0
+				}
+			}
+		}
 	}
+	// for i := range input {
+	// 	input[i] = 1.0 * float64(i) //0.1 * float64(i) / float64(N)
+	// }
 	ker_in := make([]float64, batch*batch*ker_size)
 	for i := range ker_in {
-		ker_in[i] = 1.0 * float64(i) / float64(batch*batch*ker_size)
+		ker_in[i] = 1.0 * float64(i) //0.1 * float64(i) / float64(batch*batch*ker_size)
 	}
-	ker := make([][]float64, batch)
-	reshape_ker(ker_in, ker, ker_size, false)
-
+	bn_a := make([]float64, batch)
+	for i := range bn_a {
+		bn_a[i] = 1.0
+	}
 	start = time.Now()
-	pl_ker := make([]*ckks.Plaintext, batch)
-	for i := 0; i < batch; i++ {
-		pl_ker[i] = ckks.NewPlaintext(params, params.MaxLevel(), params.Scale())
-		encoder.EncodeCoeffs(encode_ker(ker, 0, i, in_wid, batch, ker_wid, false), pl_ker[i])
-		encoder.ToNTT(pl_ker[i])
-	}
+	pl_ker := prepKer_in(params, encoder, ker_in, bn_a, in_wid, ker_wid, batch, batch, params.MaxLevel())
 	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
 
 	fmt.Println("vec size: ", N)
@@ -713,7 +576,7 @@ func testConv_noBoot(logN, in_wid, ker_wid int, printResult bool) []float64 {
 	fmt.Println("Input matrix: ")
 	prt_vec(input)
 	fmt.Println("Ker1_in (1st part): ")
-	prt_vec(ker[0])
+	prt_vec(ker_in)
 
 	start = time.Now()
 	plain_tmp := ckks.NewPlaintext(params, params.MaxLevel(), params.Scale()) // contain plaintext values
@@ -728,11 +591,7 @@ func testConv_noBoot(logN, in_wid, ker_wid int, printResult bool) []float64 {
 	fmt.Println()
 
 	start = time.Now()
-	ctxt_out := make([]*ckks.Ciphertext, batch)
-	for i := 0; i < batch; i++ {
-		ctxt_out[i] = pack_evaluator.MulNew(ctxt_input, pl_ker[i])
-	}
-	result := pack_ctxts(pack_evaluator, ctxt_out, batch, plain_idx, params)
+	ct_result := conv_then_pack(params, pack_evaluator, ctxt_input, pl_ker, plain_idx, batch)
 	fmt.Printf("Done in %s \n", time.Since(start))
 
 	fmt.Println()
@@ -742,8 +601,9 @@ func testConv_noBoot(logN, in_wid, ker_wid int, printResult bool) []float64 {
 	fmt.Println()
 
 	start = time.Now()
-	decryptor.Decrypt(result, plain_tmp)
-	cfs_tmp := reshape_conv_out(encoder.DecodeCoeffs(plain_tmp), in_wid*2, batch)
+	decryptor.Decrypt(ct_result, plain_tmp)
+	cfs_tmp := encoder.DecodeCoeffs(plain_tmp)
+	// cfs_tmp := reshape_conv_out(encoder.DecodeCoeffs(plain_tmp), in_wid, batch)
 	fmt.Printf("Decryption Done in %s \n", time.Since(start))
 
 	if printResult {
@@ -754,558 +614,8 @@ func testConv_noBoot(logN, in_wid, ker_wid int, printResult bool) []float64 {
 	return cfs_tmp
 }
 
-func testPoly() {
-
-	fmt.Println()
-	fmt.Println("=========================================")
-	fmt.Println("              Eval Poly                  ")
-	fmt.Println("=========================================")
-	fmt.Println()
-
-	var plaintext *ckks.Plaintext
-
-	// Using Bootstrapping parameters
-	// btpParams := ckks.DefaultBootstrapParams[5]
-	// params, err := btpParams.Params()
-	// if err != nil {
-	// 	panic(err)
-	// }
-
-	params, err := ckks.NewParametersFromLiteral(ckks.ParametersLiteral{
-		LogN: 12,
-		LogQ: []int{log_out_scale, log_in_scale, log_in_scale, log_in_scale,
-			log_in_scale, log_in_scale, log_in_scale, log_in_scale,
-			log_in_scale, log_in_scale, log_in_scale, log_in_scale,
-			log_in_scale, log_in_scale, log_in_scale, log_in_scale,
-			log_in_scale, log_in_scale, log_in_scale, log_in_scale,
-		},
-		LogP:     []int{60},
-		Sigma:    rlwe.DefaultSigma,
-		LogSlots: 12 - 1,
-		Scale:    float64(1 << log_in_scale),
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	// for i := 1; i < params.QCount(); i++ {
-	// 	fmt.Printf("%x \n", params.Q()[i])
-	// }
-
-	fmt.Println()
-	fmt.Printf("CKKS parameters: logN = %d, logSlots = %d, logQP = %d, levels = %d, scale= 2^%f, sigma = %f \n",
-		params.LogN(), params.LogSlots(), params.LogQP(), params.QCount(), math.Log2(params.Scale()), params.Sigma())
-
-	fmt.Println()
-	fmt.Println("Generating keys...")
-	start = time.Now()
-
-	// Scheme context and keys
-	kgen := ckks.NewKeyGenerator(params)
-	sk := kgen.GenSecretKey()
-	// sk, _ := kgen.GenKeyPairSparse(btpParams.H)
-	rlk := kgen.GenRelinearizationKey(sk, 2)
-	encoder := ckks.NewEncoder(params)
-	decryptor := ckks.NewDecryptor(params, sk)
-	encryptor := ckks.NewEncryptor(params, sk)
-	evaluator := ckks.NewEvaluator(params, rlwe.EvaluationKey{Rlk: rlk})
-
-	fmt.Printf("Done in %s \n", time.Since(start))
-
-	// // Gen Boot Keys
-	// fmt.Println()
-	// fmt.Println("Generating bootstrapping keys...")
-	// start = time.Now()
-	// rotations := btpParams.RotationsForBootstrapping(params.LogSlots())
-	// rotkeys := kgen.GenRotationKeysForRotations(rotations, true, sk)
-	// btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
-	// var btp *ckks.Bootstrapper
-	// if btp, err = ckks.NewBootstrapper(params, btpParams, btpKey); err != nil {
-	// 	panic(err)
-	// }
-	// fmt.Printf("Done in %s \n", time.Since(start))
-
-	// Generate a random plaintext
-	valuesWant := make([]complex128, params.Slots())
-	for i := range valuesWant {
-		if i < 13 {
-			valuesWant[i] = complex(1.0/(math.Pow(2, float64(i))), 0.0)
-		} else {
-			// valuesWant[i] = complex(utils.RandFloat64(-1, 1), 0.0)
-			tmp := rand.NormFloat64() * 0.16
-			// for tmp > 1 || tmp < -1 {
-			// 	tmp = rand.NormFloat64()
-			// }
-			// fmt.Print(tmp)
-			valuesWant[i] = complex(tmp, 0.0)
-		}
-	}
-
-	fmt.Print("Input: ")
-	plaintext = ckks.NewPlaintext(params, 14, params.Scale()) // contain plaintext values
-	encoder.Encode(plaintext, valuesWant, params.LogSlots())
-
-	// Encrypt
-	ciphertext := encryptor.EncryptNew(plaintext)
-
-	// Decrypt, print and compare with the plaintext values
-	fmt.Println()
-	fmt.Println("Precision of values vs. ciphertext")
-	values_test := printDebug(params, ciphertext, valuesWant, decryptor, encoder)
-
-	// fmt.Println()
-	// fmt.Println("Bootstrapping... Original:")
-
-	// start = time.Now()
-	// ciphertext0.SetScalingFactor(ciphertext0.Scale * float64(256.0))
-	ciphertext0 := ciphertext
-	// ciphertext0 := btp.Bootstrapp(ciphertext)
-	// ciphertext4.SetScalingFactor(ciphertext4.Scale / float64(256.0))
-	evaluator.Rescale(ciphertext0, params.Scale(), ciphertext0)
-	fmt.Printf("level %d, scale %f \n", ciphertext0.Level(), math.Log2(ciphertext0.Scale))
-	fmt.Printf("Done in %s \n", time.Since(start))
-	values_test = printDebug(params, ciphertext0, values_test, decryptor, encoder)
-
-	// // alpha 12
-	// coeffs_tmp := []complex128{0.0, 11.5523042357223, 0.0, -67.7794513440968, 0.0, 125.283740404562, 0.0, -69.0142908232934}
-	// coeffsReLU := ckks.NewPoly(coeffs_tmp)
-
-	// coeffs_tmp2 := []complex128{0.0, 9.65167636181626, 0.0, -61.6939174538469, 0.0, 155.170351652298, 0.0, -182.697582383214, 0.0, 112.910726525406, 0.0, -37.7752411770263, 0.0, 6.47503909732344, 0.0, -0.445613365723361}
-	// coeffsReLU2 := ckks.NewPoly(coeffs_tmp2)
-
-	// coeffs_tmp3 := []complex128{0.0, 5.25888355571745, 0.0, -33.7233593794284, 0.0, 164.983085013457, 0.0, -541.408891406992, 0.0, 1222.96207997963, 0.0, -1952.01910566479, 0.0, 2240.84021378300, 0.0, -1866.34916983170, 0.0,
-	// 	1127.22117843121, 0.0, -488.070474638380, 0.0, 147.497846308920, 0.0, -29.5171048879526, 0.0, 3.51269520930994, 0.0, -0.188101836557879}
-	// coeffsReLU3 := ckks.NewPoly(coeffs_tmp3)
-
-	// // F & G from CKK
-	// coeffs_tmpF := []complex128{0.0, 315.0 / 128, 0.0, -420.0 / 128, 0.0, 378.0 / 128, 0.0, -180.0 / 128, 0.0, 35.0 / 128}
-	// coeffsReLUF := ckks.NewPoly(coeffs_tmpF)
-
-	// coeffs_tmpG := []complex128{0.0, 5850.0 / 1024, 0.0, -34974.0 / 1024, 0.0, 97015.0 / 1024, 0.0, -113492.0 / 1024, 0.0, 46623.0 / 1024}
-	// coeffsReLUG := ckks.NewPoly(coeffs_tmpG)
-
-	coeffs_tmpFD := []complex128{0.0, 35.0 / 16, 0.0, -35.0 / 16, 0.0, 21.0 / 16, 0.0, -5.0 / 16}
-	coeffsReLUFD := ckks.NewPoly(coeffs_tmpFD)
-
-	coeffs_tmpFD2 := []complex128{0.0, 35.0 / 32, 0.0, -35.0 / 32, 0.0, 21.0 / 32, 0.0, -5.0 / 32}
-	coeffsReLUFD2 := ckks.NewPoly(coeffs_tmpFD2)
-
-	coeffs_tmpGD := []complex128{0.0, 4.4824, 0.0, -16.1915, 0.0, 25.0202, 0.0, -12.5611}
-	coeffsReLUGD := ckks.NewPoly(coeffs_tmpGD)
-
-	// coeffs_tmp := []complex128{0.0, 7.30445164958251, 0.0, -34.6825871108659, 0.0, 59.8596518298826, 0.0, -31.8755225906466}
-	// coeffsReLU := ckks.NewPoly(coeffs_tmp)
-	// coeffs_tmp2 := []complex128{0.0, 2.40085652217597, 0.0, -2.63125454261783, 0.0, 1.54912674773593, 0.0, -0.331172956504304}
-	// coeffsReLU2 := ckks.NewPoly(coeffs_tmp2)
-
-	fmt.Printf("Eval(Ours): ")
-
-	start = time.Now()
-	ciphertext1, _ := evaluator.EvaluatePoly(ciphertext0, coeffsReLUGD, params.Scale())
-	ciphertext1, _ = evaluator.EvaluatePoly(ciphertext1, coeffsReLUGD, params.Scale())
-	ciphertext1, _ = evaluator.EvaluatePoly(ciphertext1, coeffsReLUFD, params.Scale())
-	ciphertext1, _ = evaluator.EvaluatePoly(ciphertext1, coeffsReLUFD2, params.Scale())
-
-	ciphertext2 := evaluator.AddConstNew(ciphertext1, 0.5)
-	ciphertext3 := ciphertext0.CopyNew()
-	evaluator.Rescale(ciphertext3, ciphertext2.Scale, ciphertext3)
-	evaluator.DropLevel(ciphertext3, ciphertext3.Level()-ciphertext2.Level())
-	evaluator.Mul(ciphertext3, ciphertext2, ciphertext2)
-	// ciphertext2.SetScalingFactor(ciphertext2.Scale * 2)
-
-	fmt.Printf("Done in %s \n", time.Since(start))
-	fmt.Print("Sign: ")
-	values_test1 := make([]complex128, len(values_test))
-	for i := range values_test {
-		values_test1[i] = complex(real(values_test[i])/math.Abs(real(values_test[i])), 0)
-	}
-	printDebug(params, ciphertext1, values_test1, decryptor, encoder)
-
-	fmt.Print("ReLU: ")
-	values_test2 := make([]complex128, len(values_test))
-	for i := range values_test {
-		values_test2[i] = complex(math.Max(0, real(values_test[i])), 0)
-	}
-	printDebug(params, ciphertext2, values_test2, decryptor, encoder)
-
-	// ciphertext0 = encryptor.EncryptNew(plaintext)
-	fmt.Printf("Eval: ")
-	start = time.Now()
-
-	ciphertext2 = evalReLU(params, evaluator, ciphertext0, 1.0)
-
-	// ciphertext1, _ = evaluator.EvaluatePoly(ciphertext0, coeffsReLU, params.Scale())
-	// ciphertext1, _ = evaluator.EvaluatePoly(ciphertext1, coeffsReLU2, params.Scale())
-	// ciphertext1, _ = evaluator.EvaluatePoly(ciphertext1, coeffsReLU3, params.Scale())
-
-	// ciphertext2 = evaluator.AddConstNew(ciphertext1, 0.5)
-	// ciphertext3 = ciphertext0.CopyNew()
-	// fmt.Println("c3 scale: ", math.Log2(ciphertext3.Scale))
-
-	// // Modify c3 scale so that the mult result after rescale has desired scale
-	// // constPlain := ckks.NewPlaintext(params, ciphertext3.Level(), float64(params.Q()[ciphertext1.Level()])/(ciphertext3.Scale))
-	// // valuesPlain := make([]float64, params.N())
-	// // valuesPlain[0] = 1.0
-	// // encoder.EncodeCoeffs(valuesPlain, constPlain)
-	// // encoder.ToNTT(constPlain)
-	// // evaluator.Mul(ciphertext3, constPlain, ciphertext3)
-
-	// evaluator.DropLevel(ciphertext3, ciphertext3.Level()-ciphertext2.Level())
-	// evaluator.Mul(ciphertext3, ciphertext2, ciphertext2)
-	// // evaluator.Rescale(ciphertext2, ciphertext0.Scale, ciphertext2)
-
-	fmt.Printf("Done in %s \n", time.Since(start))
-	// fmt.Print("Sign: ")
-	// printDebug(params, ciphertext1, values_test1, decryptor, encoder)
-
-	fmt.Print("ReLU: ")
-	printDebug(params, ciphertext2, values_test2, decryptor, encoder)
-}
-
-// Divide coeff gen later
-// alpha: for leaky relu
-func evalReLU(params ckks.Parameters, evaluator ckks.Evaluator, ctxt_in *ckks.Ciphertext, alpha float64) (ctxt_out *ckks.Ciphertext) {
-	// alpha 10 (from minimax)
-	// prescale is multiplied to improve precision (previously done in StoC matmult)
-	// coeffs_tmp := []complex128{0.0, 10.8541842577442 * prescale, 0.0, -62.2833925211098 * prescale * prescale * prescale,
-	// 	0.0, 114.369227820443 * prescale * prescale * prescale * prescale * prescale, 0.0, -62.8023496973074 * prescale * prescale * prescale * prescale * prescale * prescale * prescale}
-	coeffs_tmp := []complex128{0.0, 10.8541842577442, 0.0, -62.2833925211098, 0.0, 114.369227820443, 0.0, -62.8023496973074}
-	coeffsReLU := ckks.NewPoly(coeffs_tmp)
-
-	coeffs_tmp2 := []complex128{0.0, 4.13976170985111, 0.0, -5.84997640211679, 0.0, 2.94376255659280, 0.0, -0.454530437460152}
-	coeffsReLU2 := ckks.NewPoly(coeffs_tmp2)
-
-	// coeffs_tmp3 := []complex128{0.0, 3.29956739043733, 0.0, -7.84227260291355, 0.0, 12.8907764115564, 0.0, -12.4917112584486, 0.0, 6.94167991428074, 0.0, -2.04298067399942, 0.0, 0.246407138926031}
-	// leakyRelu = x (bconst * s(x) + aconst)
-	aconst := (alpha + 1) / 2.0
-	bconst := (1 - alpha) / 2.0
-	coeffs_tmp3 := []complex128{0.0, 3.29956739043733, 0.0, -7.84227260291355, 0.0, 12.8907764115564, 0.0, -12.4917112584486, 0.0, 6.94167991428074, 0.0, -2.04298067399942, 0.0, 0.246407138926031}
-	for i := range coeffs_tmp3 {
-		coeffs_tmp3[i] = coeffs_tmp3[i] * complex(bconst, 0.0)
-	}
-	coeffsReLU3 := ckks.NewPoly(coeffs_tmp3)
-
-	fmt.Printf("Eval: ")
-	start = time.Now()
-	ctxt_sign, _ := evaluator.EvaluatePoly(ctxt_in, coeffsReLU, params.Scale())
-	ctxt_sign, _ = evaluator.EvaluatePoly(ctxt_sign, coeffsReLU2, params.Scale())
-	ctxt_sign, _ = evaluator.EvaluatePoly(ctxt_sign, coeffsReLU3, params.Scale())
-
-	ctxt_out = evaluator.AddConstNew(ctxt_sign, aconst)
-
-	// Modify c3 scale so that the mult result after rescale has desired scale
-	// constPlain := ckks.NewPlaintext(params, ciphertext3.Level(), float64(params.Q()[ciphertext1.Level()])/(ciphertext3.Scale))
-	// valuesPlain := make([]float64, params.N())
-	// valuesPlain[0] = 1.0
-	// encoder.EncodeCoeffs(valuesPlain, constPlain)
-	// encoder.ToNTT(constPlain)
-	// evaluator.Mul(ciphertext3, constPlain, ciphertext3)
-
-	evaluator.DropLevel(ctxt_in, ctxt_in.Level()-ctxt_out.Level())
-	evaluator.Mul(ctxt_out, ctxt_in, ctxt_out)
-	evaluator.Relinearize(ctxt_out, ctxt_out)
-
-	return
-}
-
-func testBoot() {
-
-	fmt.Println()
-	fmt.Println("=========================================")
-	fmt.Println("              BOOTSTRAPP                 ")
-	fmt.Println("=========================================")
-	fmt.Println()
-
-	var btp *ckks.Bootstrapper
-	var plaintext *ckks.Plaintext
-
-	// Bootstrapping parameters
-	// Four sets of parameters (index 0 to 3) ensuring 128 bit of security
-	// are available in github.com/ldsec/lattigo/v2/ckks/bootstrap_params
-	// LogSlots is hardcoded to 15 in the parameters, but can be changed from 1 to 15.
-	// When changing logSlots make sure that the number of levels allocated to CtS and StC is
-	// smaller or equal to logSlots.
-	btpParams := ckks.DefaultBootstrapParams[5]
-	params, err := btpParams.Params()
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println()
-	fmt.Printf("CKKS parameters: logN = %d, logSlots = %d, h = %d, logQP = %d, levels = %d, scale= 2^%f, sigma = %f \n",
-		params.LogN(), params.LogSlots(), btpParams.H, params.LogQP(), params.QCount(), math.Log2(params.Scale()), params.Sigma())
-
-	// Scheme context and keys
-	kgen := ckks.NewKeyGenerator(params)
-	sk, _ := kgen.GenKeyPairSparse(btpParams.H)
-	rlk := kgen.GenRelinearizationKey(sk, 2)
-	encoder := ckks.NewEncoder(params)
-	decryptor := ckks.NewDecryptor(params, sk)
-	encryptor := ckks.NewEncryptor(params, sk)
-	// evaluator := ckks.NewEvaluator(params, rlwe.EvaluationKey{Rlk: rlk})
-
-	fmt.Println()
-	fmt.Println("Generating bootstrapping keys...")
-	start = time.Now()
-	rotations := btpParams.RotationsForBootstrapping(params.LogSlots())
-	rotkeys := kgen.GenRotationKeysForRotations(rotations, true, sk)
-	btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
-	if btp, err = ckks.NewBootstrapper(params, btpParams, btpKey); err != nil {
-		panic(err)
-	}
-	fmt.Printf("Done in %s \n", time.Since(start))
-
-	// Generate a random plaintext
-	// valuesWant := make([]complex128, params.Slots())
-	// for i := range valuesWant {
-	// 	valuesWant[i] = utils.RandComplex128(-1, 1)
-	// }
-
-	// plaintext = encoder.EncodeNew(valuesWant, params.LogSlots())
-	cfs_tmp := make([]float64, params.N())
-	for i := range cfs_tmp {
-		// cfs_tmp[i] = math.Mod(math.Pow(2, float64(i)), float64(params.N()))
-		cfs_tmp[i] = utils.RandFloat64(-1, 1)
-		// cfs_tmp[i] = 1.0 * float64(i) / float64(len(cfs_tmp))
-	}
-	fmt.Print("Boot in: ")
-	prt_vec(cfs_tmp)
-	plaintext = ckks.NewPlaintext(params, params.MaxLevel(), params.Scale()) // contain plaintext values
-	encoder.EncodeCoeffs(cfs_tmp, plaintext)
-
-	// Encrypt
-	ciphertext0 := encryptor.EncryptNew(plaintext)
-	ciphertext1 := ciphertext0.CopyNew()
-
-	// Decrypt, print and compare with the plaintext values
-	fmt.Println()
-	fmt.Println("Precision of values vs. ciphertext")
-	values_test := printDebugCfs(params, ciphertext0, cfs_tmp, decryptor, encoder)
-
-	// Bootstrap the ciphertext (homomorphic re-encryption)
-	// It takes a ciphertext at level 0 (if not at level 0, then it will reduce it to level 0)
-	// and returns a ciphertext at level MaxLevel - k, where k is the depth of the bootstrapping circuit.
-	// CAUTION: the scale of the ciphertext MUST be equal (or very close) to params.Scale
-	// To equalize the scale, the function evaluator.SetScale(ciphertext, parameters.Scale) can be used at the expense of one level.
-	fmt.Println()
-	fmt.Println("Bootstrapping... Original:")
-
-	start = time.Now()
-	// ciphertext0.SetScalingFactor(ciphertext0.Scale * float64(256.0))
-	ciphertext4 := btp.Bootstrapp(ciphertext0)
-	// ciphertext4.SetScalingFactor(ciphertext4.Scale / float64(256.0))
-	fmt.Printf("Done in %s \n", time.Since(start))
-	printDebugCfs(params, ciphertext4, values_test, decryptor, encoder)
-
-	fmt.Println("Bootstrapping... Ours:")
-	start = time.Now()
-	// Reason for multpling 1/(2*N) : for higher precision in SineEval & ReLU before StoC (needs to be recovered after/before StoC)
-	// ciphertext1.SetScalingFactor(ciphertext1.Scale * float64(2*params.N()))
-
-	ciphertext2, ciphertext3, _ := btp.BootstrappConv_CtoS(ciphertext1)
-	fmt.Printf("Done in %s \n", time.Since(start))
-
-	values_testC := make([]complex128, params.Slots())
-	fmt.Printf("Boot out1: ")
-	values_test1 := reverseOrder(values_test[:params.Slots()], params.LogSlots())
-	for i := range values_testC {
-		values_testC[i] = complex(values_test1[i], 0)
-	}
-	printDebug(params, ciphertext2, values_testC, decryptor, encoder)
-
-	fmt.Printf("Boot out2: ")
-	values_test2 := reverseOrder(values_test[params.Slots():], params.LogSlots())
-	for i := range values_testC {
-		values_testC[i] = complex(values_test2[i], 0)
-	}
-	printDebug(params, ciphertext3, values_testC, decryptor, encoder)
-
-}
-
-// set input as in_wid * in_wid * batch, then zero padding other values.
-func testBRrot(logN, in_wid, batch int, print bool) []int {
-
-	// logN := 6
-	// in_wid := 4
-	// pad := 2
-
-	// N := (1 << logN)
-	// in_size := in_wid * in_wid
-	// batch := N / in_size
-
-	// sm_input := make([]int, in_size) // each will be packed to input vector
-	// input := make([]int, N)
-	// input_rev := make([]int, N/2)
-	// output := make([]int, N)
-
-	// // set input and desired output
-	// for b := 0; b < batch; b++ {
-	// 	for i := range sm_input {
-	// 		sm_input[i] = i + b*in_size
-	// 	}
-	// 	arrgvec(sm_input, input, b)
-	// }
-
-	// for b := 0; b < batch; b++ {
-	// 	print_vec("input ("+strconv.Itoa(b)+")", input, in_wid, b)
-	// }
-
-	// input_up := input[0 : N/2]
-	// input_dn := input[N/2 : N]
-	// for i, elt := range input_up {
-	// 	input_rev[reverseBits(uint32(i), logN-1)] = elt
-	// }
-	// output_rev := keep_vec(input_rev, in_wid, pad, 0)
-	// for i, elt := range output_rev {
-	// 	output[reverseBits(uint32(i), logN-1)] = elt
-	// }
-	// for i, elt := range input_dn {
-	// 	input_rev[reverseBits(uint32(i), logN-1)] = elt
-	// }
-	// output_rev = keep_vec(input_rev, in_wid, pad, 1)
-	// for i, elt := range output_rev {
-	// 	output[N/2+int(reverseBits(uint32(i), logN-1))] = elt
-	// }
-
-	// for b := 0; b < batch; b++ {
-	// 	print_vec("output ("+strconv.Itoa(b)+")", output, in_wid, b)
-	// }
-
-	N := (1 << logN)
-	in_size := in_wid * in_wid
-	max_batch := N / (4 * in_size)
-
-	if print {
-		fmt.Print("Batch: ", batch, "\n\n")
-	}
-
-	sm_input := make([]int, in_size) // each will be packed to input vector
-	input := make([]int, N)
-	input_rev := make([]int, N)
-	// input_hf_rev := make([]int, N/2)
-
-	// out_dsr := make([]int, N)     // desired output
-	// out_dsr_rev := make([]int, N) // desired output, bitrev
-	// sm_out_final := make([]int, 4*4*in_size) // to print out the result (ext & ext_sp)
-	test_out := make([]int, N)
-	// test_out_hf := make([]int, N/2)
-
-	// set input and desired output
-
-	for b := 0; b < max_batch; b++ {
-		if b < batch {
-			for i := range sm_input {
-				sm_input[i] = batch*i + b
-			}
-		} else {
-			for i := range sm_input {
-				sm_input[i] = 0
-			}
-		}
-
-		arrgvec(sm_input, input, b)
-	}
-
-	// // for smaller input
-	// for b := 0; b < max_batch; b++ {
-	// 	if b%(max_batch/batch) == 0 {
-	// 		for i := range sm_input {
-	// 			sm_input[i] = batch*i + (b * batch / max_batch)
-	// 		}
-	// 	} else {
-	// 		for i := range sm_input {
-	// 			sm_input[i] = 0
-	// 		}
-	// 	}
-
-	// 	arrgvec(sm_input, input, b)
-	// }
-
-	// row := 4 * in_wid
-
-	if print {
-		for b := 0; b < 4; b++ {
-			print_vec("input ("+strconv.Itoa(b)+")", input, in_wid, b)
-		}
-	}
-	for i, elt := range input {
-		input_rev[reverseBits(uint32(i), logN)] = elt
-	}
-	// fmt.Println("inputRev:")
-	// for i := 0; i < len(input_rev); i += row {
-	// 	fmt.Println(input_rev[i : i+row])
-	// }
-	// fmt.Println()
-
-	pos := 0
-	// test_out_rev := extend_vec(input_rev, in_wid, pos)
-	test_out_rev := extend_sp(input_rev, in_wid, pos)
-	// test_out_rev := extend_full(input_rev, in_wid, pos, false)
-
-	// fmt.Println("extend sp testRev: pos(" + strconv.Itoa(pos) + ")")
-	// for i := 0; i < len(test_out_rev); i += row {
-	// 	fmt.Println(test_out_rev[i : i+row])
-	// }
-	// fmt.Println()
-
-	for i, elt := range test_out_rev {
-		test_out[reverseBits(uint32(i), logN)] = elt
-	}
-	if print {
-		for b := 0; b < 1; b++ {
-			print_vec("output ("+strconv.Itoa(b)+")", test_out, 2*in_wid, b)
-		}
-	}
-
-	return test_out
-
-	// for i, elt := range test_out[:N/2] {
-	// 	input_hf_rev[reverseBits(uint32(i), logN-1)] = elt
-	// }
-
-	// test_out_hf = extend_full(input_hf_rev, 2*in_wid, 1, true, true)
-	// // test_out_rev = extend_full(test_out_rev, 2*in_wid, 0, true, false)
-
-	// fmt.Println("extend full testRev: pos(" + strconv.Itoa(pos) + ")")
-	// for i := 0; i < len(test_out_hf); i += row {
-	// 	fmt.Println(test_out_hf[i : i+row])
-	// }
-	// fmt.Println()
-
-	// for i, elt := range test_out_hf {
-	// 	test_out[reverseBits(uint32(i), logN-1)] = elt
-	// }
-
-	// for b := 0; b < batch/16; b++ {
-	// 	print_vec_hf("output ("+strconv.Itoa(b)+")", test_out[:N/2], 4*in_wid, b)
-	// }
-
-	// for i, elt := range test_out_rev {
-	// 	test_out[reverseBits(uint32(i), logN)] = elt
-	// }
-	// for b := 0; b < batch/16; b++ {
-	// 	print_vec("output ("+strconv.Itoa(b)+")", test_out, 4*in_wid, b)
-	// }
-
-	// test_out_rev = comprs_full(test_out_rev, 4*in_wid, 15, false)
-
-	// fmt.Println("after compressing")
-
-	// fmt.Println("testRev: pos(" + strconv.Itoa(pos) + ")")
-	// for i := 0; i < len(test_out_rev); i += row {
-	// 	fmt.Println(test_out_rev[i : i+row])
-	// }
-	// fmt.Println()
-
-	// for i, elt := range test_out_rev {
-	// 	test_out[reverseBits(uint32(i), logN)] = elt
-	// }
-	// for b := 0; b < batch; b++ {
-	// 	print_vec("output ("+strconv.Itoa(b)+")", test_out, in_wid, b)
-	// }
-}
-
 // Eval Conv, BN, relu with Boot
+// in_wid must be Po2,
 func testConv_BNRelu(in_wid, ker_wid, pad int, printResult bool) {
 
 	logN := 16
@@ -1354,9 +664,22 @@ func testConv_BNRelu(in_wid, ker_wid, pad int, printResult bool) {
 	fmt.Printf("Done in %s \n", time.Since(start))
 
 	input := make([]float64, N)
-	for i := range input {
-		input[i] = 1.0 * float64(i) / float64(N)
+	input_pad := (ker_wid - 1) / 2
+	k := 0.0
+	for i := 0; i < in_wid; i++ {
+		for j := 0; j < in_wid; j++ {
+			for b := 0; b < batch; b++ {
+				if (i < in_wid-input_pad) && (j < in_wid-input_pad) {
+					input[i*in_wid*batch+j*batch+b] = k
+					k += (1.0 / float64(batch*(in_wid-input_pad)*(in_wid-input_pad)))
+				}
+			}
+		}
 	}
+	// input := make([]float64, N)
+	// for i := range input {
+	// 	input[i] = 1.0 * float64(i) / float64(N)
+	// }
 	ker_in := make([]float64, batch*batch*ker_size)
 	for i := range ker_in {
 		ker_in[i] = 1.0 * float64(i) / float64(batch*batch*ker_size)
@@ -1367,8 +690,8 @@ func testConv_BNRelu(in_wid, ker_wid, pad int, printResult bool) {
 	bn_b := make([]float64, batch)
 	b_coeffs := make([]float64, N)
 	for i := range bn_a {
-		bn_a[i] = 0.0 * float64(i) / float64(batch)
-		bn_b[i] = 1.0 * float64(i) / float64(batch)
+		bn_a[i] = 1.0 / 10000 // * float64(i) / float64(batch)
+		bn_b[i] = 0.0 * float64(i) / float64(batch)
 	}
 	for i := range bn_b {
 		for j := 0; j < in_wid; j++ {
@@ -1377,8 +700,7 @@ func testConv_BNRelu(in_wid, ker_wid, pad int, printResult bool) {
 			}
 		}
 	}
-
-	pl_ker := prepKer_in_normal(params, encoder, ker_in, bn_a, in_wid, ker_wid, batch, batch, ECD_LV)
+	pl_ker := prepKer_in(params, encoder, ker_in, bn_a, in_wid, ker_wid, batch, batch, ECD_LV)
 	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
 
 	fmt.Println("vec size: ", N)
@@ -1403,7 +725,7 @@ func testConv_BNRelu(in_wid, ker_wid, pad int, printResult bool) {
 	fmt.Println()
 
 	start = time.Now()
-	ct_conv := conv_then_pack_normal(params, pack_evaluator, ct_input, pl_ker, pl_idx, batch)
+	ct_conv := conv_then_pack(params, pack_evaluator, ct_input, pl_ker, pl_idx, batch)
 
 	// for Batch Normalization (BN)
 	pl_bn_b := ckks.NewPlaintext(params, ct_conv.Level(), ct_conv.Scale) // contain plaintext values
@@ -1494,18 +816,6 @@ func testConv_BNRelu(in_wid, ker_wid, pad int, printResult bool) {
 		fmt.Print("Result: \n")
 		prt_mat(cfs_tmp, batch, 0)
 	}
-
-	// // To see each matrix
-	// cfs_tmp = encoder.DecodeCoeffs(plain_out)
-	// int_tmpn := make([]int, N)
-	// for i := range cfs_tmp {
-	// 	int_tmpn[i] = int(cfs_tmp[i])
-	// }
-	// fmt.Print("Output: \n")
-	// for b := 0; b < batch[1]; b++ {
-	// 	print_vec("output ("+strconv.Itoa(b)+")", int_tmpn, in_wid[2], b)
-	// }
-
 }
 
 // Eval Conv & Boot
@@ -1587,8 +897,8 @@ func testBootFast_Conv(ext_input []int, logN, in_wid, ker_wid int, printResult b
 	for i := range ker1_in {
 		ker1_in[i] = 1.0 * (float64(len(ker1_in)) - float64(i) - 1) // float64(len(ker1_in))
 	}
-	ker1 := make([][]float64, batch_real)
-	reshape_ker(ker1_in, ker1, ker_size, false)
+
+	ker1 := reshape_ker(ker1_in, ker_size, batch_real, false)
 
 	pl_ker := make([]*ckks.Plaintext, batch_real)
 	for i := 0; i < batch_real; i++ {
@@ -1813,114 +1123,498 @@ func testBootFast_Conv(ext_input []int, logN, in_wid, ker_wid int, printResult b
 	return cfs_tmp
 }
 
-// Encode Kernel and outputs Plain(ker)
-// in_wid : width of input (except padding)
-// in_batch / out_batch: batches in 1 ctxt (input / output) consider padding
-// prepKer with input kernel
-// a: coefficient to be multiplied (for BN)
-func prepKer_in(params ckks.Parameters, encoder ckks.Encoder, encryptor ckks.Encryptor, in_ker []float64, a []float64, in_wid, ker_wid, in_batch, out_batch, in_batch_real, out_batch_real, ECD_LV int) [][]*ckks.Plaintext {
-	ker_size := ker_wid * ker_wid
-	in_batch_conv := in_batch / 4 // num batches at convolution 		// strided conv -> /(4)
-	in_wid_conv := in_wid * 4     // size of in_wid at convolution 	// strided conv -> *4
+// set input as in_wid * in_wid * batch, then zero padding other values.
+func testBRrot(logN, in_wid, batch int, print bool) []int {
 
-	ker_in := make([]float64, in_batch*out_batch*ker_size)
-	k := 0
-	for i := range ker_in {
-		if ((i % in_batch) < in_batch_real) && (((i % (in_batch * out_batch)) / in_batch) < out_batch_real) {
-			ker_in[i] = in_ker[k] //* a[((i%(in_batch*out_batch))/in_batch)]
-			k++
+	// logN := 6
+	// in_wid := 4
+	// pad := 2
+
+	// N := (1 << logN)
+	// in_size := in_wid * in_wid
+	// batch := N / in_size
+
+	// sm_input := make([]int, in_size) // each will be packed to input vector
+	// input := make([]int, N)
+	// input_rev := make([]int, N/2)
+	// output := make([]int, N)
+
+	// // set input and desired output
+	// for b := 0; b < batch; b++ {
+	// 	for i := range sm_input {
+	// 		sm_input[i] = i + b*in_size
+	// 	}
+	// 	arrgvec(sm_input, input, b)
+	// }
+
+	// for b := 0; b < batch; b++ {
+	// 	print_vec("input ("+strconv.Itoa(b)+")", input, in_wid, b)
+	// }
+
+	// input_up := input[0 : N/2]
+	// input_dn := input[N/2 : N]
+	// for i, elt := range input_up {
+	// 	input_rev[reverseBits(uint32(i), logN-1)] = elt
+	// }
+	// output_rev := keep_vec(input_rev, in_wid, pad, 0)
+	// for i, elt := range output_rev {
+	// 	output[reverseBits(uint32(i), logN-1)] = elt
+	// }
+	// for i, elt := range input_dn {
+	// 	input_rev[reverseBits(uint32(i), logN-1)] = elt
+	// }
+	// output_rev = keep_vec(input_rev, in_wid, pad, 1)
+	// for i, elt := range output_rev {
+	// 	output[N/2+int(reverseBits(uint32(i), logN-1))] = elt
+	// }
+
+	// for b := 0; b < batch; b++ {
+	// 	print_vec("output ("+strconv.Itoa(b)+")", output, in_wid, b)
+	// }
+
+	N := (1 << logN)
+	in_size := in_wid * in_wid
+	max_batch := N / (4 * in_size)
+
+	if print {
+		fmt.Print("Batch: ", batch, "\n\n")
+	}
+
+	sm_input := make([]int, in_size) // each will be packed to input vector
+	input := make([]int, N)
+	input_rev := make([]int, N)
+	// input_hf_rev := make([]int, N/2)
+
+	// out_dsr := make([]int, N)     // desired output
+	// out_dsr_rev := make([]int, N) // desired output, bitrev
+	// sm_out_final := make([]int, 4*4*in_size) // to print out the result (ext & ext_sp)
+	test_out := make([]int, N)
+	// test_out_hf := make([]int, N/2)
+
+	// set input and desired output
+
+	for b := 0; b < max_batch; b++ {
+		if b < batch {
+			for i := range sm_input {
+				sm_input[i] = batch*i + b
+			}
 		} else {
-			ker_in[i] = 0.0
+			for i := range sm_input {
+				sm_input[i] = 0
+			}
 		}
-	}
-	ker1 := make([][]float64, out_batch) // ker1[i][j] = j-th kernel for i-th output
-	reshape_ker(ker_in, ker1, ker_size, true)
 
-	for i := 0; i < out_batch_real; i++ {
-		for j := range ker1[i] {
-			ker1[i][j] = ker1[i][j] * a[i]
-		}
+		arrgvec(sm_input, input, b)
 	}
 
-	// prt_mat(ker1[0], 16, 0)
-	// fmt.Println("ker11: ", ker1[0])
+	// // for smaller input
+	// for b := 0; b < max_batch; b++ {
+	// 	if b%(max_batch/batch) == 0 {
+	// 		for i := range sm_input {
+	// 			sm_input[i] = batch*i + (b * batch / max_batch)
+	// 		}
+	// 	} else {
+	// 		for i := range sm_input {
+	// 			sm_input[i] = 0
+	// 		}
+	// 	}
 
-	pl_ker := make([][]*ckks.Plaintext, 4) // for strided conv
-	for pos := 0; pos < 4; pos++ {
-		pl_ker[pos] = make([]*ckks.Plaintext, out_batch)
-		for i := 0; i < out_batch; i++ {
-			pl_ker[pos][i] = ckks.NewPlaintext(params, ECD_LV, params.Scale())
-			encoder.EncodeCoeffs(encode_ker(ker1, pos, i, in_wid_conv, in_batch_conv, ker_wid, true), pl_ker[pos][i])
-			encoder.ToNTT(pl_ker[pos][i])
+	// 	arrgvec(sm_input, input, b)
+	// }
+
+	// row := 4 * in_wid
+
+	if print {
+		for b := 0; b < 4; b++ {
+			print_vec("input ("+strconv.Itoa(b)+")", input, in_wid, b)
+		}
+	}
+	for i, elt := range input {
+		input_rev[reverseBits(uint32(i), logN)] = elt
+	}
+	// fmt.Println("inputRev:")
+	// for i := 0; i < len(input_rev); i += row {
+	// 	fmt.Println(input_rev[i : i+row])
+	// }
+	// fmt.Println()
+
+	pos := 0
+	// test_out_rev := extend_vec(input_rev, in_wid, pos)
+	test_out_rev := extend_sp(input_rev, in_wid, pos)
+	// test_out_rev := extend_full(input_rev, in_wid, pos, false)
+
+	// fmt.Println("extend sp testRev: pos(" + strconv.Itoa(pos) + ")")
+	// for i := 0; i < len(test_out_rev); i += row {
+	// 	fmt.Println(test_out_rev[i : i+row])
+	// }
+	// fmt.Println()
+
+	for i, elt := range test_out_rev {
+		test_out[reverseBits(uint32(i), logN)] = elt
+	}
+	if print {
+		for b := 0; b < 1; b++ {
+			print_vec("output ("+strconv.Itoa(b)+")", test_out, 2*in_wid, b)
 		}
 	}
 
-	return pl_ker
+	return test_out
+
+	// for i, elt := range test_out[:N/2] {
+	// 	input_hf_rev[reverseBits(uint32(i), logN-1)] = elt
+	// }
+
+	// test_out_hf = extend_full(input_hf_rev, 2*in_wid, 1, true, true)
+	// // test_out_rev = extend_full(test_out_rev, 2*in_wid, 0, true, false)
+
+	// fmt.Println("extend full testRev: pos(" + strconv.Itoa(pos) + ")")
+	// for i := 0; i < len(test_out_hf); i += row {
+	// 	fmt.Println(test_out_hf[i : i+row])
+	// }
+	// fmt.Println()
+
+	// for i, elt := range test_out_hf {
+	// 	test_out[reverseBits(uint32(i), logN-1)] = elt
+	// }
+
+	// for b := 0; b < batch/16; b++ {
+	// 	print_vec_hf("output ("+strconv.Itoa(b)+")", test_out[:N/2], 4*in_wid, b)
+	// }
+
+	// for i, elt := range test_out_rev {
+	// 	test_out[reverseBits(uint32(i), logN)] = elt
+	// }
+	// for b := 0; b < batch/16; b++ {
+	// 	print_vec("output ("+strconv.Itoa(b)+")", test_out, 4*in_wid, b)
+	// }
+
+	// test_out_rev = comprs_full(test_out_rev, 4*in_wid, 15, false)
+
+	// fmt.Println("after compressing")
+
+	// fmt.Println("testRev: pos(" + strconv.Itoa(pos) + ")")
+	// for i := 0; i < len(test_out_rev); i += row {
+	// 	fmt.Println(test_out_rev[i : i+row])
+	// }
+	// fmt.Println()
+
+	// for i, elt := range test_out_rev {
+	// 	test_out[reverseBits(uint32(i), logN)] = elt
+	// }
+	// for b := 0; b < batch; b++ {
+	// 	print_vec("output ("+strconv.Itoa(b)+")", test_out, in_wid, b)
+	// }
 }
 
-// Encode Kernel and outputs Plain(ker) for normal conv (no stride, no trans)
-// in_wid : width of input (include padding)
-// in_batch / out_batch: batches in 1 ctxt (input / output) consider padding
-// a: coefficient to be multiplied (for BN)
-func prepKer_in_normal(params ckks.Parameters, encoder ckks.Encoder, ker_in, BN_a []float64, in_wid, ker_wid, in_batch, out_batch, ECD_LV int) []*ckks.Plaintext {
-	ker_size := ker_wid * ker_wid
-	ker_rs := make([][]float64, out_batch) // ker1[i][j] = j-th kernel for i-th output
-	reshape_ker(ker_in, ker_rs, ker_size, false)
+func testCyc(logN, iter int, printResult bool) {
 
-	for i := 0; i < out_batch; i++ { // apply batch normalization
-		for j := range ker_rs[i] {
-			ker_rs[i][j] = ker_rs[i][j] * BN_a[i]
-		}
+	N := (1 << logN)
+	ECD_LV := 1
+
+	// Schemes parameters are created from scratch
+	params, err := ckks.NewParametersFromLiteral(ckks.ParametersLiteral{
+		LogN:     logN,
+		LogQ:     []int{log_out_scale + log_c_scale, log_in_scale},
+		LogP:     []int{60},
+		Sigma:    rlwe.DefaultSigma,
+		LogSlots: logN - 1,
+		Scale:    float64(1 << log_in_scale),
+	})
+	if err != nil {
+		panic(err)
 	}
 
-	pl_ker := make([]*ckks.Plaintext, out_batch)
-	for i := 0; i < out_batch; i++ {
-		pl_ker[i] = ckks.NewPlaintext(params, ECD_LV, params.Scale())
-		encoder.EncodeCoeffs(encode_ker(ker_rs, 0, i, in_wid, in_batch, ker_wid, false), pl_ker[i])
-		encoder.ToNTT(pl_ker[i])
-	}
+	fmt.Println()
+	fmt.Println("=========================================")
+	fmt.Println("         INSTANTIATING SCHEME            ")
+	fmt.Println("=========================================")
+	fmt.Println()
 
-	return pl_ker
-}
+	start = time.Now()
 
-// Eval Conv, then Pack
-// The ciphertexts must be packed into full (without vacant position)
-func conv_then_pack(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_in []*ckks.Ciphertext, pl_ker [][]*ckks.Plaintext, plain_idx []*ckks.Plaintext, batch_out int) *ckks.Ciphertext {
+	kgen := ckks.NewKeyGenerator(params)
+	sk := kgen.GenSecretKey()
 
-	start := time.Now()
-	ctxt_out := make([]*ckks.Ciphertext, batch_out)
-	for i := 0; i < batch_out; i++ {
-		ctxt_out[i] = pack_evaluator.MulNew(ctxt_in[0], pl_ker[0][i])
-		for pos := 1; pos < 4; pos++ {
-			pack_evaluator.Add(ctxt_out[i], pack_evaluator.MulNew(ctxt_in[pos], pl_ker[pos][i]), ctxt_out[i])
-		}
-	}
+	encryptor := ckks.NewEncryptor(params, sk)
+	decryptor := ckks.NewDecryptor(params, sk)
+	encoder := ckks.NewEncoder(params)
+	rlk := kgen.GenRelinearizationKey(sk, 2)
+	evaluator := ckks.NewEvaluator(params, rlwe.EvaluationKey{Rlk: rlk})
 
-	ctxt_result := pack_ctxts(pack_evaluator, ctxt_out, batch_out, plain_idx, params)
-	fmt.Println("Result Scale: ", math.Log2(ctxt_result.Scale))
-	fmt.Println("Result LV: ", ctxt_result.Level())
 	fmt.Printf("Done in %s \n", time.Since(start))
 
-	return ctxt_result
-}
+	fmt.Println()
+	fmt.Printf("CKKS parameters: logN = %d, logSlots = %d, logQP = %d, levels = %d, scale= %f, sigma = %f \n",
+		params.LogN(), params.LogSlots(), params.LogQP(), params.MaxLevel()+1, params.Scale(), params.Sigma())
 
-// Eval Conv, then Pack
-// The ciphertexts must be packed into full (without vacant position)
-func conv_then_pack_normal(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_in *ckks.Ciphertext, pl_ker []*ckks.Plaintext, plain_idx []*ckks.Plaintext, batch_out int) *ckks.Ciphertext {
+	fmt.Println()
+	fmt.Println("=========================================")
+	fmt.Println("   PLAINTEXT CREATION & ENCRYPTION       ")
+	fmt.Println("=========================================")
+	fmt.Println()
 
-	start := time.Now()
-	ctxt_out := make([]*ckks.Ciphertext, batch_out)
-	for i := 0; i < batch_out; i++ {
-		ctxt_out[i] = pack_evaluator.MulNew(ctxt_in, pl_ker[i])
+	start = time.Now()
+
+	name_iter := fmt.Sprintf("%04d", iter)
+
+	circ_rows := readTxt("./variables/rows.txt")
+	circ_mat := make([][]float64, 8)
+	plain_mat := make([]*ckks.Plaintext, 8)
+	for i := 0; i < len(circ_mat); i++ {
+		circ_mat[i] = encode_circ(circ_rows[N/2*i:N/2*(i+1)], 16, N)
+		plain_mat[i] = ckks.NewPlaintext(params, ECD_LV, params.Scale())
+		encoder.EncodeCoeffs(circ_mat[i], plain_mat[i])
+		encoder.ToNTT(plain_mat[i])
 	}
-	ctxt_result := pack_ctxts(pack_evaluator, ctxt_out, batch_out, plain_idx, params)
 
-	fmt.Println("Result Scale: ", math.Log2(ctxt_result.Scale))
-	fmt.Println("Result LV: ", ctxt_result.Level())
+	test_input := readTxt("./inputs/vec_input_" + name_iter + ".txt")
+	enc_test_input := make([]*ckks.Ciphertext, 8)
+	test_tmp := ckks.NewPlaintext(params, ECD_LV, params.Scale())
+	for i := 0; i < len(enc_test_input); i++ {
+		encoder.EncodeCoeffs(encode_circ_in(test_input, i, 16, N), test_tmp)
+		enc_test_input[i] = encryptor.EncryptNew(test_tmp)
+	}
+
 	fmt.Printf("Done in %s \n", time.Since(start))
+	fmt.Println("vec size: ", N)
+	fmt.Println("Input matrix: ")
+	prt_vec(test_input)
+	fmt.Println("Matrix rows (1st part): ")
+	for i := 0; i < len(circ_mat); i++ {
+		prt_vec(circ_rows[N/2*i : N/2*(i+1)])
+	}
 
-	return ctxt_result
+	fmt.Println()
+	fmt.Println("=========================================")
+	fmt.Println("              DECRYPTION                 ")
+	fmt.Println("=========================================")
+	fmt.Println()
+
+	start = time.Now()
+	var test_result *ckks.Ciphertext
+	for i := 0; i < len(enc_test_input); i++ {
+		if i == 0 {
+			test_result = evaluator.MulNew(enc_test_input[i], plain_mat[i])
+		} else {
+			evaluator.Add(test_result, evaluator.MulNew(enc_test_input[i], plain_mat[i]), test_result)
+		}
+	}
+
+	decryptor.Decrypt(test_result, test_tmp)
+	test_out := encoder.DecodeCoeffs(test_tmp)
+	fmt.Print("Result: \n")
+	fmt.Println(test_out)
+
+	fmt.Printf("Done in %s \n", time.Since(start))
 }
+
+// func testPoly() {
+
+// 	fmt.Println()
+// 	fmt.Println("=========================================")
+// 	fmt.Println("              Eval Poly                  ")
+// 	fmt.Println("=========================================")
+// 	fmt.Println()
+
+// 	var plaintext *ckks.Plaintext
+
+// 	// Using Bootstrapping parameters
+// 	// btpParams := ckks.DefaultBootstrapParams[5]
+// 	// params, err := btpParams.Params()
+// 	// if err != nil {
+// 	// 	panic(err)
+// 	// }
+
+// 	params, err := ckks.NewParametersFromLiteral(ckks.ParametersLiteral{
+// 		LogN: 12,
+// 		LogQ: []int{log_out_scale, log_in_scale, log_in_scale, log_in_scale,
+// 			log_in_scale, log_in_scale, log_in_scale, log_in_scale,
+// 			log_in_scale, log_in_scale, log_in_scale, log_in_scale,
+// 			log_in_scale, log_in_scale, log_in_scale, log_in_scale,
+// 			log_in_scale, log_in_scale, log_in_scale, log_in_scale,
+// 		},
+// 		LogP:     []int{60},
+// 		Sigma:    rlwe.DefaultSigma,
+// 		LogSlots: 12 - 1,
+// 		Scale:    float64(1 << log_in_scale),
+// 	})
+// 	if err != nil {
+// 		panic(err)
+// 	}
+
+// 	// for i := 1; i < params.QCount(); i++ {
+// 	// 	fmt.Printf("%x \n", params.Q()[i])
+// 	// }
+
+// 	fmt.Println()
+// 	fmt.Printf("CKKS parameters: logN = %d, logSlots = %d, logQP = %d, levels = %d, scale= 2^%f, sigma = %f \n",
+// 		params.LogN(), params.LogSlots(), params.LogQP(), params.QCount(), math.Log2(params.Scale()), params.Sigma())
+
+// 	fmt.Println()
+// 	fmt.Println("Generating keys...")
+// 	start = time.Now()
+
+// 	// Scheme context and keys
+// 	kgen := ckks.NewKeyGenerator(params)
+// 	sk := kgen.GenSecretKey()
+// 	// sk, _ := kgen.GenKeyPairSparse(btpParams.H)
+// 	rlk := kgen.GenRelinearizationKey(sk, 2)
+// 	encoder := ckks.NewEncoder(params)
+// 	decryptor := ckks.NewDecryptor(params, sk)
+// 	encryptor := ckks.NewEncryptor(params, sk)
+// 	evaluator := ckks.NewEvaluator(params, rlwe.EvaluationKey{Rlk: rlk})
+
+// 	fmt.Printf("Done in %s \n", time.Since(start))
+
+// 	// // Gen Boot Keys
+// 	// fmt.Println()
+// 	// fmt.Println("Generating bootstrapping keys...")
+// 	// start = time.Now()
+// 	// rotations := btpParams.RotationsForBootstrapping(params.LogSlots())
+// 	// rotkeys := kgen.GenRotationKeysForRotations(rotations, true, sk)
+// 	// btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
+// 	// var btp *ckks.Bootstrapper
+// 	// if btp, err = ckks.NewBootstrapper(params, btpParams, btpKey); err != nil {
+// 	// 	panic(err)
+// 	// }
+// 	// fmt.Printf("Done in %s \n", time.Since(start))
+
+// 	// Generate a random plaintext
+// 	valuesWant := make([]complex128, params.Slots())
+// 	for i := range valuesWant {
+// 		if i < 13 {
+// 			valuesWant[i] = complex(1.0/(math.Pow(2, float64(i))), 0.0)
+// 		} else {
+// 			// valuesWant[i] = complex(utils.RandFloat64(-1, 1), 0.0)
+// 			tmp := rand.NormFloat64() * 0.16
+// 			// for tmp > 1 || tmp < -1 {
+// 			// 	tmp = rand.NormFloat64()
+// 			// }
+// 			// fmt.Print(tmp)
+// 			valuesWant[i] = complex(tmp, 0.0)
+// 		}
+// 	}
+
+// 	fmt.Print("Input: ")
+// 	plaintext = ckks.NewPlaintext(params, 14, params.Scale()) // contain plaintext values
+// 	encoder.Encode(plaintext, valuesWant, params.LogSlots())
+
+// 	// Encrypt
+// 	ciphertext := encryptor.EncryptNew(plaintext)
+
+// 	// Decrypt, print and compare with the plaintext values
+// 	fmt.Println()
+// 	fmt.Println("Precision of values vs. ciphertext")
+// 	values_test := printDebug(params, ciphertext, valuesWant, decryptor, encoder)
+
+// 	// fmt.Println()
+// 	// fmt.Println("Bootstrapping... Original:")
+
+// 	// start = time.Now()
+// 	// ciphertext0.SetScalingFactor(ciphertext0.Scale * float64(256.0))
+// 	ciphertext0 := ciphertext
+// 	// ciphertext0 := btp.Bootstrapp(ciphertext)
+// 	// ciphertext4.SetScalingFactor(ciphertext4.Scale / float64(256.0))
+// 	evaluator.Rescale(ciphertext0, params.Scale(), ciphertext0)
+// 	fmt.Printf("level %d, scale %f \n", ciphertext0.Level(), math.Log2(ciphertext0.Scale))
+// 	fmt.Printf("Done in %s \n", time.Since(start))
+// 	values_test = printDebug(params, ciphertext0, values_test, decryptor, encoder)
+
+// 	// // alpha 12
+// 	// coeffs_tmp := []complex128{0.0, 11.5523042357223, 0.0, -67.7794513440968, 0.0, 125.283740404562, 0.0, -69.0142908232934}
+// 	// coeffsReLU := ckks.NewPoly(coeffs_tmp)
+
+// 	// coeffs_tmp2 := []complex128{0.0, 9.65167636181626, 0.0, -61.6939174538469, 0.0, 155.170351652298, 0.0, -182.697582383214, 0.0, 112.910726525406, 0.0, -37.7752411770263, 0.0, 6.47503909732344, 0.0, -0.445613365723361}
+// 	// coeffsReLU2 := ckks.NewPoly(coeffs_tmp2)
+
+// 	// coeffs_tmp3 := []complex128{0.0, 5.25888355571745, 0.0, -33.7233593794284, 0.0, 164.983085013457, 0.0, -541.408891406992, 0.0, 1222.96207997963, 0.0, -1952.01910566479, 0.0, 2240.84021378300, 0.0, -1866.34916983170, 0.0,
+// 	// 	1127.22117843121, 0.0, -488.070474638380, 0.0, 147.497846308920, 0.0, -29.5171048879526, 0.0, 3.51269520930994, 0.0, -0.188101836557879}
+// 	// coeffsReLU3 := ckks.NewPoly(coeffs_tmp3)
+
+// 	// // F & G from CKK
+// 	// coeffs_tmpF := []complex128{0.0, 315.0 / 128, 0.0, -420.0 / 128, 0.0, 378.0 / 128, 0.0, -180.0 / 128, 0.0, 35.0 / 128}
+// 	// coeffsReLUF := ckks.NewPoly(coeffs_tmpF)
+
+// 	// coeffs_tmpG := []complex128{0.0, 5850.0 / 1024, 0.0, -34974.0 / 1024, 0.0, 97015.0 / 1024, 0.0, -113492.0 / 1024, 0.0, 46623.0 / 1024}
+// 	// coeffsReLUG := ckks.NewPoly(coeffs_tmpG)
+
+// 	coeffs_tmpFD := []complex128{0.0, 35.0 / 16, 0.0, -35.0 / 16, 0.0, 21.0 / 16, 0.0, -5.0 / 16}
+// 	coeffsReLUFD := ckks.NewPoly(coeffs_tmpFD)
+
+// 	coeffs_tmpFD2 := []complex128{0.0, 35.0 / 32, 0.0, -35.0 / 32, 0.0, 21.0 / 32, 0.0, -5.0 / 32}
+// 	coeffsReLUFD2 := ckks.NewPoly(coeffs_tmpFD2)
+
+// 	coeffs_tmpGD := []complex128{0.0, 4.4824, 0.0, -16.1915, 0.0, 25.0202, 0.0, -12.5611}
+// 	coeffsReLUGD := ckks.NewPoly(coeffs_tmpGD)
+
+// 	// coeffs_tmp := []complex128{0.0, 7.30445164958251, 0.0, -34.6825871108659, 0.0, 59.8596518298826, 0.0, -31.8755225906466}
+// 	// coeffsReLU := ckks.NewPoly(coeffs_tmp)
+// 	// coeffs_tmp2 := []complex128{0.0, 2.40085652217597, 0.0, -2.63125454261783, 0.0, 1.54912674773593, 0.0, -0.331172956504304}
+// 	// coeffsReLU2 := ckks.NewPoly(coeffs_tmp2)
+
+// 	fmt.Printf("Eval(Ours): ")
+
+// 	start = time.Now()
+// 	ciphertext1, _ := evaluator.EvaluatePoly(ciphertext0, coeffsReLUGD, params.Scale())
+// 	ciphertext1, _ = evaluator.EvaluatePoly(ciphertext1, coeffsReLUGD, params.Scale())
+// 	ciphertext1, _ = evaluator.EvaluatePoly(ciphertext1, coeffsReLUFD, params.Scale())
+// 	ciphertext1, _ = evaluator.EvaluatePoly(ciphertext1, coeffsReLUFD2, params.Scale())
+
+// 	ciphertext2 := evaluator.AddConstNew(ciphertext1, 0.5)
+// 	ciphertext3 := ciphertext0.CopyNew()
+// 	evaluator.Rescale(ciphertext3, ciphertext2.Scale, ciphertext3)
+// 	evaluator.DropLevel(ciphertext3, ciphertext3.Level()-ciphertext2.Level())
+// 	evaluator.Mul(ciphertext3, ciphertext2, ciphertext2)
+// 	// ciphertext2.SetScalingFactor(ciphertext2.Scale * 2)
+
+// 	fmt.Printf("Done in %s \n", time.Since(start))
+// 	fmt.Print("Sign: ")
+// 	values_test1 := make([]complex128, len(values_test))
+// 	for i := range values_test {
+// 		values_test1[i] = complex(real(values_test[i])/math.Abs(real(values_test[i])), 0)
+// 	}
+// 	printDebug(params, ciphertext1, values_test1, decryptor, encoder)
+
+// 	fmt.Print("ReLU: ")
+// 	values_test2 := make([]complex128, len(values_test))
+// 	for i := range values_test {
+// 		values_test2[i] = complex(math.Max(0, real(values_test[i])), 0)
+// 	}
+// 	printDebug(params, ciphertext2, values_test2, decryptor, encoder)
+
+// 	// ciphertext0 = encryptor.EncryptNew(plaintext)
+// 	fmt.Printf("Eval: ")
+// 	start = time.Now()
+
+// 	ciphertext2 = evalReLU(params, evaluator, ciphertext0, 1.0)
+
+// 	// ciphertext1, _ = evaluator.EvaluatePoly(ciphertext0, coeffsReLU, params.Scale())
+// 	// ciphertext1, _ = evaluator.EvaluatePoly(ciphertext1, coeffsReLU2, params.Scale())
+// 	// ciphertext1, _ = evaluator.EvaluatePoly(ciphertext1, coeffsReLU3, params.Scale())
+
+// 	// ciphertext2 = evaluator.AddConstNew(ciphertext1, 0.5)
+// 	// ciphertext3 = ciphertext0.CopyNew()
+// 	// fmt.Println("c3 scale: ", math.Log2(ciphertext3.Scale))
+
+// 	// // Modify c3 scale so that the mult result after rescale has desired scale
+// 	// // constPlain := ckks.NewPlaintext(params, ciphertext3.Level(), float64(params.Q()[ciphertext1.Level()])/(ciphertext3.Scale))
+// 	// // valuesPlain := make([]float64, params.N())
+// 	// // valuesPlain[0] = 1.0
+// 	// // encoder.EncodeCoeffs(valuesPlain, constPlain)
+// 	// // encoder.ToNTT(constPlain)
+// 	// // evaluator.Mul(ciphertext3, constPlain, ciphertext3)
+
+// 	// evaluator.DropLevel(ciphertext3, ciphertext3.Level()-ciphertext2.Level())
+// 	// evaluator.Mul(ciphertext3, ciphertext2, ciphertext2)
+// 	// // evaluator.Rescale(ciphertext2, ciphertext0.Scale, ciphertext2)
+
+// 	fmt.Printf("Done in %s \n", time.Since(start))
+// 	// fmt.Print("Sign: ")
+// 	// printDebug(params, ciphertext1, values_test1, decryptor, encoder)
+
+// 	fmt.Print("ReLU: ")
+// 	printDebug(params, ciphertext2, values_test2, decryptor, encoder)
+// }
 
 // // Eval Conv, then Pack
 // // The ciphertexts must be packed into full (without vacant position)
