@@ -1124,94 +1124,72 @@ func testBootFast_Conv(ext_input []int, logN, in_wid, ker_wid int, printResult b
 }
 
 // set input as in_wid * in_wid * batch, then zero padding other values.
-func testBRrot(logN, in_wid, batch int, print bool) []int {
-
-	// logN := 6
-	// in_wid := 4
-	// pad := 2
-
-	// N := (1 << logN)
-	// in_size := in_wid * in_wid
-	// batch := N / in_size
-
-	// sm_input := make([]int, in_size) // each will be packed to input vector
-	// input := make([]int, N)
-	// input_rev := make([]int, N/2)
-	// output := make([]int, N)
-
-	// // set input and desired output
-	// for b := 0; b < batch; b++ {
-	// 	for i := range sm_input {
-	// 		sm_input[i] = i + b*in_size
-	// 	}
-	// 	arrgvec(sm_input, input, b)
-	// }
-
-	// for b := 0; b < batch; b++ {
-	// 	print_vec("input ("+strconv.Itoa(b)+")", input, in_wid, b)
-	// }
-
-	// input_up := input[0 : N/2]
-	// input_dn := input[N/2 : N]
-	// for i, elt := range input_up {
-	// 	input_rev[reverseBits(uint32(i), logN-1)] = elt
-	// }
-	// output_rev := keep_vec(input_rev, in_wid, pad, 0)
-	// for i, elt := range output_rev {
-	// 	output[reverseBits(uint32(i), logN-1)] = elt
-	// }
-	// for i, elt := range input_dn {
-	// 	input_rev[reverseBits(uint32(i), logN-1)] = elt
-	// }
-	// output_rev = keep_vec(input_rev, in_wid, pad, 1)
-	// for i, elt := range output_rev {
-	// 	output[N/2+int(reverseBits(uint32(i), logN-1))] = elt
-	// }
-
-	// for b := 0; b < batch; b++ {
-	// 	print_vec("output ("+strconv.Itoa(b)+")", output, in_wid, b)
-	// }
+func testBRrot(logN, in_wid int, print bool) {
 
 	N := (1 << logN)
 	in_size := in_wid * in_wid
-	max_batch := N / (4 * in_size)
-
-	if print {
-		fmt.Print("Batch: ", batch, "\n\n")
-	}
+	batch := N / in_size
 
 	sm_input := make([]int, in_size) // each will be packed to input vector
 	input := make([]int, N)
-	input_rev := make([]int, N)
-	// input_hf_rev := make([]int, N/2)
-
-	// out_dsr := make([]int, N)     // desired output
-	// out_dsr_rev := make([]int, N) // desired output, bitrev
-	// sm_out_final := make([]int, 4*4*in_size) // to print out the result (ext & ext_sp)
-	test_out := make([]int, N)
-	// test_out_hf := make([]int, N/2)
+	input_rev := make([]int, N/2) // for upper or lowerpart
+	output := make([]int, N)
 
 	// set input and desired output
-
-	for b := 0; b < max_batch; b++ {
-		if b < batch {
-			for i := range sm_input {
-				sm_input[i] = batch*i + b
-			}
-		} else {
-			for i := range sm_input {
-				sm_input[i] = 0
-			}
+	for b := 0; b < batch; b++ {
+		for i := range sm_input {
+			sm_input[i] = i + b*in_size
 		}
-
 		arrgvec(sm_input, input, b)
 	}
 
-	// // for smaller input
+	for b := 0; b < batch; b++ {
+		print_vec("input ("+strconv.Itoa(b)+")", input, in_wid, b)
+	}
+
+	input_up := input[0 : N/2]
+	input_lw := input[N/2 : N]
+	for i, elt := range input_up {
+		input_rev[reverseBits(uint32(i), logN-1)] = elt
+	}
+	output_rev := comprs_full_hf(input_rev, in_wid, 1)
+	// fmt.Println(output_rev)
+	for i, elt := range output_rev {
+		output[reverseBits(uint32(i), logN-1)] = elt
+	}
+	for i, elt := range input_lw {
+		output[N/2+i] = elt
+	}
+
+	for b := 0; b < batch*4; b++ {
+		print_vec("output ("+strconv.Itoa(b)+")", output, in_wid/2, b)
+	}
+	fmt.Println(output)
+	// N := (1 << logN)
+	// in_size := in_wid * in_wid
+	// max_batch := N / (4 * in_size)
+
+	// if print {
+	// 	fmt.Print("Batch: ", batch, "\n\n")
+	// }
+
+	// sm_input := make([]int, in_size) // each will be packed to input vector
+	// input := make([]int, N)
+	// input_rev := make([]int, N)
+	// // input_hf_rev := make([]int, N/2)
+
+	// // out_dsr := make([]int, N)     // desired output
+	// // out_dsr_rev := make([]int, N) // desired output, bitrev
+	// // sm_out_final := make([]int, 4*4*in_size) // to print out the result (ext & ext_sp)
+	// test_out := make([]int, N)
+	// // test_out_hf := make([]int, N/2)
+
+	// // set input and desired output
+
 	// for b := 0; b < max_batch; b++ {
-	// 	if b%(max_batch/batch) == 0 {
+	// 	if b < batch {
 	// 		for i := range sm_input {
-	// 			sm_input[i] = batch*i + (b * batch / max_batch)
+	// 			sm_input[i] = batch*i + b
 	// 		}
 	// 	} else {
 	// 		for i := range sm_input {
@@ -1222,43 +1200,58 @@ func testBRrot(logN, in_wid, batch int, print bool) []int {
 	// 	arrgvec(sm_input, input, b)
 	// }
 
-	// row := 4 * in_wid
+	// // // for smaller input
+	// // for b := 0; b < max_batch; b++ {
+	// // 	if b%(max_batch/batch) == 0 {
+	// // 		for i := range sm_input {
+	// // 			sm_input[i] = batch*i + (b * batch / max_batch)
+	// // 		}
+	// // 	} else {
+	// // 		for i := range sm_input {
+	// // 			sm_input[i] = 0
+	// // 		}
+	// // 	}
 
-	if print {
-		for b := 0; b < 4; b++ {
-			print_vec("input ("+strconv.Itoa(b)+")", input, in_wid, b)
-		}
-	}
-	for i, elt := range input {
-		input_rev[reverseBits(uint32(i), logN)] = elt
-	}
-	// fmt.Println("inputRev:")
-	// for i := 0; i < len(input_rev); i += row {
-	// 	fmt.Println(input_rev[i : i+row])
+	// // 	arrgvec(sm_input, input, b)
+	// // }
+
+	// // row := 4 * in_wid
+
+	// if print {
+	// 	for b := 0; b < 4; b++ {
+	// 		print_vec("input ("+strconv.Itoa(b)+")", input, in_wid, b)
+	// 	}
 	// }
-	// fmt.Println()
-
-	pos := 0
-	// test_out_rev := extend_vec(input_rev, in_wid, pos)
-	test_out_rev := extend_sp(input_rev, in_wid, pos)
-	// test_out_rev := extend_full(input_rev, in_wid, pos, false)
-
-	// fmt.Println("extend sp testRev: pos(" + strconv.Itoa(pos) + ")")
-	// for i := 0; i < len(test_out_rev); i += row {
-	// 	fmt.Println(test_out_rev[i : i+row])
+	// for i, elt := range input {
+	// 	input_rev[reverseBits(uint32(i), logN)] = elt
 	// }
-	// fmt.Println()
+	// // fmt.Println("inputRev:")
+	// // for i := 0; i < len(input_rev); i += row {
+	// // 	fmt.Println(input_rev[i : i+row])
+	// // }
+	// // fmt.Println()
 
-	for i, elt := range test_out_rev {
-		test_out[reverseBits(uint32(i), logN)] = elt
-	}
-	if print {
-		for b := 0; b < 1; b++ {
-			print_vec("output ("+strconv.Itoa(b)+")", test_out, 2*in_wid, b)
-		}
-	}
+	// pos := 0
+	// // test_out_rev := extend_vec(input_rev, in_wid, pos)
+	// test_out_rev := extend_sp(input_rev, in_wid, pos)
+	// // test_out_rev := extend_full(input_rev, in_wid, pos, false)
 
-	return test_out
+	// // fmt.Println("extend sp testRev: pos(" + strconv.Itoa(pos) + ")")
+	// // for i := 0; i < len(test_out_rev); i += row {
+	// // 	fmt.Println(test_out_rev[i : i+row])
+	// // }
+	// // fmt.Println()
+
+	// for i, elt := range test_out_rev {
+	// 	test_out[reverseBits(uint32(i), logN)] = elt
+	// }
+	// if print {
+	// 	for b := 0; b < 1; b++ {
+	// 		print_vec("output ("+strconv.Itoa(b)+")", test_out, 2*in_wid, b)
+	// 	}
+	// }
+
+	// return test_out
 
 	// for i, elt := range test_out[:N/2] {
 	// 	input_hf_rev[reverseBits(uint32(i), logN-1)] = elt

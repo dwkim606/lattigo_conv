@@ -43,7 +43,7 @@ def prt_list(input, start, width, showAll):
 input_width = 7
 vec_size = 4*input_width**2
 ker_width = 3
-bn_a = 0.1
+bn_a = 0.08
 
 batch = vec_size // (input_width * input_width)
 batch_out = batch
@@ -74,9 +74,16 @@ ten_k = tf.reshape(tf.constant(np.array(ker), tf.float32), [ker_width, ker_width
 # print(ten_k[:,:,:,1])
 # print(ten_k[:,:,:,2])
 
-conv = tf.nn.conv2d(ten_x, ten_k, strides = [1,1,1,1], padding = "SAME")*bn_a
-conv = tf.nn.relu(conv)
-conv = tf.nn.conv2d(conv, ten_k, strides = [1,1,1,1], padding = "SAME")*bn_a
-conv = tf.nn.relu(conv)
+num_bl1 = 7
+
+conv = ten_x
+for i in range(num_bl1):
+    conv = tf.nn.conv2d(conv, ten_k, strides = [1,1,1,1], padding = "SAME")*bn_a
+    conv = tf.nn.relu(conv)
+    print(i+1,"layer done\n")
+
 #conv = tf.nn.conv2d_transpose(ten_x, ten_k1, output_shape=(1, input_width[1], input_width[1], batch[1]), strides=[1, 2, 2, 1])
+print(conv)
+
+conv = tf.nn.conv2d(conv, ten_k, strides = [1,2,2,1], padding = "VALID")
 print(conv)

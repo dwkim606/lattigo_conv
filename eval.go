@@ -9,7 +9,7 @@ import (
 )
 
 // Eval Conv, BN, relu with Boot
-// in_wid must be Po2,
+// in_wid must be Po2, BN is fold with Kernel
 func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, ker_wid int, printResult bool) (ct_res *ckks.Ciphertext) {
 
 	in_size := in_wid * in_wid

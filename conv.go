@@ -244,7 +244,6 @@ func ext_ctxt(eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext,
 
 // keep ctxt using given idx so that it outputs a ctxt to be convolved with filter
 func keep_ctxt(params ckks.Parameters, eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext, idx []int) (result *ckks.Ciphertext) {
-
 	tmp := make([]complex128, params.Slots())
 	for i := range idx {
 		tmp[i] = complex(float64(idx[i]), 0)
