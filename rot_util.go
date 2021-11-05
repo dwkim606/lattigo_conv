@@ -651,10 +651,11 @@ func comprs_full(input []int, in_wid int, pos int, padding bool) []int {
 }
 
 // reverse of extend_full (strided -> normal)
-// padding = true: in_wid = real wid including padding
-// (output) e.g., 12 00 // 34 00 // 00 00 // 00 00
+// in_wid = real wid including padding
+// padding = true: only keeps valid elements	// (output) e.g., 12 00 // 34 00 // 00 00 // 00 00
+// padding = false: keeps all elements	// (output) e.g., 12 // 34
 // 0 <= pos < 4 determines to which part the output is positioned at the final output
-func comprs_full_hf(input []int, in_wid int, pos int) []int {
+func comprs_full_hf(input []int, in_wid, pos int, padding bool) []int {
 	output := make([]int, len(input))
 	batch := len(input) / (in_wid * in_wid / 2)
 
@@ -664,16 +665,54 @@ func comprs_full_hf(input []int, in_wid int, pos int) []int {
 		panic("input wid not divisible by 4")
 	}
 
-	for j := 0; j < min_wid; j++ { // kinds of mov depends on j
-		tmp := make([]int, len(input))
-		for b := 0; b < batch; b++ {
-			for i := 0; i < min_wid; i++ {
-				idx := 2*min_wid*in_wid*b + in_wid*j + i
-				tmp[idx] = input[idx]
+	if padding {
+		for j := 0; j < min_wid; j++ { // kinds of mov depends on j
+			tmp := make([]int, len(input))
+			for b := 0; b < batch; b++ {
+				for i := 0; i < min_wid; i++ {
+					idx := 2*min_wid*in_wid*b + in_wid*j + i + min_wid*in_wid + min_wid
+					tmp[idx] = input[idx]
+				}
 			}
+			rot := -2*j*min_wid + 2*pos*min_wid*min_wid - min_wid*in_wid - min_wid
+			output = addSlice(output, rRot(tmp, rot))
 		}
-		rot := -2*j*min_wid + 2*pos*min_wid*min_wid
-		output = addSlice(output, rRot(tmp, rot))
+		// // when we want to extract even positioned inputs
+		// for j := 0; j < min_wid; j++ { // kinds of mov depends on j
+		// 	tmp := make([]int, len(input))
+		// 	for b := 0; b < batch; b++ {
+		// 		for i := 0; i < min_wid; i++ {
+		// 			idx := 2*min_wid*in_wid*b + in_wid*j + i
+		// 			tmp[idx] = input[idx]
+		// 		}
+		// 	}
+		// 	rot := -2*j*min_wid + 2*pos*min_wid*min_wid
+		// 	output = addSlice(output, rRot(tmp, rot))
+		// }
+	} else {
+		for j := 0; j < 2*min_wid; j++ { // kinds of mov depends on j
+			tmp := make([]int, len(input))
+			for b := 0; b < batch; b++ {
+				for i := 0; i < min_wid; i++ {
+					idx := 2*min_wid*in_wid*b + 2*min_wid*j + i + in_wid*min_wid + min_wid
+					tmp[idx] = input[idx]
+				}
+			}
+			rot := -j*min_wid + 2*pos*min_wid*min_wid - min_wid - in_wid*min_wid
+			output = addSlice(output, rRot(tmp, rot))
+		}
+		// // when we want to extract even positioned inputs
+		// for j := 0; j < 2*min_wid; j++ { // kinds of mov depends on j
+		// 	tmp := make([]int, len(input))
+		// 	for b := 0; b < batch; b++ {
+		// 		for i := 0; i < min_wid; i++ {
+		// 			idx := 2*min_wid*in_wid*b + 2*min_wid*j + i
+		// 			tmp[idx] = input[idx]
+		// 		}
+		// 	}
+		// 	rot := -j*min_wid + 2*pos*min_wid*min_wid
+		// 	output = addSlice(output, rRot(tmp, rot))
+		// }
 	}
 
 	return output
@@ -681,7 +720,8 @@ func comprs_full_hf(input []int, in_wid int, pos int) []int {
 
 // returns the idx and rotations for each idx For comprs_full_hf
 // vec_size = slots, in_wid = real in_wid including padding,
-func gen_comprs_full_hf(vec_size, in_wid, pos int) (r_idx map[int][]int) {
+// CAUTION: rotation = -rotation (of comprs_full_hf)
+func gen_comprs_full_hf(vec_size, in_wid, pos int, padding bool) (r_idx map[int][]int) {
 	r_idx = make(map[int][]int)
 	batch := vec_size / (in_wid * in_wid / 2)
 
@@ -691,16 +731,30 @@ func gen_comprs_full_hf(vec_size, in_wid, pos int) (r_idx map[int][]int) {
 		panic("in wid not divisible by 4")
 	}
 
-	for j := 0; j < min_wid; j++ { // kinds of mov depends on j
-		tmp := make([]int, vec_size)
-		for b := 0; b < batch; b++ {
-			for i := 0; i < min_wid; i++ {
-				idx := 2*min_wid*in_wid*b + in_wid*j + i
-				tmp[idx] = 1
+	if padding {
+		for j := 0; j < min_wid; j++ { // kinds of mov depends on j
+			tmp := make([]int, vec_size)
+			for b := 0; b < batch; b++ {
+				for i := 0; i < min_wid; i++ {
+					idx := 2*min_wid*in_wid*b + in_wid*j + i + min_wid*in_wid + min_wid
+					tmp[idx] = 1
+				}
 			}
+			rot := 2*j*min_wid - 2*pos*min_wid*min_wid + min_wid*in_wid + min_wid
+			r_idx[rot] = tmp
 		}
-		rot := -2*j*min_wid + 2*pos*min_wid*min_wid
-		r_idx[rot] = tmp
+	} else {
+		for j := 0; j < 2*min_wid; j++ { // kinds of mov depends on j
+			tmp := make([]int, vec_size)
+			for b := 0; b < batch; b++ {
+				for i := 0; i < min_wid; i++ {
+					idx := 2*min_wid*in_wid*b + 2*min_wid*j + i + in_wid*min_wid + min_wid
+					tmp[idx] = 1
+				}
+			}
+			rot := j*min_wid - 2*pos*min_wid*min_wid + min_wid + in_wid*min_wid
+			r_idx[rot] = tmp
+		}
 	}
 
 	return r_idx

@@ -10,7 +10,9 @@ import (
 
 // Eval Conv, BN, relu with Boot
 // in_wid must be Po2, BN is fold with Kernel
-func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, ker_wid int, printResult bool) (ct_res *ckks.Ciphertext) {
+// stride = true: apply [1,2,2,1] stride; false: [1,1,1,1]
+// pack_pos: position to pack (0,1,2,3): only for strided case
+func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, ker_wid, pack_pos int, padding, stride, printResult bool) (ct_res *ckks.Ciphertext) {
 
 	in_size := in_wid * in_wid
 	batch := cont.N / in_size
@@ -83,10 +85,16 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 	in_slots1 = printDebug(cont.params, ct_boots[0], in_slots1, cont.decryptor, cont.encoder) // Compare before & after CtoS
 	in_slots2 = printDebug(cont.params, ct_boots[1], in_slots2, cont.decryptor, cont.encoder) // Compare before & after CtoS
 
+	var iter int
+	if padding {
+		iter = 1
+	} else {
+		iter = 2
+	}
 	start = time.Now()
-	for pos := 0; pos < 2; pos++ {
-		ct_boots[pos] = evalReLU(cont.params, cont.evaluator, ct_boots[pos], alpha)
-		cont.evaluator.MulByPow2(ct_boots[pos], pow, ct_boots[pos])
+	for ul := 0; ul < iter; ul++ { // up & low parts
+		ct_boots[ul] = evalReLU(cont.params, cont.evaluator, ct_boots[ul], alpha)
+		cont.evaluator.MulByPow2(ct_boots[ul], pow, ct_boots[ul])
 	}
 	fmt.Printf("ReLU Done in %s \n", time.Since(start))
 
@@ -100,13 +108,22 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 	}
 	printDebug(cont.params, ct_boots[1], values_ReLU, cont.decryptor, cont.encoder)
 
-	ct_keep := make([]*ckks.Ciphertext, 2) // for extend (rotation) of ctxt_in
+	ct_keep := make([]*ckks.Ciphertext, iter) // for extend (rotation) of ctxt_in
 
 	start = time.Now()
-	for pos := 0; pos < 2; pos++ {
-		ct_keep[pos] = keep_ctxt(cont.params, cont.evaluator, cont.encoder, ct_boots[pos], cont.ext_idx[in_wid][pos])
+	for ul := 0; ul < iter; ul++ {
+		if stride {
+			ct_keep[ul] = ext_ctxt(cont.evaluator, cont.encoder, ct_boots[ul], cont.r_idx[in_wid][pack_pos], cont.params)
+		} else {
+			ct_keep[ul] = keep_ctxt(cont.params, cont.evaluator, cont.encoder, ct_boots[ul], cont.ext_idx[in_wid][ul])
+		}
 	}
-	ct_res = cont.btp.BootstrappConv_StoC(ct_keep[0], ct_keep[1])
+	if padding {
+		ct_boots[1] = nil
+		ct_res = cont.btp.BootstrappConv_StoC(ct_keep[0], ct_boots[1])
+	} else {
+		ct_res = cont.btp.BootstrappConv_StoC(ct_keep[0], ct_keep[1])
+	}
 	cont.evaluator.Rescale(ct_res, cont.params.Scale(), ct_res)
 
 	fmt.Printf("Boot (StoC) Done in %s \n", time.Since(start))
@@ -127,7 +144,11 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 		fmt.Println()
 
 		fmt.Print("Result: \n")
-		prt_mat(cfs_tmp, batch, 0)
+		if stride {
+			prt_mat(cfs_tmp, batch*4, 0)
+		} else {
+			prt_mat(cfs_tmp, batch, 0)
+		}
 	}
 
 	return ct_res

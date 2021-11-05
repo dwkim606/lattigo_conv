@@ -218,7 +218,7 @@ func pack_ctxts(pack_eval ckks.Evaluator, ctxts_in []*ckks.Ciphertext, cnum int,
 }
 
 // extend ctxt using given rotations so that it outputs a ctxt to be convolved with filter
-func ext_ctxt(eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext, r_idx, m_idx map[int][]int, params ckks.Parameters) (result *ckks.Ciphertext) {
+func ext_ctxt(eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext, r_idx map[int][]int, params ckks.Parameters) (result *ckks.Ciphertext) {
 	st := true
 
 	for rot, elt := range r_idx {

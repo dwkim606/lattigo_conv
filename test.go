@@ -219,7 +219,7 @@ func testDCGAN() {
 		// evaluator.DropLevel(ctxt2, ctxt2.Level()-2)
 		start = time.Now()
 		for pos := 0; pos < 4; pos++ {
-			ext_ctxt1[pos] = ext_ctxt(evaluator, encoder, ctxt1, r_idx[pos], m_idx[pos], params)
+			ext_ctxt1[pos] = ext_ctxt(evaluator, encoder, ctxt1, r_idx[pos], params)
 			// fmt.Println(ext_ctxt1[pos].Level(), ctxt2.Level(), ext_ctxt1[pos].Scale, ctxt2.Scale)
 			// ext_ctxt2[pos] = ext_ctxt(evaluator, encoder, ctxt2, r_idx[pos], m_idx[pos], params)
 			ciphertext[pos] = btp.BootstrappConv_StoC(ext_ctxt1[pos], ctxt2)
@@ -352,7 +352,7 @@ func testDCGAN() {
 
 		start = time.Now()
 		for pos := 0; pos < 4; pos++ {
-			ext_ctxt1[pos] = ext_ctxt(evaluator, encoder, ctxt1, r_idx1[pos], m_idx1[pos], params)
+			ext_ctxt1[pos] = ext_ctxt(evaluator, encoder, ctxt1, r_idx1[pos], params)
 			// ext_ctxt2[pos] = ext_ctxt(evaluator, encoder, ctxt2, r_idx1[pos], m_idx1[pos], params)
 			ciphertext[pos] = btp.BootstrappConv_StoC(ext_ctxt1[pos], ctxt2)
 			evaluator.Rescale(ciphertext[pos], params.Scale(), ciphertext[pos])
@@ -461,7 +461,7 @@ func testDCGAN() {
 
 		start = time.Now()
 		for pos := 0; pos < 4; pos++ {
-			ext_ctxt1[pos] = ext_ctxt(evaluator, encoder, ctxt1, r_idx2[pos], m_idx2[pos], params)
+			ext_ctxt1[pos] = ext_ctxt(evaluator, encoder, ctxt1, r_idx2[pos], params)
 			// ext_ctxt2[pos] = ext_ctxt(evaluator, encoder, ctxt2, r_idx2[pos], m_idx2[pos], params)
 			ciphertext[pos] = btp.BootstrappConv_StoC(ext_ctxt1[pos], ctxt2)
 			evaluator.Rescale(ciphertext[pos], params.Scale(), ciphertext[pos])
@@ -987,8 +987,8 @@ func testBootFast_Conv(ext_input []int, logN, in_wid, ker_wid int, printResult b
 	fmt.Printf("Done in %s \n", time.Since(start))
 	fmt.Println("after Boot: LV = ", ctxt1.Level(), " Scale = ", math.Log2(ctxt1.Scale))
 
-	ctxt1 = ext_ctxt(evaluator, encoder, ctxt1, r_idx, m_idx, params)
-	ctxt2 = ext_ctxt(evaluator, encoder, ctxt2, r_idx, m_idx, params)
+	ctxt1 = ext_ctxt(evaluator, encoder, ctxt1, r_idx, params)
+	ctxt2 = ext_ctxt(evaluator, encoder, ctxt2, r_idx, params)
 
 	// evaluator.Rescale(ctxt1, params.Scale(), ctxt1)
 	// evaluator.Rescale(ctxt2, params.Scale(), ctxt2)
@@ -1129,6 +1129,8 @@ func testBRrot(logN, in_wid int, print bool) {
 	N := (1 << logN)
 	in_size := in_wid * in_wid
 	batch := N / in_size
+	pos := 0
+	padding := true
 
 	sm_input := make([]int, in_size) // each will be packed to input vector
 	input := make([]int, N)
@@ -1152,151 +1154,24 @@ func testBRrot(logN, in_wid int, print bool) {
 	for i, elt := range input_up {
 		input_rev[reverseBits(uint32(i), logN-1)] = elt
 	}
-	output_rev := comprs_full_hf(input_rev, in_wid, 1)
-	// fmt.Println(output_rev)
+	output_rev := comprs_full_hf(input_rev, in_wid, pos, padding)
 	for i, elt := range output_rev {
 		output[reverseBits(uint32(i), logN-1)] = elt
 	}
 	for i, elt := range input_lw {
-		output[N/2+i] = elt
+		input_rev[reverseBits(uint32(i), logN-1)] = elt
 	}
-
+	output_rev = comprs_full_hf(input_rev, in_wid, pos, padding)
+	for i, elt := range output_rev {
+		output[uint32(N/2)+reverseBits(uint32(i), logN-1)] = elt
+		if padding {
+			output[uint32(N/2)+reverseBits(uint32(i), logN-1)] = 0
+		}
+	}
 	for b := 0; b < batch*4; b++ {
 		print_vec("output ("+strconv.Itoa(b)+")", output, in_wid/2, b)
 	}
 	fmt.Println(output)
-	// N := (1 << logN)
-	// in_size := in_wid * in_wid
-	// max_batch := N / (4 * in_size)
-
-	// if print {
-	// 	fmt.Print("Batch: ", batch, "\n\n")
-	// }
-
-	// sm_input := make([]int, in_size) // each will be packed to input vector
-	// input := make([]int, N)
-	// input_rev := make([]int, N)
-	// // input_hf_rev := make([]int, N/2)
-
-	// // out_dsr := make([]int, N)     // desired output
-	// // out_dsr_rev := make([]int, N) // desired output, bitrev
-	// // sm_out_final := make([]int, 4*4*in_size) // to print out the result (ext & ext_sp)
-	// test_out := make([]int, N)
-	// // test_out_hf := make([]int, N/2)
-
-	// // set input and desired output
-
-	// for b := 0; b < max_batch; b++ {
-	// 	if b < batch {
-	// 		for i := range sm_input {
-	// 			sm_input[i] = batch*i + b
-	// 		}
-	// 	} else {
-	// 		for i := range sm_input {
-	// 			sm_input[i] = 0
-	// 		}
-	// 	}
-
-	// 	arrgvec(sm_input, input, b)
-	// }
-
-	// // // for smaller input
-	// // for b := 0; b < max_batch; b++ {
-	// // 	if b%(max_batch/batch) == 0 {
-	// // 		for i := range sm_input {
-	// // 			sm_input[i] = batch*i + (b * batch / max_batch)
-	// // 		}
-	// // 	} else {
-	// // 		for i := range sm_input {
-	// // 			sm_input[i] = 0
-	// // 		}
-	// // 	}
-
-	// // 	arrgvec(sm_input, input, b)
-	// // }
-
-	// // row := 4 * in_wid
-
-	// if print {
-	// 	for b := 0; b < 4; b++ {
-	// 		print_vec("input ("+strconv.Itoa(b)+")", input, in_wid, b)
-	// 	}
-	// }
-	// for i, elt := range input {
-	// 	input_rev[reverseBits(uint32(i), logN)] = elt
-	// }
-	// // fmt.Println("inputRev:")
-	// // for i := 0; i < len(input_rev); i += row {
-	// // 	fmt.Println(input_rev[i : i+row])
-	// // }
-	// // fmt.Println()
-
-	// pos := 0
-	// // test_out_rev := extend_vec(input_rev, in_wid, pos)
-	// test_out_rev := extend_sp(input_rev, in_wid, pos)
-	// // test_out_rev := extend_full(input_rev, in_wid, pos, false)
-
-	// // fmt.Println("extend sp testRev: pos(" + strconv.Itoa(pos) + ")")
-	// // for i := 0; i < len(test_out_rev); i += row {
-	// // 	fmt.Println(test_out_rev[i : i+row])
-	// // }
-	// // fmt.Println()
-
-	// for i, elt := range test_out_rev {
-	// 	test_out[reverseBits(uint32(i), logN)] = elt
-	// }
-	// if print {
-	// 	for b := 0; b < 1; b++ {
-	// 		print_vec("output ("+strconv.Itoa(b)+")", test_out, 2*in_wid, b)
-	// 	}
-	// }
-
-	// return test_out
-
-	// for i, elt := range test_out[:N/2] {
-	// 	input_hf_rev[reverseBits(uint32(i), logN-1)] = elt
-	// }
-
-	// test_out_hf = extend_full(input_hf_rev, 2*in_wid, 1, true, true)
-	// // test_out_rev = extend_full(test_out_rev, 2*in_wid, 0, true, false)
-
-	// fmt.Println("extend full testRev: pos(" + strconv.Itoa(pos) + ")")
-	// for i := 0; i < len(test_out_hf); i += row {
-	// 	fmt.Println(test_out_hf[i : i+row])
-	// }
-	// fmt.Println()
-
-	// for i, elt := range test_out_hf {
-	// 	test_out[reverseBits(uint32(i), logN-1)] = elt
-	// }
-
-	// for b := 0; b < batch/16; b++ {
-	// 	print_vec_hf("output ("+strconv.Itoa(b)+")", test_out[:N/2], 4*in_wid, b)
-	// }
-
-	// for i, elt := range test_out_rev {
-	// 	test_out[reverseBits(uint32(i), logN)] = elt
-	// }
-	// for b := 0; b < batch/16; b++ {
-	// 	print_vec("output ("+strconv.Itoa(b)+")", test_out, 4*in_wid, b)
-	// }
-
-	// test_out_rev = comprs_full(test_out_rev, 4*in_wid, 15, false)
-
-	// fmt.Println("after compressing")
-
-	// fmt.Println("testRev: pos(" + strconv.Itoa(pos) + ")")
-	// for i := 0; i < len(test_out_rev); i += row {
-	// 	fmt.Println(test_out_rev[i : i+row])
-	// }
-	// fmt.Println()
-
-	// for i, elt := range test_out_rev {
-	// 	test_out[reverseBits(uint32(i), logN)] = elt
-	// }
-	// for b := 0; b < batch; b++ {
-	// 	print_vec("output ("+strconv.Itoa(b)+")", test_out, in_wid, b)
-	// }
 }
 
 func testCyc(logN, iter int, printResult bool) {
