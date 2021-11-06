@@ -23,11 +23,11 @@ const log_out_scale = 30
 const pow = 4
 
 type context struct {
-	logN           int
-	N              int
-	pad            int
-	ECD_LV         int
-	in_wids        []int                   // possible input widths
+	logN    int
+	N       int
+	ECD_LV  int
+	in_wids []int // possible input widths
+	// pads           map[int]int
 	ext_idx        map[int][][]int         // ext_idx for keep_vec (saved for each possible input width) map: in_wid, [up/low]
 	r_idx          map[int][]map[int][]int // r_idx for compr_vec map: in_wid [pos] map: rot
 	pl_idx         []*ckks.Plaintext
@@ -40,10 +40,11 @@ type context struct {
 	btp            *ckks.Bootstrapper
 }
 
-func newContext(logN, pad, ECD_LV int, in_wids []int, padding bool) *context {
-	cont := context{N: (1 << logN), logN: logN, pad: pad, ECD_LV: ECD_LV}
+func newContext(logN, ECD_LV int, in_wids []int, padding bool) *context {
+	cont := context{N: (1 << logN), logN: logN, ECD_LV: ECD_LV}
 	cont.in_wids = make([]int, len(in_wids))
 	copy(cont.in_wids, in_wids)
+	// cont.pads = make(map[int]int)
 
 	btpParams := ckks.DefaultBootstrapParams[6]
 	cont.params, err = btpParams.Params()
@@ -67,7 +68,7 @@ func newContext(logN, pad, ECD_LV int, in_wids []int, padding bool) *context {
 	for _, elt := range cont.in_wids {
 		cont.ext_idx[elt] = make([][]int, iter)
 		for i := 0; i < iter; i++ {
-			cont.ext_idx[elt][i] = gen_keep_vec(cont.logN, elt, cont.pad, i)
+			cont.ext_idx[elt][i] = gen_keep_vec(cont.logN, elt, elt/2, i)
 		}
 		cont.r_idx[elt] = make([]map[int][]int, 4)
 		for pos := 0; pos < 4; pos++ {
@@ -109,8 +110,9 @@ func main() {
 
 	// For ResNet, we use padding: i.e., in_wid**2 element is contained in (2*in_wid)**2 sized block
 	// So ReLU, keep or rot, StoC done only on the 1st part of the CtoS ciphertexts
-	logN := 8
-	raw_in_wids := []int{4, 4}
+	logN := 6
+	raw_in_wids := []int{4, 2} // same as python
+	real_batch := []int{1, 2}  // same as python
 	ker_wid := 3
 	input_pad := raw_in_wids[0] // input_pad := (ker_wid - 1) / 2
 	ECD_LV := 1
@@ -123,33 +125,57 @@ func main() {
 			in_wids[i] = elt
 		}
 	}
-	cont := newContext(logN, input_pad, ECD_LV, in_wids, padding)
+	cont := newContext(logN, ECD_LV, in_wids, padding)
 
 	ker_size := ker_wid * ker_wid
-	batch := cont.N / (in_wids[0] * in_wids[0])
-	alpha := 0.0 // 0.3 => leakyrelu
+	batch := make([]int, len(real_batch))
+	for i := range batch {
+		batch[i] = cont.N / (in_wids[i] * in_wids[i])
+	}
 
+	alpha := 0.0 // 0.3 => leakyrelu
 	input := make([]float64, cont.N)
 	k := 0.0
 	for i := 0; i < in_wids[0]; i++ {
 		for j := 0; j < in_wids[0]; j++ {
-			for b := 0; b < batch; b++ {
+			for b := 0; b < batch[0]; b++ {
 				if (i < in_wids[0]-input_pad) && (j < in_wids[0]-input_pad) {
-					input[i*in_wids[0]*batch+j*batch+b] = k
-					k += (1.0 / float64(batch*(in_wids[0]-input_pad)*(in_wids[0]-input_pad)))
+					input[i*in_wids[0]*batch[0]+j*batch[0]+b] = k
+					k += (1.0 / float64(batch[0]*(in_wids[0]-input_pad)*(in_wids[0]-input_pad)))
 				}
 			}
 		}
 	}
-	ker_in := make([]float64, batch*batch*ker_size)
+	prt_mat(input, batch[0], 0)
+	ker_in := make([]float64, real_batch[0]*real_batch[0]*ker_size)
 	for i := range ker_in {
-		ker_in[i] = 1.0 * float64(i) / float64(batch*batch*ker_size)
+		ker_in[i] = 1.0 * float64(i) / float64(len(ker_in))
 	}
-	bn_a := make([]float64, batch)
-	bn_b := make([]float64, batch)
+	ker_in12 := make([]float64, real_batch[0]*real_batch[1]*ker_size)
+	for i := range ker_in12 {
+		ker_in12[i] = 1.0 * float64(i) / float64(len(ker_in12))
+	}
+	ker_in12_0 := make([]float64, len(ker_in12)/2)
+	ker_in12_1 := make([]float64, len(ker_in12)/2)
+	for i := range ker_in12_0 {
+		ker_in12_0[i] = ker_in12[(i/(real_batch[1]/2))*real_batch[1]+i%(real_batch[1]/2)]
+		ker_in12_1[i] = ker_in12[(i/(real_batch[1]/2))*real_batch[1]+i%(real_batch[1]/2)+real_batch[1]/2]
+	}
+	ker_in2 := make([]float64, real_batch[1]*real_batch[1]*ker_size)
+	for i := range ker_in2 {
+		ker_in2[i] = 1.0 //1.0 * float64(i) / float64(len(ker_in2))
+	}
+	bn_a := make([]float64, batch[0])
+	bn_b := make([]float64, batch[0])
 	for i := range bn_a {
-		bn_a[i] = 0.1 // * float64(i) / float64(batch)
-		bn_b[i] = 0.0 * float64(i) / float64(batch)
+		bn_a[i] = 0.5 // * float64(i) / float64(batch)
+		bn_b[i] = 0.0 * float64(i) / float64(batch[0])
+	}
+	bn_a2 := make([]float64, batch[1])
+	bn_b2 := make([]float64, batch[1])
+	for i := range bn_a2 {
+		bn_a2[i] = 0.1 // * float64(i) / float64(batch)
+		bn_b2[i] = 0.0 * float64(i) / float64(batch[1])
 	}
 
 	fmt.Println("vec size: ", cont.N)
@@ -174,11 +200,35 @@ func main() {
 		if i == num_blc1 {
 			prt_result = true
 		}
-		ct_layer[i] = evalConv_BNRelu(cont, ct_layer[i-1], ker_in, bn_a, bn_b, alpha, in_wids[0], ker_wid, 0, padding, false, prt_result)
+		ct_layer[i] = evalConv_BNRelu(cont, ct_layer[i-1], ker_in, bn_a, bn_b, alpha, in_wids[0], ker_wid, batch[0], batch[0], 0, padding, false, prt_result)
 		fmt.Println("Layer ", i, "done!")
 	}
-	ct_result := evalConv_BNRelu(cont, ct_layer[num_blc1], ker_in, bn_a, bn_b, alpha, in_wids[0], ker_wid, 0, padding, true, prt_result)
-	_ = ct_result
+	ct_result1 := evalConv_BNRelu(cont, ct_layer[num_blc1], ker_in12_0, bn_a, bn_b, alpha, in_wids[0], ker_wid, real_batch[0], real_batch[1]/2, 0, padding, true, prt_result)
+	ct_result2 := evalConv_BNRelu(cont, ct_layer[num_blc1], ker_in12_1, bn_a, bn_b, alpha, in_wids[0], ker_wid, real_batch[0], real_batch[1]/2, 1, padding, true, prt_result)
+	ct_result := cont.evaluator.AddNew(ct_result1, ct_result2)
+
+	// cont.decryptor.Decrypt(ct_result, pl_input)
+	// cfs_tmp := cont.encoder.DecodeCoeffs(pl_input)
+	// fmt.Println("Layer", num_blc1+1, "done!")
+	// prt_mat(cfs_tmp, batch[0]*4, 0)
+
+	// ResNet Block 2
+	num_blc2 := 1
+	ct_layer2 := make([]*ckks.Ciphertext, num_blc2+1)
+	ct_layer2[0] = ct_result
+	prt_result = false
+	for i := 1; i <= num_blc2; i++ {
+		if i == num_blc2 {
+			prt_result = true
+		}
+		ct_layer2[i] = evalConv_BNRelu(cont, ct_layer2[i-1], ker_in2, bn_a2, bn_b2, alpha, in_wids[1], ker_wid, real_batch[1], real_batch[1], 0, padding, false, prt_result)
+		fmt.Println("Layer ", i, "done!")
+	}
+
+	// cont.decryptor.Decrypt(ct_layer2[1], pl_input)
+	// cfs_tmp := cont.encoder.DecodeCoeffs(pl_input)
+	// fmt.Println("Layer", num_blc1+1, "done!")
+	// fmt.Print(cfs_tmp)
 
 	// testConv_BNRelu(8, 5, 2, true)
 

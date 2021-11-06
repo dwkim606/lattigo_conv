@@ -41,12 +41,12 @@ def prt_list(input, start, width, showAll):
 
 
 input_width = 4
-batch = 4
+batch = 1
 vec_size = batch*input_width**2
 ker_width = 3
-bn_a = 0.1
+bn_a = 0.5
 
-batch_out = batch
+batch2 = batch*2
 ker_size = ker_width**2
 
 print("input width:", input_width)
@@ -63,29 +63,38 @@ print("ker width:", ker_width)
 
 ## Correctness Check: Compare with TF NN CONV2D
 raw_input = [(1.0 * i)/vec_size for i in range(vec_size)]
-ker =  [(1.0 * i)/(batch * batch_out * ker_size) for i in range(batch * batch_out * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+ker =  [(1.0 * i)/(batch * batch * ker_size) for i in range(batch * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+ker12 = [(1.0 * i)/(batch * batch2 * ker_size) for i in range(batch * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+ker2 = [1.0 for i in range(batch2 * batch2 * ker_size)] # [(1.0 * i)/(batch2 * batch2 * ker_size) for i in range(batch2 * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
 
 ten_x = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, input_width, input_width, batch])
 # print(ten_x)
-ten_k = tf.reshape(tf.constant(np.array(ker), tf.float32), [ker_width, ker_width, batch, batch_out])
+ten_k = tf.reshape(tf.constant(np.array(ker), tf.float32), [ker_width, ker_width, batch, batch])
+ten_k12 = tf.reshape(tf.constant(np.array(ker12), tf.float32), [ker_width, ker_width, batch, batch2])
+ten_k2 = tf.reshape(tf.constant(np.array(ker2), tf.float32), [ker_width, ker_width, batch2, batch2])
 # print(ten_k)
 
 # print(ten_k[:,:,:,0])
 # print(ten_k[:,:,:,1])
 # print(ten_k[:,:,:,2])
+# conv = tf.nn.conv2d_transpose(ten_x, ten_k1, output_shape=(1, input_width[1], input_width[1], batch[1]), strides=[1, 2, 2, 1])
 
 num_bl1 = 1
+num_bl2 = 1
 
 conv = ten_x
 for i in range(num_bl1):
     conv = tf.nn.conv2d(conv, ten_k, strides = [1,1,1,1], padding = "SAME")*bn_a
     conv = tf.nn.relu(conv)
     print(i+1,"layer done\n")
-print("after 1layer", conv)
+print("after 1layer\n", conv, "\n")
 
-# conv = tf.nn.conv2d_transpose(ten_x, ten_k1, output_shape=(1, input_width[1], input_width[1], batch[1]), strides=[1, 2, 2, 1])
-
-
-conv = tf.nn.conv2d(conv, ten_k, strides = [1,2,2,1], padding = "SAME")*bn_a
+conv = tf.nn.conv2d(conv, ten_k12, strides = [1,2,2,1], padding = "SAME")*bn_a
 conv = tf.nn.relu(conv)
-print("after 2layer", conv)
+print("after 2layer\n", conv, "\n")
+
+for i in range(num_bl2):
+    conv = tf.nn.conv2d(conv, ten_k2, strides = [1,1,1,1], padding = "SAME")*0.1
+    conv = tf.nn.relu(conv)
+    print(i+1,"layer done\n")
+print("after final layer\n", conv, "\n")

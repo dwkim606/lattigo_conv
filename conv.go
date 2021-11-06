@@ -382,22 +382,34 @@ func prepKer_in_trans(params ckks.Parameters, encoder ckks.Encoder, encryptor ck
 // in_wid : width of input (include padding)
 // in_batch / out_batch: batches in 1 ctxt (input / output) consider padding
 // a: coefficient to be multiplied (for BN)
-func prepKer_in(params ckks.Parameters, encoder ckks.Encoder, ker_in, BN_a []float64, in_wid, ker_wid, in_batch, out_batch, ECD_LV int) []*ckks.Plaintext {
+// max_ib, max_ob: max inbatch, outbatch for full batch case
+// real_ib, real_ob: real batches for kernel <=> set the same as python
+func prepKer_in(params ckks.Parameters, encoder ckks.Encoder, ker_in, BN_a []float64, in_wid, ker_wid, real_ib, real_ob, max_ib, max_ob, ECD_LV int) []*ckks.Plaintext {
 	ker_size := ker_wid * ker_wid
-	// ker_rs := make([][]float64, out_batch) // ker1[i][j] = j-th kernel for i-th output
-	// reshape_ker(ker_in, ker_rs, ker_size, false)
-	ker_rs := reshape_ker(ker_in, ker_size, out_batch, false) // ker1[i][j] = j-th kernel for i-th output
+	ker_rs := reshape_ker(ker_in, ker_size, real_ob, false) // ker1[i][j] = j-th kernel for i-th output
 
-	for i := 0; i < out_batch; i++ { // apply batch normalization
+	for i := 0; i < real_ob; i++ { // apply batch normalization
 		for j := range ker_rs[i] {
 			ker_rs[i][j] = ker_rs[i][j] * BN_a[i]
 		}
 	}
 
-	pl_ker := make([]*ckks.Plaintext, out_batch)
-	for i := 0; i < out_batch; i++ {
+	max_ker_rs := make([][]float64, max_ob)
+	for i := 0; i < max_ob; i++ {
+		max_ker_rs[i] = make([]float64, max_ib*ker_size)
+		if i < real_ob {
+			for j := 0; j < real_ib; j++ {
+				for k := 0; k < ker_size; k++ {
+					max_ker_rs[i][j+k*max_ib] = ker_rs[i][j+k*real_ib]
+				}
+			}
+		}
+	}
+
+	pl_ker := make([]*ckks.Plaintext, max_ob)
+	for i := 0; i < max_ob; i++ {
 		pl_ker[i] = ckks.NewPlaintext(params, ECD_LV, params.Scale())
-		encoder.EncodeCoeffs(encode_ker(ker_rs, 0, i, in_wid, in_batch, ker_wid, false), pl_ker[i])
+		encoder.EncodeCoeffs(encode_ker(max_ker_rs, 0, i, in_wid, max_ib, ker_wid, false), pl_ker[i])
 		encoder.ToNTT(pl_ker[i])
 	}
 
@@ -427,14 +439,14 @@ func conv_then_pack_trans(params ckks.Parameters, pack_evaluator ckks.Evaluator,
 
 // Eval Conv, then Pack
 // The ciphertexts must be packed into full (without vacant position)
-func conv_then_pack(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_in *ckks.Ciphertext, pl_ker []*ckks.Plaintext, plain_idx []*ckks.Plaintext, batch_out int) *ckks.Ciphertext {
+func conv_then_pack(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_in *ckks.Ciphertext, pl_ker []*ckks.Plaintext, plain_idx []*ckks.Plaintext, max_ob int) *ckks.Ciphertext {
 
 	start := time.Now()
-	ctxt_out := make([]*ckks.Ciphertext, batch_out)
-	for i := 0; i < batch_out; i++ {
+	ctxt_out := make([]*ckks.Ciphertext, max_ob)
+	for i := 0; i < max_ob; i++ {
 		ctxt_out[i] = pack_evaluator.MulNew(ctxt_in, pl_ker[i])
 	}
-	ctxt_result := pack_ctxts(pack_evaluator, ctxt_out, batch_out, plain_idx, params)
+	ctxt_result := pack_ctxts(pack_evaluator, ctxt_out, max_ob, plain_idx, params)
 
 	fmt.Println("Result Scale: ", math.Log2(ctxt_result.Scale))
 	fmt.Println("Result LV: ", ctxt_result.Level())

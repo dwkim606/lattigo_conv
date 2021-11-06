@@ -566,7 +566,7 @@ func testConv_noBoot(logN, in_wid, ker_wid int, printResult bool) []float64 {
 		bn_a[i] = 1.0
 	}
 	start = time.Now()
-	pl_ker := prepKer_in(params, encoder, ker_in, bn_a, in_wid, ker_wid, batch, batch, params.MaxLevel())
+	pl_ker := prepKer_in(params, encoder, ker_in, bn_a, in_wid, ker_wid, batch, batch, batch, batch, params.MaxLevel())
 	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
 
 	fmt.Println("vec size: ", N)
@@ -700,7 +700,7 @@ func testConv_BNRelu(in_wid, ker_wid, pad int, printResult bool) {
 			}
 		}
 	}
-	pl_ker := prepKer_in(params, encoder, ker_in, bn_a, in_wid, ker_wid, batch, batch, ECD_LV)
+	pl_ker := prepKer_in(params, encoder, ker_in, bn_a, in_wid, ker_wid, batch, batch, batch, batch, ECD_LV)
 	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
 
 	fmt.Println("vec size: ", N)
