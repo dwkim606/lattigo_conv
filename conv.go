@@ -74,6 +74,7 @@ func reshape_ker_old(ker_in []float64, ker_out [][]float64, k_sz int, trans bool
 
 // Reshape 1-D ker_in (from python) into batch number of ker_outs: ker_out[i][j] = j-th kernel (elements then batch order) for i-th output
 // i.e., ker_out is of the shape (out_batch, (in_batch * ker_size))
+// ker_out[i] = [k1 for 1st input, ..., ,kk for 1st input, k1 for 2nd input, ...]
 // trans = true for transposed convolution
 func reshape_ker(ker_in []float64, k_sz, out_batch int, trans bool) (ker_out [][]float64) {
 	ker_out = make([][]float64, out_batch)
@@ -394,15 +395,15 @@ func prepKer_in(params ckks.Parameters, encoder ckks.Encoder, ker_in, BN_a []flo
 		}
 	}
 
-	max_ker_rs := make([][]float64, max_ob)
+	max_ker_rs := make([][]float64, max_ob) // overloading ker_rs to the case with max_batch
 	for i := 0; i < max_ob; i++ {
 		max_ker_rs[i] = make([]float64, max_ib*ker_size)
 		if i < real_ob {
-			for j := 0; j < real_ib; j++ {
-				for k := 0; k < ker_size; k++ {
-					max_ker_rs[i][j+k*max_ib] = ker_rs[i][j+k*real_ib]
-				}
+			for j := 0; j < real_ib*ker_size; j++ {
+				max_ker_rs[i][j] = ker_rs[i][j]
 			}
+			// fmt.Println(ker_rs[i])
+			// fmt.Println(max_ker_rs[i])
 		}
 	}
 

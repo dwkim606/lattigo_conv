@@ -149,9 +149,9 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 
 		fmt.Print("Result: \n")
 		if stride {
-			prt_mat(cfs_tmp, max_batch*4, 0)
+			prt_mat(cfs_tmp, max_batch*4, 3)
 		} else {
-			prt_mat(cfs_tmp, max_batch, 0)
+			prt_mat(cfs_tmp, max_batch, 3)
 		}
 	}
 
