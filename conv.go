@@ -72,10 +72,69 @@ func reshape_ker_old(ker_in []float64, ker_out [][]float64, k_sz int, trans bool
 	}
 }
 
+// Reshape 1-D input (from python) into H,W,Batch format
+// i.e., 0, 1, 2, 3, -> 1st input of 0,1,2,3-th batch
+// only for BL test
+func reshape_input_BL(input []float64, in_wid int) (out []complex128) {
+	out = make([]complex128, len(input))
+	batch := len(input) / (in_wid * in_wid)
+	l := 0
+	for i := 0; i < in_wid; i++ {
+		for j := 0; j < in_wid; j++ {
+			for k := 0; k < batch; k++ {
+				out[i*in_wid+j+k*in_wid*in_wid] = complex(input[l], 0)
+				l++
+			}
+		}
+	}
+
+	return out
+}
+
+// Reshape 1-D kernel (from python) into (H,W,in,out) format, and applies BN, then into max ker
+// ker[i][j][ib][ob]: (i,j)-th elt of kernel for ib-th input to ob-th output
+// only for BL test // for transposed conv, we should add rearragement!!
+func reshape_ker_BL(input, BN_a []float64, ker_wid, inB, outB, max_bat int) (max_ker_rs [][][][]float64) {
+	ker_rs := make([][][][]float64, ker_wid)
+	for i := 0; i < ker_wid; i++ {
+		ker_rs[i] = make([][][]float64, ker_wid)
+		for j := 0; j < ker_wid; j++ {
+			ker_rs[i][j] = make([][]float64, inB)
+			for ib := 0; ib < inB; ib++ {
+				ker_rs[i][j][ib] = make([]float64, outB)
+				for ob := 0; ob < outB; ob++ {
+					ker_rs[i][j][ib][ob] = input[ob+ib*outB+j*outB*inB+i*outB*inB*ker_wid] * BN_a[ob] // Apply BN
+				}
+			}
+		}
+	}
+	max_ker_rs = make([][][][]float64, ker_wid)
+	for i := 0; i < ker_wid; i++ {
+		max_ker_rs[i] = make([][][]float64, ker_wid)
+		for j := 0; j < ker_wid; j++ {
+			max_ker_rs[i][j] = make([][]float64, max_bat)
+			for ib := 0; ib < max_bat; ib++ {
+				max_ker_rs[i][j][ib] = make([]float64, max_bat)
+				if ib < inB {
+					for ob := 0; ob < outB; ob++ {
+						max_ker_rs[i][j][ib][ob] = ker_rs[i][j][ib][ob]
+					}
+				}
+			}
+		}
+	}
+
+	return max_ker_rs
+}
+
+func prepKer_BL() {
+
+}
+
 // Reshape 1-D ker_in (from python) into batch number of ker_outs: ker_out[i][j] = j-th kernel (elements then batch order) for i-th output
 // i.e., ker_out is of the shape (out_batch, (in_batch * ker_size))
 // ker_out[i] = [k1 for 1st input, ..., ,kk for 1st input, k1 for 2nd input, ...]
-// trans = true for transposed convolution
+// trans = true for transposed convolution (in trans convolution of python, ker_in[i][j] corresponds to i-th kernel for j-th output so we should rearrage ker_out according to this)
 func reshape_ker(ker_in []float64, k_sz, out_batch int, trans bool) (ker_out [][]float64) {
 	ker_out = make([][]float64, out_batch)
 	in_batch := len(ker_in) / (k_sz * out_batch)
@@ -313,9 +372,18 @@ func evalReLU(params ckks.Parameters, evaluator ckks.Evaluator, ctxt_in *ckks.Ci
 
 	fmt.Printf("Eval: ")
 	start = time.Now()
-	ctxt_sign, _ := evaluator.EvaluatePoly(ctxt_in, coeffsReLU, params.Scale())
-	ctxt_sign, _ = evaluator.EvaluatePoly(ctxt_sign, coeffsReLU2, params.Scale())
-	ctxt_sign, _ = evaluator.EvaluatePoly(ctxt_sign, coeffsReLU3, params.Scale())
+	ctxt_sign, err := evaluator.EvaluatePoly(ctxt_in, coeffsReLU, params.Scale())
+	if err != nil {
+		panic(err)
+	}
+	ctxt_sign, err = evaluator.EvaluatePoly(ctxt_sign, coeffsReLU2, params.Scale())
+	if err != nil {
+		panic(err)
+	}
+	ctxt_sign, err = evaluator.EvaluatePoly(ctxt_sign, coeffsReLU3, params.Scale())
+	if err != nil {
+		panic(err)
+	}
 
 	ctxt_out = evaluator.AddConstNew(ctxt_sign, aconst)
 
@@ -377,6 +445,60 @@ func prepKer_in_trans(params ckks.Parameters, encoder ckks.Encoder, encryptor ck
 	}
 
 	return pl_ker
+}
+
+// rotate input ciphertext and outputs rotated ciphertexts
+// always assume Odd ker_wid
+func preConv_BL(evaluator ckks.Evaluator, ct_in *ckks.Ciphertext, in_wid, ker_wid int) (ct_in_rots []*ckks.Ciphertext) {
+	ker_size := ker_wid * ker_wid
+	ct_in_rots = make([]*ckks.Ciphertext, ker_size)
+
+	st := -(ker_wid / 2)
+	end := ker_wid / 2
+	k := 0
+	for i := st; i <= end; i++ {
+		for j := st; j <= end; j++ {
+			ct_in_rots[k] = evaluator.RotateNew(ct_in, i*in_wid+j)
+			k++
+		}
+	}
+
+	return ct_in_rots
+}
+
+// eval Convolution for the part of output: need to sum this up with rotations
+func postConv_BL(param ckks.Parameters, encoder ckks.Encoder, evaluator ckks.Evaluator, ct_in_rots []*ckks.Ciphertext, in_wid, ker_wid, rot int, max_ker_rs [][][][]float64) (ct_out *ckks.Ciphertext) {
+
+	max_batch := param.Slots() / (in_wid * in_wid)
+	postKer := make([]complex128, param.Slots())
+	pl_tmp := ckks.NewPlaintext(param, ct_in_rots[0].Level(), param.Scale())
+
+	iter := 0
+	for i := 0; i < ker_wid; i++ {
+		for j := 0; j < ker_wid; j++ {
+			for k := 0; k < max_batch; k++ {
+				for ki := 0; ki < in_wid; ki++ { // position of input
+					for kj := 0; kj < in_wid; kj++ {
+						postKer[k*in_wid*in_wid+ki*in_wid+kj] = complex(max_ker_rs[i][j][k][(k-rot+max_batch)%max_batch], 0)
+						if (((ki + i - (ker_wid / 2)) < 0) || ((ki + i - (ker_wid / 2)) >= in_wid)) || (((kj + j - (ker_wid / 2)) < 0) || ((kj + j - (ker_wid / 2)) >= in_wid)) {
+							postKer[k*in_wid*in_wid+ki*in_wid+kj] = complex(0, 0)
+						}
+					}
+				}
+			}
+			encoder.Encode(pl_tmp, postKer, param.LogSlots())
+			encoder.ToNTT(pl_tmp)
+			if (i == 0) && (j == 0) {
+				ct_out = evaluator.MulNew(ct_in_rots[iter], pl_tmp)
+			} else {
+				ct_tmp := evaluator.MulNew(ct_in_rots[iter], pl_tmp)
+				evaluator.Add(ct_out, ct_tmp, ct_out)
+			}
+			iter++
+		}
+	}
+
+	return ct_out
 }
 
 // Encode Kernel and outputs Plain(ker) for normal conv (no stride, no trans)

@@ -501,6 +501,331 @@ func testDCGAN() {
 	}
 }
 
+// BaseLine Conv without boot, Assume full batch with Po2 in_wid & N
+// Normal Conv without output modification (e.g., trimming or expanding)
+// Input does not need padding
+func testConv_noBoot_BL(log_slots, in_wid, ker_wid int, printResult bool) {
+	slots := (1 << log_slots)
+	in_size := in_wid * in_wid
+	batch := slots / in_size
+	ker_size := ker_wid * ker_wid
+
+	params, err := ckks.NewParametersFromLiteral(ckks.ParametersLiteral{ // Schemes parameters are created from scratch
+		LogN:     log_slots + 1,
+		LogQ:     []int{log_out_scale + log_c_scale, log_in_scale},
+		LogP:     []int{60},
+		Sigma:    rlwe.DefaultSigma,
+		LogSlots: log_slots,
+		Scale:    float64(1 << log_in_scale),
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("Q ", params.Q())
+
+	fmt.Println()
+	fmt.Println("========================================================")
+	fmt.Println(" INSTANTIATING SCHEME & PLAINTEXT CREATION & Encryption ")
+	fmt.Println("========================================================")
+	fmt.Println()
+
+	var rotations []int
+	for k := -(ker_wid / 2); k <= ker_wid/2; k++ {
+		for k2 := -(ker_wid / 2); k2 <= ker_wid/2; k2++ {
+			rotations = append(rotations, k*in_wid+k2)
+		}
+	}
+	for k := 1; k <= batch; k++ {
+		rotations = append(rotations, k*in_size)
+	}
+	// fmt.Println("Rotations: ", rotations)
+
+	start := time.Now()
+	kgen := ckks.NewKeyGenerator(params)
+	sk := kgen.GenSecretKey()
+	rotkeys := kgen.GenRotationKeysForRotations(rotations, false, sk)
+	encryptor := ckks.NewEncryptor(params, sk)
+	decryptor := ckks.NewDecryptor(params, sk)
+	encoder := ckks.NewEncoder(params)
+	evaluator := ckks.NewEvaluator(params, rlwe.EvaluationKey{Rtks: rotkeys})
+
+	fmt.Printf("Keygen, Done in %s \n", time.Since(start))
+
+	fmt.Println()
+	fmt.Printf("CKKS parameters: logN = %d, logSlots = %d, logQP = %d, levels = %d, scale= %f, sigma = %f \n",
+		params.LogN(), params.LogSlots(), params.LogQP(), params.MaxLevel()+1, params.Scale(), params.Sigma())
+
+	input := make([]float64, slots)
+	for i := range input {
+		input[i] = 1.0 * float64(i) / float64(len(input))
+	}
+	input_rs := reshape_input_BL(input, in_wid)
+	if printResult {
+		prt_mat_BL(input_rs, batch, 0)
+	}
+
+	ker_in := make([]float64, batch*batch*ker_size)
+	for i := range ker_in {
+		ker_in[i] = 1.0 * float64(i) / float64(len(ker_in)) //0.1 * float64(i) / float64(batch*batch*ker_size)
+	}
+	bn_a := make([]float64, batch)
+	for i := range bn_a {
+		bn_a[i] = 1.0
+	}
+	start = time.Now()
+	max_ker_rs := reshape_ker_BL(ker_in, bn_a, ker_wid, batch, batch, batch)
+	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
+
+	fmt.Println("vec size: ", slots)
+	fmt.Println("input width: ", in_wid)
+	fmt.Println("kernel width: ", ker_wid)
+	fmt.Println("num batches: ", batch)
+	fmt.Println("Input matrix: ")
+	real_input_rs := make([]float64, len(input_rs))
+	for i, elt := range input_rs {
+		real_input_rs[i] = real(elt)
+	}
+	prt_vec(real_input_rs)
+	fmt.Println("Ker1_in (1st to 1st part): ")
+	for i := 0; i < ker_wid; i++ {
+		for j := 0; j < ker_wid; j++ {
+			fmt.Print(max_ker_rs[i][j][0][0], ", ")
+		}
+	}
+	fmt.Print("\n\n")
+
+	start = time.Now()
+	plain_tmp := ckks.NewPlaintext(params, params.MaxLevel(), params.Scale()) // contain plaintext values
+	encoder.Encode(plain_tmp, input_rs, log_slots)
+	ctxt_input := encryptor.EncryptNew(plain_tmp)
+	fmt.Printf("Encryption done in %s \n", time.Since(start))
+
+	fmt.Println()
+	fmt.Println("===============================================")
+	fmt.Println("     			   EVALUATION					")
+	fmt.Println("===============================================")
+	fmt.Println()
+
+	start = time.Now()
+	ct_inputs_rots := preConv_BL(evaluator, ctxt_input, in_wid, ker_wid)
+	fmt.Printf("preConv done in %s \n", time.Since(start))
+
+	var ct_result *ckks.Ciphertext
+	for i := 0; i < batch; i++ {
+		ct_tmp := postConv_BL(params, encoder, evaluator, ct_inputs_rots, in_wid, ker_wid, i, max_ker_rs)
+		if i == 0 {
+			ct_result = ct_tmp
+		} else {
+			evaluator.Add(ct_result, evaluator.RotateNew(ct_tmp, i*in_size), ct_result)
+		}
+	}
+	fmt.Printf("Eval Done in %s \n", time.Since(start))
+
+	fmt.Println()
+	fmt.Println("=========================================")
+	fmt.Println("              DECRYPTION                 ")
+	fmt.Println("=========================================")
+	fmt.Println()
+
+	start = time.Now()
+	decryptor.Decrypt(ct_result, plain_tmp)
+	vals_tmp := encoder.Decode(plain_tmp, log_slots)
+	real_vals_tmp := make([]float64, len(vals_tmp))
+	for i, elt := range vals_tmp {
+		real_vals_tmp[i] = real(elt)
+	}
+	fmt.Printf("Decryption Done in %s \n", time.Since(start))
+
+	if printResult {
+		fmt.Print("Result: \n")
+		prt_mat_BL(vals_tmp, batch, 0)
+	}
+}
+
+// BaseLine Conv without boot, Assume full batch with Po2 in_wid & N
+// Normal Conv without output modification (e.g., trimming or expanding)
+// Input does not need padding
+func testConv_BNRelu_BL(log_slots, in_wid, ker_wid int, printResult bool) {
+	slots := (1 << log_slots)
+	in_size := in_wid * in_wid
+	batch := slots / in_size
+	ker_size := ker_wid * ker_wid
+	ECD_LV := 1
+	alpha := 0.0
+
+	var btp *ckks.Bootstrapper
+	btpParams := ckks.DefaultBootstrapParams[7]
+	params, err := btpParams.Params()
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("CKKS parameters: logN = %d, logSlots = %d, h = %d, logQP = %d, levels = %d, scale= 2^%f, sigma = %f \n",
+		params.LogN(), params.LogSlots(), btpParams.H, params.LogQP(), params.QCount(), math.Log2(params.Scale()), params.Sigma())
+
+	var rotations []int
+	for k := -(ker_wid / 2); k <= ker_wid/2; k++ {
+		for k2 := -(ker_wid / 2); k2 <= ker_wid/2; k2++ {
+			rotations = append(rotations, k*in_wid+k2)
+		}
+	}
+	for k := 1; k <= batch; k++ {
+		rotations = append(rotations, k*in_size)
+	}
+	// fmt.Println("Rotations: ", rotations)
+
+	start := time.Now()
+	kgen := ckks.NewKeyGenerator(params)
+	sk, _ := kgen.GenKeyPairSparse(btpParams.H)
+	rlk := kgen.GenRelinearizationKey(sk, 2)
+	rotkeys := kgen.GenRotationKeysForRotations(rotations, false, sk)
+	encryptor := ckks.NewEncryptor(params, sk)
+	decryptor := ckks.NewDecryptor(params, sk)
+	encoder := ckks.NewEncoder(params)
+	evaluator := ckks.NewEvaluator(params, rlwe.EvaluationKey{Rlk: rlk, Rtks: rotkeys})
+
+	fmt.Println("Generating bootstrapping keys...")
+	start = time.Now()
+	rotations = btpParams.RotationsForBootstrapping(params.LogSlots())
+	rotkeys = kgen.GenRotationKeysForRotations(rotations, true, sk)
+	btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
+	if btp, err = ckks.NewBootstrapper(params, btpParams, btpKey); err != nil {
+		panic(err)
+	}
+	fmt.Printf("Done in %s \n", time.Since(start))
+
+	input := make([]float64, slots)
+	for i := range input {
+		input[i] = 1.0 * float64(i) / float64(len(input))
+	}
+	input_rs := reshape_input_BL(input, in_wid)
+	if printResult {
+		prt_mat_BL(input_rs, batch, 0)
+	}
+
+	ker_in := make([]float64, batch*batch*ker_size)
+	for i := range ker_in {
+		ker_in[i] = 1.0 * float64(i) / float64(len(ker_in)) //0.1 * float64(i) / float64(batch*batch*ker_size)
+	}
+	bn_a := make([]float64, batch)
+	for i := range bn_a {
+		bn_a[i] = 0.001
+	}
+	start = time.Now()
+	max_ker_rs := reshape_ker_BL(ker_in, bn_a, ker_wid, batch, batch, batch)
+	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
+
+	fmt.Println("vec size: ", slots)
+	fmt.Println("input width: ", in_wid)
+	fmt.Println("kernel width: ", ker_wid)
+	fmt.Println("num batches: ", batch)
+	fmt.Println("Input matrix: ")
+	real_input_rs := make([]float64, len(input_rs))
+	for i, elt := range input_rs {
+		real_input_rs[i] = real(elt)
+	}
+	prt_vec(real_input_rs)
+	fmt.Println("Ker1_in (1st to 1st part): ")
+	for i := 0; i < ker_wid; i++ {
+		for j := 0; j < ker_wid; j++ {
+			fmt.Print(max_ker_rs[i][j][0][0], ", ")
+		}
+	}
+	fmt.Print("\n\n")
+
+	start = time.Now()
+	plain_tmp := ckks.NewPlaintext(params, ECD_LV, params.Scale()) // contain plaintext values
+	encoder.Encode(plain_tmp, input_rs, log_slots)
+	ct_input := encryptor.EncryptNew(plain_tmp)
+	fmt.Printf("Encryption done in %s \n", time.Since(start))
+
+	fmt.Println()
+	fmt.Println("===============================================")
+	fmt.Println("     			   EVALUATION					")
+	fmt.Println("===============================================")
+	fmt.Println()
+
+	start = time.Now()
+	ct_inputs_rots := preConv_BL(evaluator, ct_input, in_wid, ker_wid)
+	fmt.Printf("preConv done in %s \n", time.Since(start))
+
+	var ct_conv *ckks.Ciphertext
+	for i := 0; i < batch; i++ {
+		ct_tmp := postConv_BL(params, encoder, evaluator, ct_inputs_rots, in_wid, ker_wid, i, max_ker_rs)
+		if i == 0 {
+			ct_conv = ct_tmp
+		} else {
+			evaluator.Add(ct_conv, evaluator.RotateNew(ct_tmp, i*in_size), ct_conv)
+		}
+	}
+	fmt.Printf("Eval (Conv) Done in %s \n", time.Since(start))
+
+	fmt.Println()
+	fmt.Println("=========================================")
+	fmt.Println("              DECRYPTION                 ")
+	fmt.Println("=========================================")
+	fmt.Println()
+
+	start = time.Now()
+	decryptor.Decrypt(ct_conv, plain_tmp)
+	vals_tmp := encoder.Decode(plain_tmp, log_slots)
+	real_vals_tmp := make([]float64, len(vals_tmp))
+	for i, elt := range vals_tmp {
+		real_vals_tmp[i] = real(elt)
+	}
+	fmt.Printf("Decryption (Conv) Done in %s \n", time.Since(start))
+
+	if printResult {
+		fmt.Print("Result: \n")
+		prt_mat_BL(vals_tmp, batch, 0)
+	}
+
+	fmt.Println("Boot in: ")
+	fmt.Println("inputs: ")
+	in_vals := printDebug(params, ct_conv, vals_tmp, decryptor, encoder)
+
+	fmt.Println("Bootstrapping... (original):")
+	start_boot := time.Now()
+	ct_boot := btp.Bootstrapp(ct_conv)
+	fmt.Printf("Done in %s \n", time.Since(start_boot))
+	fmt.Println("after Boot: LV = ", ct_boot.Level(), " Scale = ", math.Log2(ct_boot.Scale))
+	fmt.Println()
+	fmt.Println("Precision of ciphertext vs. Bootstrapp(ciphertext)")
+	in_relu := printDebug(params, ct_boot, in_vals, decryptor, encoder)
+	for i, elt := range in_relu {
+		in_relu[i] = complex(math.Max(0, real(elt)), 0)
+	}
+
+	start = time.Now()
+	in_relu = printDebug(params, ct_boot, in_relu, decryptor, encoder)
+	evaluator.Rescale(ct_boot, params.Scale(), ct_boot)
+	evaluator.ScaleUp(ct_boot, params.Scale()/ct_boot.Scale, ct_boot)
+	fmt.Println("after Rescale: LV = ", ct_boot.Level(), " Scale = 2^", math.Log2(ct_boot.Scale))
+	in_relu = printDebug(params, ct_boot, in_relu, decryptor, encoder)
+
+	ct_relu := evalReLU(params, evaluator, ct_boot, alpha)
+	evaluator.SetScale(ct_relu, params.Scale())
+	fmt.Printf("Relu Done in %s \n", time.Since(start))
+	fmt.Println("Precision of relu")
+	printDebug(params, ct_relu, in_relu, decryptor, encoder)
+
+	fmt.Println()
+	fmt.Println("=========================================")
+	fmt.Println("              DECRYPTION                 ")
+	fmt.Println("=========================================")
+	fmt.Println()
+
+	start = time.Now()
+	decryptor.Decrypt(ct_relu, plain_tmp)
+	vals_tmp = encoder.Decode(plain_tmp, log_slots)
+	fmt.Printf("Decryption (Relu) Done in %s \n", time.Since(start))
+	fmt.Println("after relu: LV = ", ct_relu.Level(), " Scale = 2^", math.Log2(ct_relu.Scale))
+	if printResult {
+		fmt.Print("Result: \n")
+		prt_mat_BL(vals_tmp, batch, 0)
+	}
+}
+
 // Fast Conv without boot, Assume full batch with Po2 in_wid & N
 // Normal Conv without output modification (e.g., trimming or expanding)
 // Assume that the input is 0 padded according to kernel size: only in_wid - (ker_wid-1)/2 elements in row and columns are nonzero
@@ -816,6 +1141,174 @@ func testConv_BNRelu(in_wid, ker_wid, pad int, printResult bool) {
 		fmt.Print("Result: \n")
 		prt_mat(cfs_tmp, batch, 0)
 	}
+}
+
+func testResNet() {
+	// For ResNet, we use padding: i.e., in_wid**2 element is contained in (2*in_wid)**2 sized block
+	// So ReLU, keep or rot, StoC done only on the 1st part of the CtoS ciphertexts
+	logN := 16
+	raw_in_wids := []int{32, 16, 8} // same as python
+	real_batch := []int{16, 32, 64} // same as python
+	ker_wid := 3
+	ECD_LV := 1
+	padding := true
+	in_wids := make([]int, len(raw_in_wids))
+	for i, elt := range raw_in_wids {
+		if padding {
+			in_wids[i] = 2 * elt
+		} else {
+			in_wids[i] = elt
+		}
+	}
+	cont := newContext(logN, ECD_LV, in_wids, padding)
+
+	ker_size := ker_wid * ker_wid
+	max_batch := make([]int, len(real_batch)) // the max batch
+	for i := range max_batch {
+		max_batch[i] = cont.N / (in_wids[i] * in_wids[i])
+	}
+
+	alpha := 0.0 // 0.3 => leakyrelu
+	input := make([]float64, cont.N)
+	k := 0.0
+	for i := 0; i < in_wids[0]; i++ {
+		for j := 0; j < in_wids[0]; j++ {
+			for b := 0; b < max_batch[0]; b++ {
+				if (i < raw_in_wids[0]) && (j < raw_in_wids[0]) {
+					input[i*in_wids[0]*max_batch[0]+j*max_batch[0]+b] = k
+					k += (1.0 / float64(max_batch[0]*(raw_in_wids[0])*(raw_in_wids[0])))
+				}
+			}
+		}
+	}
+	fmt.Println("Input: ")
+	prt_mat(input, max_batch[0], 3)
+	ker_in := make([]float64, real_batch[0]*real_batch[0]*ker_size)
+	for i := range ker_in {
+		ker_in[i] = 0.5 * float64(i) / float64(len(ker_in))
+	}
+	ker_in12 := make([]float64, real_batch[0]*real_batch[1]*ker_size)
+	for i := range ker_in12 {
+		ker_in12[i] = 0.5 * float64(i) / float64(len(ker_in12))
+	}
+	ker_in12_0 := make([]float64, len(ker_in12)/2)
+	ker_in12_1 := make([]float64, len(ker_in12)/2)
+	for i := range ker_in12_0 {
+		ker_in12_0[i] = ker_in12[(i/(real_batch[1]/2))*real_batch[1]+i%(real_batch[1]/2)]
+		ker_in12_1[i] = ker_in12[(i/(real_batch[1]/2))*real_batch[1]+i%(real_batch[1]/2)+real_batch[1]/2]
+	}
+	ker_in2 := make([]float64, real_batch[1]*real_batch[1]*ker_size)
+	for i := range ker_in2 {
+		ker_in2[i] = 0.5 * float64(i) / float64(len(ker_in2))
+	}
+	ker_in23 := make([]float64, real_batch[1]*real_batch[2]*ker_size)
+	for i := range ker_in23 {
+		ker_in23[i] = 0.5 * float64(i) / float64(len(ker_in23))
+	}
+	ker_in3 := make([]float64, real_batch[2]*real_batch[2]*ker_size)
+	for i := range ker_in3 {
+		ker_in3[i] = 0.5 * float64(i) / float64(len(ker_in3))
+	}
+	bn_a := make([]float64, real_batch[0])
+	bn_b := make([]float64, real_batch[0])
+	for i := range bn_a {
+		bn_a[i] = 0.02 // * float64(i) / float64(batch)
+		bn_b[i] = 0.0  //0.1 * float64(i) // float64(real_batch[0])
+	}
+	bn_a2 := make([]float64, real_batch[1])
+	bn_b2 := make([]float64, real_batch[1])
+	for i := range bn_a2 {
+		bn_a2[i] = 0.02 // * float64(i) / float64(batch)
+		bn_b2[i] = 0.0  //0.1 * float64(i)
+	}
+	bn_a3 := make([]float64, real_batch[2])
+	bn_b3 := make([]float64, real_batch[2])
+	for i := range bn_a3 {
+		bn_a3[i] = 0.02 // * float64(i) / float64(batch)
+		bn_b3[i] = 0.0  //0.1 * float64(i)
+	}
+
+	fmt.Println("vec size: ", cont.N)
+	fmt.Println("input width: ", raw_in_wids)
+	fmt.Println("kernel width: ", ker_wid)
+	fmt.Println("num batches: ", real_batch)
+	fmt.Println("Input matrix: ")
+	prt_vec(input)
+
+	start = time.Now()
+	pl_input := ckks.NewPlaintext(cont.params, cont.ECD_LV, cont.params.Scale()) // contain plaintext values
+	cont.encoder.EncodeCoeffs(input, pl_input)
+	ct_input := cont.encryptor.EncryptNew(pl_input)
+	fmt.Printf("Encryption done in %s \n", time.Since(start))
+
+	timings := make([]float64, 5)
+	begin_start := time.Now()
+	new_start := time.Now()
+
+	// ResNet Block 1
+	num_blc1 := 1
+	ct_layer := make([]*ckks.Ciphertext, num_blc1+1)
+	ct_layer[0] = ct_input
+	prt_result := false
+	for i := 1; i <= num_blc1; i++ {
+		if i == num_blc1 {
+			prt_result = true
+		}
+		ct_layer[i] = evalConv_BNRelu(cont, ct_layer[i-1], ker_in, bn_a, bn_b, alpha, in_wids[0], ker_wid, max_batch[0], max_batch[0], 0, padding, false, prt_result)
+		fmt.Println("Block1, Layer ", i, "done!")
+	}
+	fmt.Println("done.")
+	timings[0] = time.Since(new_start).Seconds()
+	new_start = time.Now()
+
+	ct_result1 := evalConv_BNRelu(cont, ct_layer[num_blc1], ker_in12_0, bn_a, bn_b, alpha, in_wids[0], ker_wid, real_batch[0], real_batch[1]/2, 0, padding, true, prt_result)
+	ct_result2 := evalConv_BNRelu(cont, ct_layer[num_blc1], ker_in12_1, bn_a, bn_b, alpha, in_wids[0], ker_wid, real_batch[0], real_batch[1]/2, 1, padding, true, prt_result)
+	ct_result := cont.evaluator.AddNew(ct_result1, ct_result2)
+	fmt.Println("Block1 to 2 done!")
+	timings[1] = time.Since(new_start).Seconds()
+	new_start = time.Now()
+
+	// ResNet Block 2
+	num_blc2 := 1
+	ct_layer2 := make([]*ckks.Ciphertext, num_blc2+1)
+	ct_layer2[0] = ct_result
+	prt_result = false
+	for i := 1; i <= num_blc2; i++ {
+		if i == num_blc2 {
+			prt_result = true
+		}
+		ct_layer2[i] = evalConv_BNRelu(cont, ct_layer2[i-1], ker_in2, bn_a2, bn_b2, alpha, in_wids[1], ker_wid, real_batch[1], real_batch[1], 0, padding, false, prt_result)
+		fmt.Println("Block2, Layer ", i, "done!")
+	}
+	timings[2] = time.Since(new_start).Seconds()
+	new_start = time.Now()
+
+	ct_result = evalConv_BNRelu(cont, ct_layer2[num_blc2], ker_in23, bn_a3, bn_b3, alpha, in_wids[1], ker_wid, real_batch[1], real_batch[2], 0, padding, true, prt_result)
+	fmt.Println("Block2 to 3 done!")
+	timings[3] = time.Since(new_start).Seconds()
+	new_start = time.Now()
+
+	// ResNet Block 3
+	num_blc3 := 1
+	ct_layer3 := make([]*ckks.Ciphertext, num_blc3+1)
+	ct_layer3[0] = ct_result
+	prt_result = false
+	for i := 1; i <= num_blc3; i++ {
+		if i == num_blc3 {
+			prt_result = true
+		}
+		ct_layer3[i] = evalConv_BNRelu(cont, ct_layer3[i-1], ker_in3, bn_a3, bn_b3, alpha, in_wids[2], ker_wid, real_batch[2], real_batch[2], 0, padding, false, prt_result)
+		fmt.Println("Block3, Layer ", i, "done!")
+	}
+	timings[4] = time.Since(new_start).Seconds()
+	new_start = time.Now()
+
+	fmt.Println("Blc1: ", timings[0], " sec")
+	fmt.Println("Blc1->2: ", timings[1], " sec")
+	fmt.Println("Blc2: ", timings[2], " sec")
+	fmt.Println("Blc2->3: ", timings[3], " sec")
+	fmt.Println("Blc3: ", timings[4], " sec")
+	fmt.Printf("Total done in %s \n", time.Since(begin_start))
 }
 
 // Eval Conv & Boot
