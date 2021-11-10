@@ -20,7 +20,7 @@ const log_c_scale = 30
 const log_in_scale = 30
 const log_out_scale = 30
 
-const pow = 4
+const pow = 5
 
 type context struct {
 	logN    int
