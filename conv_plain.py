@@ -183,13 +183,64 @@ def load_save_data(num_samples):
     np.savetxt('test_labels_'+str(num_samples)+'.csv', tf_labels_sm, fmt='%d', delimiter=',')
     np.savetxt('test_images_'+str(num_samples)+'.csv', np.reshape(tf_images_sm, [-1]), fmt='%.18e', delimiter=',')
 
+# compare enc result (after post process: reduce_mean) with plain result
+def post_process(iter_num):
+    ## First load plain result
+    num_samples = 100
+    pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
+    result_dir = 'test_result_enc/'
+    in_dir = 'weight_h5/'
+    ten_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fckernel.csv'), tf.float32), [1, 1, 64, 10])
+    bias_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fcbias.csv'), tf.float32), [10])
+
+    acc = 0
+    for iter in range(iter_num):
+        read = np.loadtxt(result_dir+'class_result_'+str(iter)+'.csv')
+        if len(read) > 256:
+            post_process = True
+        else:
+            post_process = False
+
+        if post_process:
+            conv = tf.reshape(tf.constant(read, tf.float32), [1, 16, 16, 256])
+            conv = conv[:,:8,:8,:64]
+            conv = tf.reduce_mean(conv, [1,2], keepdims = True)
+            conv = tf.nn.conv2d(conv, ten_final, strides = [1,1,1,1], padding = "SAME")
+            conv = conv + bias_final
+            conv = tf.squeeze(conv, axis=[1,2])
+            res_np = conv.numpy()
+        else:
+            res_np = np.reshape(read, [256])[:10]
+        print("enc: ", res_np, "argmax: ", np.argmax(res_np))
+        print("plain: ", pred[iter], "argmax: ", np.argmax(pred[iter]))
+        if (np.argmax(res_np) == np.argmax(pred[iter])):
+            acc += 1
+
+    print("precision: ", acc, "/", iter_num)
+    # tf_images = tf.reshape(tf.constant(np.loadtxt('test_images_'+str(num_samples)+'.csv'), tf.float32), [num_samples, 32, 32, 3])
+    # pred = plain_resnet(tf_images)
+    # print("enc == plain?", tf.argmax(tf.squeeze(conv, axis=[1,2]),1) == tf.argmax(pred[iter],1))
 
 #### Main Start #### 
 
-num_samples = 100 # or 1000
-tf_labels = tf.constant(np.loadtxt('test_labels_'+str(num_samples)+'.csv'), tf.int64)
-tf_images = tf.reshape(tf.constant(np.loadtxt('test_images_'+str(num_samples)+'.csv'), tf.float32), [num_samples, 32, 32, 3])
+post_process(6)
+# num_samples = 100
+# pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
 
-predictions = plain_resnet(tf_images)
-print("num samples: ", len(tf_labels), "precision: ", tf.reduce_mean(tf.cast(tf.equal(predictions, tf_labels), 'float32')))
+# conv = np.reshape(np.loadtxt('class_result_'+str(5)+'.csv'), [256])
+# print("enc: ", conv[:10], "argmax: ", np.argmax(conv[:10]))
+# print("plain: ", pred[5], "argmax: ", np.argmax(pred[5]))
+
+# num_samples = 100 # or 1000
+# tf_labels = tf.constant(np.loadtxt('test_labels_'+str(num_samples)+'.csv'), tf.int64)
+# tf_images = tf.reshape(tf.constant(np.loadtxt('test_images_'+str(num_samples)+'.csv'), tf.float32), [num_samples, 32, 32, 3])
+
+# np.savetxt('test_data/test_labels.csv',tf_labels, fmt='%d', delimiter=',')
+# for i in range(num_samples):
+#     np.savetxt('test_data/test_image_'+str(i)+'.csv',np.reshape(tf_images[i,:,:,:], [-1]), fmt='%.18e', delimiter=',')
+    
+
+# predictions = plain_resnet(tf_images)
+# np.savetxt('plain_prediction'+str(num_samples)+'.csv',np.reshape(predictions, [-1]), fmt='%.18e', delimiter=',')
+# print("num samples: ", len(tf_labels), "precision: ", tf.reduce_mean(tf.cast(tf.equal(predictions, tf_labels), 'float32')))
 

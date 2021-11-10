@@ -106,13 +106,20 @@ func newContext(logN, ECD_LV int, in_wids []int, padding bool) *context {
 
 func main() {
 
-	testConv_BNRelu_BL(15, 16, 3, true)
+	// testConv_noBoot(7, 8, 8, true)
 
+	st_in, _ := strconv.Atoi(os.Args[1])
+	end_in, _ := strconv.Atoi(os.Args[2])
+
+	testResNet_in(st_in, end_in)
+
+	// testConv_BNRelu_BL(15, 16, 3, true)
 	// testConv_noBoot_BL(6, 4, 3, false)
 
 	// testBRrot(6, 8, true)
 	// testConv_noBoot(7, 8, 7, true)
-	// testConv_BNRelu(8, 5, 2, true)
+	// testConv_BNRelu(16, 3, true)
+	// testReduceMean()
 	// testResNet()
 	// testDCGAN()
 
@@ -296,20 +303,37 @@ func prt_mat(vec []float64, batch, show int) {
 	}
 }
 
+// only (sj,sk) element in all batches
+func prt_mat_one(vec []float64, batch, sj, sk int) (out []float64) {
+	mat_size := len(vec) / batch
+	j, k := 1, 1
+	for i := 0; i < len(vec); i += batch {
+		if (j == sj) && (k == sk) {
+			fmt.Print(vec[i : i+batch])
+			out = vec[i : i+batch]
+		}
+		k++
+		if k*k > mat_size {
+			k = 1
+			j++
+		}
+	}
+	return out
+}
+
 func check(e error) {
 	if e != nil {
 		panic(e)
 	}
 }
 
-func readTxt(name_file string) []float64 {
+func readTxt(name_file string, size int) (input []float64) {
 
 	file, err := os.Open(name_file)
 	check(err)
 	scanner := bufio.NewScanner(file)
 	scanner.Split(bufio.ScanWords)
 
-	var input []float64
 	for scanner.Scan() {
 		add, _ := strconv.ParseFloat(scanner.Text(), 64)
 		input = append(input, add)
@@ -317,8 +341,11 @@ func readTxt(name_file string) []float64 {
 	file.Close()
 	// fmt.Print(input)
 
-	return input
+	if (size != 0) && (len(input) != size) {
+		panic("input size inconsistent!")
+	}
 
+	return input
 }
 
 func writeTxt(name_file string, input []float64) {

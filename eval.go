@@ -158,23 +158,23 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 	return ct_res
 }
 
-// Eval Conv only
+// Eval Conv only, always assume max batch
 // in_wid must be Po2,
-func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid int, printResult bool) (ct_res *ckks.Ciphertext) {
+func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob int, printResult bool) (ct_res *ckks.Ciphertext) {
 
 	in_size := in_wid * in_wid
-	batch := cont.N / in_size
+	max_batch := cont.N / in_size
 
 	start = time.Now()
 	b_coeffs := make([]float64, cont.N)
 	for i := range bn_b {
 		for j := 0; j < in_wid; j++ {
 			for k := 0; k < in_wid; k++ {
-				b_coeffs[i+(j+k*in_wid)*batch] = bn_b[i]
+				b_coeffs[i+(j+k*in_wid)*max_batch] = bn_b[i]
 			}
 		}
 	}
-	pl_ker := prepKer_in(cont.params, cont.encoder, ker_in, bn_a, in_wid, ker_wid, batch, batch, batch, batch, cont.ECD_LV)
+	pl_ker := prepKer_in(cont.params, cont.encoder, ker_in, bn_a, in_wid, ker_wid, real_ib, real_ob, max_batch, max_batch, cont.ECD_LV)
 	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
 
 	fmt.Println("Ker1_in (1st part): ")
@@ -187,7 +187,7 @@ func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []
 	fmt.Println()
 
 	start = time.Now()
-	ct_conv := conv_then_pack(cont.params, cont.pack_evaluator, ct_input, pl_ker, cont.pl_idx, batch)
+	ct_conv := conv_then_pack(cont.params, cont.pack_evaluator, ct_input, pl_ker, cont.pl_idx, max_batch)
 
 	// for Batch Normalization (BN)
 	pl_bn_b := ckks.NewPlaintext(cont.params, ct_conv.Level(), ct_conv.Scale) // contain plaintext values
