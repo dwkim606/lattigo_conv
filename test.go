@@ -13,7 +13,6 @@ import (
 func testDCGAN() {
 
 	alpha := 0.3
-	pow := 4
 	print := false
 	logN := 16
 	in_wid := [4]int{4, 8, 16, 32}
@@ -173,7 +172,7 @@ func testDCGAN() {
 
 		fmt.Println("Bootstrapping... Ours (until CtoS):")
 		start = time.Now()
-		ctxt1, ctxt2, _ := btp.BootstrappConv_CtoS(ctxt_in)
+		ctxt1, ctxt2, _ := btp.BootstrappConv_CtoS(ctxt_in, float64(pow))
 		fmt.Printf("Done in %s \n", time.Since(start))
 		fmt.Println("after Boot: LV = ", ctxt1.Level(), " Scale = ", math.Log2(ctxt1.Scale))
 
@@ -302,7 +301,7 @@ func testDCGAN() {
 
 		fmt.Println("Bootstrapping... Ours (until CtoS):")
 		start = time.Now()
-		ctxt1, _, _ = btp.BootstrappConv_CtoS(ctxt_in)
+		ctxt1, _, _ = btp.BootstrappConv_CtoS(ctxt_in, float64(pow))
 		fmt.Printf("Done in %s \n", time.Since(start))
 
 		// Only for checking the correctness
@@ -412,7 +411,7 @@ func testDCGAN() {
 
 		fmt.Println("Bootstrapping... Ours (until CtoS):")
 		start = time.Now()
-		ctxt1, _, _ = btp.BootstrappConv_CtoS(ctxt_in)
+		ctxt1, _, _ = btp.BootstrappConv_CtoS(ctxt_in, float64(pow))
 		fmt.Printf("Done in %s \n", time.Since(start))
 
 		// Only for checking the correctness
@@ -1071,7 +1070,7 @@ func testConv_BNRelu(in_wid, ker_wid int, printResult bool) {
 	fmt.Println("Bootstrapping... Ours (until CtoS):")
 	start = time.Now()
 	ct_boots := make([]*ckks.Ciphertext, 2)
-	ct_boots[0], ct_boots[1], _ = btp.BootstrappConv_CtoS(ct_conv)
+	ct_boots[0], ct_boots[1], _ = btp.BootstrappConv_CtoS(ct_conv, float64(pow))
 	fmt.Printf("Done in %s \n", time.Since(start))
 	fmt.Println("after Boot (CtoS): LV = ", ct_boots[0].Level(), " Scale = ", math.Log2(ct_boots[0].Scale))
 
@@ -1808,7 +1807,7 @@ func testBootFast_Conv(ext_input []int, logN, in_wid, ker_wid int, printResult b
 	// Reason for multpling 1/(2*N) : for higher precision in SineEval & ReLU before StoC (needs to be recovered after/before StoC)
 	// ciphertext1.SetScalingFactor(ciphertext1.Scale * float64(2*params.N()))
 
-	ctxt1, ctxt2, _ := btp.BootstrappConv_CtoS(ctxt_input)
+	ctxt1, ctxt2, _ := btp.BootstrappConv_CtoS(ctxt_input, float64(pow))
 	fmt.Printf("Done in %s \n", time.Since(start))
 	fmt.Println("after Boot: LV = ", ctxt1.Level(), " Scale = ", math.Log2(ctxt1.Scale))
 

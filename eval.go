@@ -61,7 +61,7 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 	fmt.Println("Bootstrapping... Ours (until CtoS):")
 	start = time.Now()
 	ct_boots := make([]*ckks.Ciphertext, 2)
-	ct_boots[0], ct_boots[1], _ = cont.btp.BootstrappConv_CtoS(ct_conv)
+	ct_boots[0], ct_boots[1], _ = cont.btp.BootstrappConv_CtoS(ct_conv, float64(pow))
 	fmt.Printf("Done in %s \n", time.Since(start))
 	fmt.Println("after Boot (CtoS): LV = ", ct_boots[0].Level(), " Scale = ", math.Log2(ct_boots[0].Scale))
 

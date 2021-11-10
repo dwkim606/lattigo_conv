@@ -20,7 +20,7 @@ const log_c_scale = 30
 const log_in_scale = 30
 const log_out_scale = 30
 
-const pow = 5
+const pow = 5 // making sure that ReLu can cover values in [-2^pow, 2^pow].
 
 type context struct {
 	logN    int
