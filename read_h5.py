@@ -1,6 +1,6 @@
 import h5py
 import numpy as np
-filename = 'weights_noskip.h5'
+filename = 'weight_h5/weights_noskip.h5'
 h5f = h5py.File(filename, 'r')
 cvsfmt = '%.18e'    # covers upto float128
 # get a List of data sets in group 'dd48'
