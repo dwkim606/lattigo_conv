@@ -29,7 +29,8 @@ type context struct {
 	in_wids []int // possible input widths
 	// pads           map[int]int
 	ext_idx        map[int][][]int         // ext_idx for keep_vec (saved for each possible input width) map: in_wid, [up/low]
-	r_idx          map[int][]map[int][]int // r_idx for compr_vec map: in_wid [pos] map: rot
+	r_idx          map[int][]map[int][]int // r_idx for compr_vec (or ext_vec) map: in_wid [pos] map: rot
+	m_idx          map[int][]map[int][]int // m_idx , map: in_wid [pos] map: rot
 	pl_idx         []*ckks.Plaintext
 	params         ckks.Parameters
 	encoder        ckks.Encoder
@@ -40,7 +41,7 @@ type context struct {
 	btp            *ckks.Bootstrapper
 }
 
-func newContext(logN, ECD_LV int, in_wids []int, padding bool) *context {
+func newContext(logN, ECD_LV int, in_wids []int, padding bool, kind string) *context {
 	cont := context{N: (1 << logN), logN: logN, ECD_LV: ECD_LV}
 	cont.in_wids = make([]int, len(in_wids))
 	copy(cont.in_wids, in_wids)
@@ -54,29 +55,51 @@ func newContext(logN, ECD_LV int, in_wids []int, padding bool) *context {
 	fmt.Printf("CKKS parameters: logN = %d, logSlots = %d, h = %d, logQP = %d, levels = %d, scale= 2^%f, sigma = %f \n",
 		cont.params.LogN(), cont.params.LogSlots(), btpParams.H, cont.params.LogQP(), cont.params.QCount(), math.Log2(cont.params.Scale()), cont.params.Sigma())
 
-	// Generate ext_idx for extracting valid values from conv with "same" padding
-
-	var iter int
-	if padding {
-		iter = 1
-	} else {
-		iter = 2
-	}
+	// Gen rotations
 	var rotations []int
 	cont.ext_idx = make(map[int][][]int)
 	cont.r_idx = make(map[int][]map[int][]int)
-	for _, elt := range cont.in_wids {
-		cont.ext_idx[elt] = make([][]int, iter)
-		for i := 0; i < iter; i++ {
-			cont.ext_idx[elt][i] = gen_keep_vec(cont.logN, elt, elt/2, i)
+	cont.m_idx = make(map[int][]map[int][]int)
+	var iter int
+	half := padding // only for DCGAN
+
+	switch kind {
+	case "Resnet": // Generate ext_idx for extracting valid values from conv with "same" padding
+		if padding {
+			iter = 1
+		} else {
+			iter = 2
 		}
-		cont.r_idx[elt] = make([]map[int][]int, 4)
-		for pos := 0; pos < 4; pos++ {
-			cont.r_idx[elt][pos] = gen_comprs_full_hf(cont.N/2, elt, pos, padding)
-			for k := range cont.r_idx[elt][pos] {
-				rotations = append(rotations, k)
+		for _, elt := range cont.in_wids {
+			cont.ext_idx[elt] = make([][]int, iter)
+			for i := 0; i < iter; i++ {
+				cont.ext_idx[elt][i] = gen_keep_vec(cont.logN, elt, elt/2, i)
+			}
+			cont.r_idx[elt] = make([]map[int][]int, 4)
+			for pos := 0; pos < 4; pos++ {
+				cont.r_idx[elt][pos] = gen_comprs_full_hf(cont.N/2, elt, pos, padding)
+				for k := range cont.r_idx[elt][pos] {
+					rotations = append(rotations, k)
+				}
 			}
 		}
+	case "DCGAN": // Generate rotations for EXT_FULL
+		for _, elt := range cont.in_wids {
+			cont.r_idx[elt] = make([]map[int][]int, 4)
+			cont.m_idx[elt] = make([]map[int][]int, 4)
+			for pos := 0; pos < 4; pos++ {
+				cont.r_idx[elt][pos], cont.m_idx[elt][pos] = gen_extend_full(cont.N/2, elt, pos, padding, half)
+				for k := range cont.r_idx[elt][pos] {
+					rotations = append(rotations, k)
+				}
+				for k := range cont.m_idx[elt][pos] {
+					rotations = append(rotations, k)
+				}
+			}
+		}
+		// fmt.Println("Rotations: ", rotations)
+	default:
+		panic("Wrong kinds!")
 	}
 
 	// Scheme context and keys for evaluation (no Boot)
@@ -89,7 +112,12 @@ func newContext(logN, ECD_LV int, in_wids []int, padding bool) *context {
 	cont.encryptor = ckks.NewEncryptor(cont.params, sk)
 	cont.evaluator = ckks.NewEvaluator(cont.params, rlwe.EvaluationKey{Rlk: rlk, Rtks: rotkeys})
 
-	cont.pl_idx, cont.pack_evaluator = gen_idxNlogs(cont.ECD_LV, kgen, sk, cont.encoder, cont.params)
+	switch kind {
+	case "Resnet":
+		cont.pl_idx, cont.pack_evaluator = gen_idxNlogs(cont.ECD_LV, kgen, sk, cont.encoder, cont.params)
+	case "DCGAN":
+		cont.pl_idx, cont.pack_evaluator = gen_idxNlogs(cont.ECD_LV, kgen, sk, cont.encoder, cont.params)
+	}
 
 	fmt.Println("Generating bootstrapping keys...")
 	start = time.Now()
@@ -108,16 +136,15 @@ func main() {
 
 	// testConv_noBoot(7, 8, 8, true)
 
-	st_in, _ := strconv.Atoi(os.Args[1])
-	end_in, _ := strconv.Atoi(os.Args[2])
-
-	testResNet_in(st_in, end_in)
+	// iter, _ := strconv.Atoi(os.Args[1])
+	// testResNet_in(iter)
 
 	// testConv_BNRelu_BL(15, 16, 3, true)
 	// testConv_noBoot_BL(6, 4, 3, false)
 
 	// testBRrot(6, 8, true)
-	// testConv_noBoot(7, 8, 7, true)
+	// testConv_noBoot(5, 4, 3, true, true)
+	testConv_noBoot(7, 8, 5, true, true)
 	// testConv_BNRelu(16, 3, true)
 	// testReduceMean()
 	// testResNet()

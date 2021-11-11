@@ -14,7 +14,7 @@ import (
 // pack_pos: position to pack (0,1,2,3): only for strided case
 // real_ib, real_ob: real number of batches (less or equal than max_batch)
 func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, ker_wid, real_ib, real_ob, pack_pos int, padding, stride, printResult bool) (ct_res *ckks.Ciphertext) {
-
+	trans := false
 	in_size := in_wid * in_wid
 	max_batch := cont.N / in_size
 	pad := (ker_wid - 1) / 2
@@ -28,7 +28,7 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 			}
 		}
 	}
-	pl_ker := prepKer_in(cont.params, cont.encoder, ker_in, bn_a, in_wid, ker_wid, real_ib, real_ob, max_batch, max_batch, cont.ECD_LV)
+	pl_ker := prepKer_in(cont.params, cont.encoder, ker_in, bn_a, in_wid, ker_wid, real_ib, real_ob, cont.ECD_LV, 0, trans)
 	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
 
 	fmt.Println("Ker1_in (1st part): ")
@@ -159,9 +159,8 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 }
 
 // Eval Conv only, always assume max batch
-// in_wid must be Po2,
-func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob int, printResult bool) (ct_res *ckks.Ciphertext) {
-
+// in_wid must be Po2 (also include padding),
+func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob int, printResult, trans bool) (ct_res *ckks.Ciphertext) {
 	in_size := in_wid * in_wid
 	max_batch := cont.N / in_size
 
@@ -174,7 +173,7 @@ func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []
 			}
 		}
 	}
-	pl_ker := prepKer_in(cont.params, cont.encoder, ker_in, bn_a, in_wid, ker_wid, real_ib, real_ob, max_batch, max_batch, cont.ECD_LV)
+	pl_ker := prepKer_in(cont.params, cont.encoder, ker_in, bn_a, in_wid, ker_wid, real_ib, real_ob, cont.ECD_LV, 0, trans)
 	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
 
 	fmt.Println("Ker1_in (1st part): ")

@@ -7,6 +7,7 @@ import sys
 import math
 import cmath
 import random
+import os
 import tensorflow as tf
 
 def prt_list(input, start, width, showAll):
@@ -122,6 +123,36 @@ def conv_bnReLU_BL_bench():
     conv = tf.nn.relu(conv)
     print("result: \n", conv, "\n")
 
+def trans_conv_bnReLU_BL_bench():
+    input_width = 3
+    batch = 2
+    vec_size = batch*input_width**2
+    ker_width = 5
+    bn_a = 1.0
+
+    ker_size = ker_width**2 
+
+    print("input width:", input_width)
+    print("batch:", batch)
+    print("ker width:", ker_width)
+    #data = np.loadtxt("./weights/batch0.txt")
+
+    ## Correctness Check: Compare with TF NN CONV2D
+    raw_input = [1.0 for i in range(vec_size)]
+    ker =  [1.0*i for i in range(batch * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+
+    ten_x = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, input_width, input_width, batch])
+    print("input: \n", ten_x)
+    ten_k = tf.reshape(tf.constant(np.array(ker), tf.float32), [ker_width, ker_width, batch, batch])
+
+    # print(tf.reshape(ten_k, [-1]))
+    # print("kernel: \n", ten_k)
+
+    # print("ker0: ", ten_k[:,:,0,0])
+    conv = tf.nn.conv2d_transpose(ten_x, ten_k, output_shape=(1, 2*input_width, 2*input_width, batch), strides=[1, 2, 2, 1])
+    # conv = tf.nn.relu(conv)
+    print("result: \n", conv, "\n")
+
 def plain_resnet(input_image):
     in_dir = 'weight_h5/'
     in_wid = [32, 16, 8]
@@ -187,15 +218,20 @@ def load_save_data(num_samples):
 def post_process(iter_num):
     ## First load plain result
     num_samples = 100
-    pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
-    result_dir = 'test_result_enc/'
+    pred = np.reshape(np.loadtxt('Resnet_plain_data/plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
+    result_dir = 'Resnet_test_result_enc/'
     in_dir = 'weight_h5/'
     ten_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fckernel.csv'), tf.float32), [1, 1, 64, 10])
     bias_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fcbias.csv'), tf.float32), [10])
 
     acc = 0
+    total = 0
     for iter in range(iter_num):
-        read = np.loadtxt(result_dir+'class_result_'+str(iter)+'.csv')
+        if os.path.exists(result_dir+'class_result_'+str(iter)+'.csv'):
+            read = np.loadtxt(result_dir+'class_result_'+str(iter)+'.csv')
+            total+=1
+        else:
+            continue
         if len(read) > 256:
             post_process = True
         else:
@@ -215,15 +251,18 @@ def post_process(iter_num):
         print("plain: ", pred[iter], "argmax: ", np.argmax(pred[iter]))
         if (np.argmax(res_np) == np.argmax(pred[iter])):
             acc += 1
+        
 
-    print("precision: ", acc, "/", iter_num)
+    print("precision: ", acc, "/", total)
+    print("among ", iter_num, " samples.")
     # tf_images = tf.reshape(tf.constant(np.loadtxt('test_images_'+str(num_samples)+'.csv'), tf.float32), [num_samples, 32, 32, 3])
     # pred = plain_resnet(tf_images)
     # print("enc == plain?", tf.argmax(tf.squeeze(conv, axis=[1,2]),1) == tf.argmax(pred[iter],1))
 
 #### Main Start #### 
 
-post_process(6)
+trans_conv_bnReLU_BL_bench()
+# post_process(100)
 # num_samples = 100
 # pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
 

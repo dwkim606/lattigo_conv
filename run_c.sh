@@ -1,7 +1,6 @@
 #!/bin/bash
-for ((i=0; i<$1; i+=4))
+for ((i=0; i<$1; i+=1))
 do
-	j=$(($i+4))
-	echo "running "$i" to "$j "th iter..." 
-	./resnet_enc_100 $i $j
+	echo "running "$i" th iter..." 
+	./resnet_enc_100 $i
 done

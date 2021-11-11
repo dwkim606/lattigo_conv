@@ -157,6 +157,55 @@ func reshape_ker(ker_in []float64, k_sz, out_batch int, trans bool) (ker_out [][
 
 // Encode ker_outs from reshape_ker into the i-th ker vector output
 // in_wid, in_batch is those for input (to be convolved) includng padding
+func encode_ker_test(ker_in [][]float64, pos, i, in_wid, in_batch, ker_wid int) []float64 {
+	vec_size := in_wid * in_wid * in_batch
+	output := make([]float64, vec_size)
+	bias := pos * ker_wid * ker_wid * in_batch
+	k_sz := ker_wid * ker_wid
+
+	// allocate each kernel so that 0-th batch and B-1th batch adds together at B-1th position (B = in_batch)
+	for j := 0; j < in_batch; j++ { // j-th input (batch)
+		for k := 0; k < k_sz; k++ {
+			// fmt.Println("ecd: ", j, k)
+			output[(in_wid*(k/ker_wid)+k%ker_wid)*in_batch+j] = ker_in[i][(in_batch-1-j)*k_sz+(k_sz-1-k)+bias] // * scale;
+		}
+	}
+
+	// for j := 0; j < in_batch; j++ { // j-th input (batch)
+	// 	for k := 0; k < ker_wid*ker_wid; k++ {
+	// 		if k == 0 {
+	// 			if j == 0 {
+	// 				tmp[(vec_size-j)%vec_size] = ker_in[i][j*ker_wid*ker_wid+(ker_wid*ker_wid-1)+bias] // * scale;
+	// 			} else {
+	// 				tmp[(vec_size-j)%vec_size] = -ker_in[i][j*ker_wid*ker_wid+(ker_wid*ker_wid-1)+bias] // * scale;
+	// 			}
+	// 		} else {
+	// 			tmp[-j+(in_wid*(k/ker_wid)+k%ker_wid)*in_batch] = ker_in[i][j*ker_wid*ker_wid+(ker_wid*ker_wid-1-k)+bias] // * scale;
+	// 		}
+	// 	}
+	// }
+
+	// move the kernel to left adj times, so that the result of "transposed" convolution appears at 0-th position
+	// adj := (in_wid+1)*(ker_wid-3)/2 + (in_batch - 1)
+
+	adj := (in_batch - 1) + (in_batch)*(in_wid+1)*(ker_wid-1)/2
+	tmp := make([]float64, adj)
+	for i := 0; i < adj; i++ {
+		tmp[i] = output[vec_size-adj+i]
+		output[vec_size-adj+i] = -output[i]
+	}
+	for i := 0; i < vec_size-2*adj; i++ {
+		output[i] = output[i+adj]
+	}
+	for i := 0; i < adj; i++ {
+		output[i+vec_size-2*adj] = tmp[i]
+	}
+
+	return output
+}
+
+// Encode ker_outs from reshape_ker into the i-th ker vector output
+// in_wid, in_batch is those for input (to be convolved) includng padding
 func encode_ker(ker_in [][]float64, pos, i, in_wid, in_batch, ker_wid int, trans bool) []float64 {
 	vec_size := in_wid * in_wid * in_batch
 	output := make([]float64, vec_size)
@@ -166,6 +215,7 @@ func encode_ker(ker_in [][]float64, pos, i, in_wid, in_batch, ker_wid int, trans
 	// allocate each kernel so that 0-th batch and B-1th batch adds together at B-1th position (B = in_batch)
 	for j := 0; j < in_batch; j++ { // j-th input (batch)
 		for k := 0; k < k_sz; k++ {
+			// fmt.Println("ecd: ", j, k)
 			output[(in_wid*(k/ker_wid)+k%ker_wid)*in_batch+j] = ker_in[i][(in_batch-1-j)*k_sz+(k_sz-1-k)+bias] // * scale;
 		}
 	}
@@ -501,15 +551,15 @@ func postConv_BL(param ckks.Parameters, encoder ckks.Encoder, evaluator ckks.Eva
 	return ct_out
 }
 
-// Encode Kernel and outputs Plain(ker) for normal conv (no stride, no trans)
+// Encode Kernel and outputs Plain(ker) for normal conv or transposed conv (no stride)
+// Prepare kernels as if the input, output is fully batched in 1 ctxt (for trans conv, output pl_ker is one (pos-th) of the 4 divided pl_ker)
 // in_wid : width of input (include padding)
-// in_batch / out_batch: batches in 1 ctxt (input / output) consider padding
-// a: coefficient to be multiplied (for BN)
-// max_ib, max_ob: max inbatch, outbatch for full batch case
+// BN_a: coefficient to be multiplied (for BN)
 // real_ib, real_ob: real batches for kernel <=> set the same as python
-func prepKer_in(params ckks.Parameters, encoder ckks.Encoder, ker_in, BN_a []float64, in_wid, ker_wid, real_ib, real_ob, max_ib, max_ob, ECD_LV int) []*ckks.Plaintext {
+func prepKer_in(params ckks.Parameters, encoder ckks.Encoder, ker_in, BN_a []float64, in_wid, ker_wid, real_ib, real_ob, ECD_LV, pos int, trans bool) (pl_ker []*ckks.Plaintext) {
+	max_bat := params.N() / (in_wid * in_wid)
 	ker_size := ker_wid * ker_wid
-	ker_rs := reshape_ker(ker_in, ker_size, real_ob, false) // ker1[i][j] = j-th kernel for i-th output
+	ker_rs := reshape_ker(ker_in, ker_size, real_ob, trans) // ker1[i][j] = j-th kernel for i-th output
 
 	for i := 0; i < real_ob; i++ { // apply batch normalization
 		for j := range ker_rs[i] {
@@ -517,24 +567,28 @@ func prepKer_in(params ckks.Parameters, encoder ckks.Encoder, ker_in, BN_a []flo
 		}
 	}
 
-	max_ker_rs := make([][]float64, max_ob) // overloading ker_rs to the case with max_batch
-	for i := 0; i < max_ob; i++ {
-		max_ker_rs[i] = make([]float64, max_ib*ker_size)
+	max_ker_rs := make([][]float64, max_bat) // overloading ker_rs to the case with max_batch
+	for i := 0; i < max_bat; i++ {
+		max_ker_rs[i] = make([]float64, max_bat*ker_size)
 		if i < real_ob {
 			for j := 0; j < real_ib*ker_size; j++ {
 				max_ker_rs[i][j] = ker_rs[i][j]
 			}
-			// fmt.Println(ker_rs[i])
-			// fmt.Println(max_ker_rs[i])
 		}
 	}
 
-	pl_ker := make([]*ckks.Plaintext, max_ob)
-	for i := 0; i < max_ob; i++ {
+	pl_ker = make([]*ckks.Plaintext, max_bat)
+	for i := 0; i < max_bat; i++ {
 		pl_ker[i] = ckks.NewPlaintext(params, ECD_LV, params.Scale())
-		encoder.EncodeCoeffs(encode_ker(max_ker_rs, 0, i, in_wid, max_ib, ker_wid, false), pl_ker[i])
+		encoder.EncodeCoeffs(encode_ker_test(max_ker_rs, pos, i, in_wid, max_bat, ker_wid), pl_ker[i])
 		encoder.ToNTT(pl_ker[i])
 	}
+	// pl_ker := make([]*ckks.Plaintext, max_ob)
+	// for i := 0; i < max_ob; i++ {
+	// 	pl_ker[i] = ckks.NewPlaintext(params, ECD_LV, params.Scale())
+	// 	encoder.EncodeCoeffs(encode_ker(max_ker_rs, 0, i, in_wid, max_ib, ker_wid, false), pl_ker[i])
+	// 	encoder.ToNTT(pl_ker[i])
+	// }
 
 	return pl_ker
 }
@@ -563,7 +617,6 @@ func conv_then_pack_trans(params ckks.Parameters, pack_evaluator ckks.Evaluator,
 // Eval Conv, then Pack
 // The ciphertexts must be packed into full (without vacant position)
 func conv_then_pack(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_in *ckks.Ciphertext, pl_ker []*ckks.Plaintext, plain_idx []*ckks.Plaintext, max_ob int) *ckks.Ciphertext {
-
 	start := time.Now()
 	ctxt_out := make([]*ckks.Ciphertext, max_ob)
 	for i := 0; i < max_ob; i++ {
