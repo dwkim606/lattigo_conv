@@ -77,7 +77,7 @@ func newContext(logN, ECD_LV int, in_wids []int, padding bool, kind string) *con
 			}
 			cont.r_idx[elt] = make([]map[int][]int, 4)
 			for pos := 0; pos < 4; pos++ {
-				cont.r_idx[elt][pos] = gen_comprs_full_hf(cont.N/2, elt, pos, padding)
+				cont.r_idx[elt][pos] = gen_comprs_full_hf(cont.N/2, elt, elt/2, pos, 0)
 				for k := range cont.r_idx[elt][pos] {
 					rotations = append(rotations, k)
 				}
@@ -137,15 +137,15 @@ func main() {
 	// testConv_noBoot(7, 8, 8, true)
 
 	// iter, _ := strconv.Atoi(os.Args[1])
-	// testResNet_in(iter)
+	// testResNet_in(0)
 
 	// testConv_BNRelu_BL(15, 16, 3, true)
 	// testConv_noBoot_BL(6, 4, 3, false)
 
-	// testBRrot(6, 8, true)
+	// testBRrot()
 	// testConv_noBoot(5, 4, 3, true, true)
-	testConv_noBoot(7, 8, 5, true, true)
-	// testConv_BNRelu(16, 3, true)
+	// testConv_noBoot(7, 8, 5, true, true)
+	testConv_BNRelu()
 	// testReduceMean()
 	// testResNet()
 	// testDCGAN()

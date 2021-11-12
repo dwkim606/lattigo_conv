@@ -1245,9 +1245,11 @@ func testConv_noBoot(logN, in_wid, ker_wid int, printResult, trans bool) []float
 	start = time.Now()
 	kgen := ckks.NewKeyGenerator(params)
 	sk := kgen.GenSecretKey()
+	rlk := kgen.GenRelinearizationKey(sk, 2)
 	encryptor := ckks.NewEncryptor(params, sk)
 	decryptor := ckks.NewDecryptor(params, sk)
 	encoder := ckks.NewEncoder(params)
+	evaluator := ckks.NewEvaluator(params, rlwe.EvaluationKey{Rlk: rlk})
 	plain_idx, pack_evaluator := gen_idxNlogs(params.MaxLevel(), kgen, sk, encoder, params) // for final pack_ciphertexts
 	fmt.Printf("Keygen, Done in %s \n", time.Since(start))
 
@@ -1260,13 +1262,13 @@ func testConv_noBoot(logN, in_wid, ker_wid int, printResult, trans bool) []float
 	pad := (ker_wid - 1) / 2 // for batch with largest input possible
 
 	if trans {
-		k := 1.0
+		k := 0.0
 		for i := 0; i < in_wid/2; i++ {
 			for j := 0; j < in_wid/2; j++ {
 				for b := 0; b < batch; b++ {
 					if ((2*i + 1) < (in_wid - pad)) && ((2*j + 1) < (in_wid - pad)) {
 						input[(2*i+1)*in_wid*batch+(2*j+1)*batch+b] = k
-						k += 0.0
+						k += 1.0
 					}
 				}
 			}
@@ -1292,8 +1294,10 @@ func testConv_noBoot(logN, in_wid, ker_wid int, printResult, trans bool) []float
 		ker_in[i] = 1.0 * float64(i) //* float64(i) / float64(batch*batch*ker_size)
 	}
 	bn_a := make([]float64, batch)
+	bn_b := make([]float64, batch)
 	for i := range bn_a {
 		bn_a[i] = 1.0
+		bn_b[i] = 0.0
 	}
 	start = time.Now()
 	pl_ker := prepKer_in(params, encoder, ker_in, bn_a, in_wid, ker_wid, batch, batch, params.MaxLevel(), 0, trans)
@@ -1322,7 +1326,13 @@ func testConv_noBoot(logN, in_wid, ker_wid int, printResult, trans bool) []float
 
 	start = time.Now()
 	ct_result := conv_then_pack(params, pack_evaluator, ctxt_input, pl_ker, plain_idx, batch)
-	fmt.Printf("Done in %s \n", time.Since(start))
+	// for Batch Normalization (BN)
+	b_coeffs := make([]float64, N)
+	pl_bn_b := ckks.NewPlaintext(params, ct_result.Level(), ct_result.Scale) // contain plaintext values
+	encoder.EncodeCoeffs(b_coeffs, pl_bn_b)
+	encoder.ToNTT(pl_bn_b)
+	evaluator.Add(ct_result, pl_bn_b, ct_result)
+	fmt.Printf("Conv (with BN) Done in %s \n", time.Since(start))
 
 	fmt.Println()
 	fmt.Println("=========================================")
@@ -1345,18 +1355,32 @@ func testConv_noBoot(logN, in_wid, ker_wid int, printResult, trans bool) []float
 }
 
 // Eval Conv, BN, relu with Boot
-// in_wid must be Po2,
-func testConv_BNRelu(in_wid, ker_wid int, printResult, trans bool) {
+// always set pad := (ker_wid-1)/2 to simulate full packing
+// in_wid must be Po2
+// For trans, assume that input: full bached ciphertext, outputs 1/4 batched 1ctxt due to expansion
+func testConv_BNRelu() {
+	batch := 4
+	in_wid := 8
+	ker_wid := 5
+	trans := true
+	printResult := true
 
-	logN := 16
 	alpha := 0.0 // 0.3 => leakyrelu
-	pow := 4
-	N := (1 << logN)
-	in_size := in_wid * in_wid
-	batch := N / in_size
+	N := batch * in_wid * in_wid
+	logN := 0
+	for ; (1 << logN) < N; logN++ {
+	}
+
+	var out_batch int
+	if trans {
+		out_batch = batch / 4
+	} else {
+		out_batch = batch
+	}
 	ker_size := ker_wid * ker_wid
 	ECD_LV := 1
-	pad := (ker_wid - 1) / 2
+	kp_wid := in_wid - ((ker_wid - 1) / 2)
+	// kp_wid := 4
 
 	var btp *ckks.Bootstrapper
 	btpParams := ckks.DefaultBootstrapParams[6]
@@ -1370,59 +1394,90 @@ func testConv_BNRelu(in_wid, ker_wid int, printResult, trans bool) {
 	// Generate ext_idx for extracting valid values from conv with "same" padding
 	ext_idx := make([][]int, 2)
 	for i := 0; i < 2; i++ {
-		ext_idx[i] = gen_keep_vec(logN, in_wid, pad, i)
+		ext_idx[i] = gen_keep_vec(logN, in_wid, kp_wid, i)
+	}
+	var rotations []int
+	r_idx := make(map[int][]map[int][]int)
+	elt := in_wid
+	r_idx[elt] = make([]map[int][]int, 4)
+	for ul := 0; ul < 2; ul++ {
+		r_idx[elt][ul] = gen_extend_full_hf(N/2, elt, kp_wid, 0, ul)
+		for k := range r_idx[elt][ul] {
+			rotations = append(rotations, k)
+		}
 	}
 
 	// Scheme context and keys for evaluation (no Boot)
 	kgen := ckks.NewKeyGenerator(params)
 	sk, _ := kgen.GenKeyPairSparse(btpParams.H)
 	rlk := kgen.GenRelinearizationKey(sk, 2)
+	rotkeys := kgen.GenRotationKeysForRotations(rotations, false, sk)
 	encoder := ckks.NewEncoder(params)
 	decryptor := ckks.NewDecryptor(params, sk)
 	encryptor := ckks.NewEncryptor(params, sk)
-	evaluator := ckks.NewEvaluator(params, rlwe.EvaluationKey{Rlk: rlk})
-
+	evaluator := ckks.NewEvaluator(params, rlwe.EvaluationKey{Rlk: rlk, Rtks: rotkeys})
 	pl_idx, pack_evaluator := gen_idxNlogs(ECD_LV, kgen, sk, encoder, params)
-
 	fmt.Println("Generating bootstrapping keys...")
 	start = time.Now()
-	rotations := btpParams.RotationsForBootstrapping(params.LogSlots())
-	rotkeys := kgen.GenRotationKeysForRotations(rotations, true, sk)
+	rotations = btpParams.RotationsForBootstrapping(params.LogSlots())
+	rotkeys = kgen.GenRotationKeysForRotations(rotations, true, sk)
 	btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
 	if btp, err = ckks.NewBootstrapper_mod(params, btpParams, btpKey); err != nil {
 		panic(err)
 	}
 	fmt.Printf("Done in %s \n", time.Since(start))
+	if btp.N() != N {
+		fmt.Println("Set Boot logN to", logN)
+		panic("Boot N != N")
+	}
 
 	input := make([]float64, N)
-	input_pad := (ker_wid - 1) / 2
 	k := 0.0
-	for i := 0; i < in_wid; i++ {
-		for j := 0; j < in_wid; j++ {
-			for b := 0; b < batch; b++ {
-				if (i < in_wid-input_pad) && (j < in_wid-input_pad) {
-					input[i*in_wid*batch+j*batch+b] = k
-					k += (1.0 / float64(batch*(in_wid-input_pad)*(in_wid-input_pad)))
+	if trans {
+		for i := 0; i < in_wid/2; i++ {
+			for j := 0; j < in_wid/2; j++ {
+				for b := 0; b < batch; b++ {
+					if ((2*i + 1) < kp_wid) && ((2*j + 1) < kp_wid) {
+						input[(2*i+1)*in_wid*batch+(2*j+1)*batch+b] = k
+						k += 1.0
+						// k += (1.0 / float64(batch*(in_wid-input_pad)*(in_wid-input_pad)))
+					}
+				}
+			}
+		}
+		for i := range input {
+			input[i] = input[i] / k
+		}
+
+	} else {
+		for i := 0; i < in_wid; i++ {
+			for j := 0; j < in_wid; j++ {
+				for b := 0; b < batch; b++ {
+					if (i < in_wid-kp_wid) && (j < in_wid-kp_wid) {
+						input[i*in_wid*batch+j*batch+b] = k
+						k += (1.0 / float64(batch*(in_wid-kp_wid)*(in_wid-kp_wid)))
+					}
 				}
 			}
 		}
 	}
-	// input := make([]float64, N)
-	// for i := range input {
-	// 	input[i] = 1.0 * float64(i) / float64(N)
-	// }
-	ker_in := make([]float64, batch*batch*ker_size)
+	prt_mat(input, batch, 0)
+	for b := 0; b < batch; b++ {
+		print_vec_fl("input ("+strconv.Itoa(b)+")", input, in_wid, b)
+	}
+
+	ker_in := make([]float64, batch*out_batch*ker_size)
 	for i := range ker_in {
-		ker_in[i] = 1.0 * float64(i) / float64(batch*batch*ker_size)
+		ker_in[i] = 1.0 * float64(i) / float64(len(ker_in))
 	}
 
 	start = time.Now()
-	bn_a := make([]float64, batch)
-	bn_b := make([]float64, batch)
+	bn_a := make([]float64, out_batch)
+	bn_b := make([]float64, out_batch)
 	b_coeffs := make([]float64, N)
 	for i := range bn_a {
-		bn_a[i] = 1.0 / 10000 // * float64(i) / float64(batch)
-		bn_b[i] = 0.0 * float64(i) / float64(batch)
+		bn_a[i] = 1.0 // * float64(i) / float64(batch)
+		bn_b[i] = 0.0 //* float64(i) / float64(batch)
 	}
 	for i := range bn_b {
 		for j := 0; j < in_wid; j++ {
@@ -1431,7 +1486,14 @@ func testConv_BNRelu(in_wid, ker_wid int, printResult, trans bool) {
 			}
 		}
 	}
-	pl_ker := prepKer_in(params, encoder, ker_in, bn_a, in_wid, ker_wid, batch, batch, ECD_LV, 0, trans)
+
+	// pl_ker_add := make([][]*ckks.Plaintext, 3)
+	// if trans {
+	// 	for i := 1; i < 4; i++ {
+	// 		pl_ker_add[i] = prepKer_in(params, encoder, ker_in, bn_a, in_wid, ker_wid, batch, batch, ECD_LV, i, trans)
+	// 	}
+	// }
+	pl_ker := prepKer_in(params, encoder, ker_in, bn_a, in_wid, ker_wid, batch, out_batch, ECD_LV, 0, trans)
 	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
 
 	fmt.Println("vec size: ", N)
@@ -1491,8 +1553,8 @@ func testConv_BNRelu(in_wid, ker_wid int, printResult, trans bool) {
 		in_slots1[i] = complex(in_cfs1_preB[i]/math.Pow(2, float64(pow)), 0)
 		in_slots2[i] = complex(in_cfs2_preB[i]/math.Pow(2, float64(pow)), 0)
 	}
-	ext1_tmp := keep_vec_fl(in_cfs1_preB, in_wid, pad, 0)
-	ext2_tmp := keep_vec_fl(in_cfs2_preB, in_wid, pad, 1)
+	ext1_tmp := keep_vec_fl(in_cfs1_preB, in_wid, kp_wid, 0)
+	ext2_tmp := keep_vec_fl(in_cfs2_preB, in_wid, kp_wid, 1)
 	for i := range in_cfs1_preB {
 		in_cfs1_preB[i] = ext1_tmp[reverseBits(uint32(i), params.LogSlots())]
 		in_cfs2_preB[i] = ext2_tmp[reverseBits(uint32(i), params.LogSlots())]
@@ -1502,9 +1564,9 @@ func testConv_BNRelu(in_wid, ker_wid int, printResult, trans bool) {
 	in_slots2 = printDebug(params, ct_boots[1], in_slots2, decryptor, encoder) // Compare before & after CtoS
 
 	start = time.Now()
-	for pos := 0; pos < 2; pos++ {
-		ct_boots[pos] = evalReLU(params, evaluator, ct_boots[pos], alpha)
-		evaluator.MulByPow2(ct_boots[pos], pow, ct_boots[pos])
+	for ul := 0; ul < 2; ul++ {
+		ct_boots[ul] = evalReLU(params, evaluator, ct_boots[ul], alpha)
+		evaluator.MulByPow2(ct_boots[ul], pow, ct_boots[ul])
 	}
 	fmt.Printf("ReLU Done in %s \n", time.Since(start))
 
@@ -1521,8 +1583,12 @@ func testConv_BNRelu(in_wid, ker_wid int, printResult, trans bool) {
 	ct_keep := make([]*ckks.Ciphertext, 2) // for extend (rotation) of ctxt_in
 
 	start = time.Now()
-	for pos := 0; pos < 2; pos++ {
-		ct_keep[pos] = keep_ctxt(params, evaluator, encoder, ct_boots[pos], ext_idx[pos])
+	for ul := 0; ul < 2; ul++ {
+		if trans {
+			ct_keep[ul] = ext_ctxt(evaluator, encoder, ct_boots[ul], r_idx[elt][ul], params)
+		} else {
+			ct_keep[ul] = keep_ctxt(params, evaluator, encoder, ct_boots[ul], ext_idx[ul])
+		}
 	}
 	ct_res := btp.BootstrappConv_StoC(ct_keep[0], ct_keep[1])
 	evaluator.Rescale(ct_res, params.Scale(), ct_res)
@@ -1545,7 +1611,19 @@ func testConv_BNRelu(in_wid, ker_wid int, printResult, trans bool) {
 		fmt.Println()
 
 		fmt.Print("Result: \n")
-		prt_mat(cfs_tmp, batch, 0)
+		if trans {
+			prt_mat(cfs_tmp, out_batch, 0)
+		} else {
+			prt_mat(cfs_tmp, batch, 0)
+		}
+
+		for b := 0; b < batch; b++ {
+			print_vec_fl("input ("+strconv.Itoa(b)+")", input, in_wid, b)
+		}
+		for b := 0; b < out_batch; b++ {
+			print_vec_fl("output ("+strconv.Itoa(b)+")", cfs_tmp, in_wid*2, b)
+		}
+
 	}
 }
 
@@ -1566,6 +1644,7 @@ func testResNet_in(iter int) {
 			in_wids[i] = elt
 		}
 	}
+	image := readTxt("test_data/test_image_"+strconv.Itoa(iter)+".csv", 32*32*3)
 	cont := newContext(logN, ECD_LV, in_wids, padding, "Resnet")
 
 	ker_size := ker_wid * ker_wid
@@ -1573,8 +1652,6 @@ func testResNet_in(iter int) {
 	for i := range max_batch {
 		max_batch[i] = cont.N / (in_wids[i] * in_wids[i])
 	}
-
-	image := readTxt("test_data/test_image_"+strconv.Itoa(iter)+".csv", 32*32*3)
 
 	alpha := 0.0 // 0.3 => leakyrelu
 	input := make([]float64, cont.N)
@@ -1757,7 +1834,7 @@ func testResNet_in(iter int) {
 			}
 		}
 	}
-	bn_af := make([]float64, real_batch[2])
+	bn_af := make([]float64, 10)
 	for i := range bn_af {
 		bn_af[i] = 1.0 / (8 * 8) // for reduce mean on 8*8 elements
 	}
@@ -1852,9 +1929,9 @@ func testReduceMean() {
 func testResNet() {
 	// For ResNet, we use padding: i.e., in_wid**2 element is contained in (2*in_wid)**2 sized block
 	// So ReLU, keep or rot, StoC done only on the 1st part of the CtoS ciphertexts
-	logN := 16
+	logN := 12
 	raw_in_wids := []int{32, 16, 8} // same as python
-	real_batch := []int{16, 32, 64} // same as python
+	real_batch := []int{1, 2, 4}    // same as python
 	ker_wid := 3
 	ECD_LV := 1
 	padding := true
@@ -1947,7 +2024,7 @@ func testResNet() {
 	ct_input := cont.encryptor.EncryptNew(pl_input)
 	fmt.Printf("Encryption done in %s \n", time.Since(start))
 
-	timings := make([]float64, 5)
+	timings := make([]float64, 6)
 	begin_start := time.Now()
 	new_start := time.Now()
 
@@ -2022,7 +2099,7 @@ func testResNet() {
 			}
 		}
 	}
-	bn_af := make([]float64, real_batch[2])
+	bn_af := make([]float64, 10)
 	for i := range bn_af {
 		bn_af[i] = 1.0 / (8 * 8) // for reduce mean on 8*8 elements
 	}
@@ -2353,17 +2430,22 @@ func testBootFast_Conv(ext_input []int, logN, in_wid, ker_wid int, printResult b
 }
 
 // set input as in_wid * in_wid * batch, then zero padding other values.
-func testBRrot(logN, in_wid int, print bool) {
-
-	N := (1 << logN)
+func testBRrot() {
+	batch := 4
+	in_wid := 4
+	kp_wid := 3
+	pos := 1
 	in_size := in_wid * in_wid
-	batch := N / in_size
-	pos := 0
-	padding := true
+	N := in_size * batch
+	logN := 0
+	for ; (1 << logN) < N; logN++ {
+	}
+	// padding := false
 
 	sm_input := make([]int, in_size) // each will be packed to input vector
 	input := make([]int, N)
-	input_rev := make([]int, N/2) // for upper or lowerpart
+	input_up_rev := make([]int, N/2) // for upper or lowerpart
+	input_lw_rev := make([]int, N/2) // for upper or lowerpart
 	output := make([]int, N)
 
 	// set input and desired output
@@ -2380,27 +2462,29 @@ func testBRrot(logN, in_wid int, print bool) {
 
 	input_up := input[0 : N/2]
 	input_lw := input[N/2 : N]
-	for i, elt := range input_up {
-		input_rev[reverseBits(uint32(i), logN-1)] = elt
+	for i := range input_up {
+		input_up_rev[reverseBits(uint32(i), logN-1)] = input_up[i]
+		input_lw_rev[reverseBits(uint32(i), logN-1)] = input_lw[i]
 	}
-	output_rev := comprs_full_hf(input_rev, in_wid, pos, padding)
-	for i, elt := range output_rev {
-		output[reverseBits(uint32(i), logN-1)] = elt
+
+	// output_up_rev := keep_vec(input_up_rev, in_wid, 4, 0)
+	// output_lw_rev := keep_vec(input_lw_rev, in_wid, 4, 1)
+	// output_up_rev := comprs_full_hf(input_up_rev, in_wid, kp_wid, pos, 0)
+	// output_lw_rev := comprs_full_hf(input_lw_rev, in_wid, kp_wid, pos, 1)
+	output_up_rev := extend_full_hf(input_up_rev, in_wid, kp_wid, pos, 0)
+	output_lw_rev := extend_full_hf(input_lw_rev, in_wid, kp_wid, pos, 1)
+
+	// "Now, to do extract_full_hf"
+
+	for i := range output_up_rev {
+		output[reverseBits(uint32(i), logN-1)] = output_up_rev[i]
+		output[uint32(N/2)+reverseBits(uint32(i), logN-1)] = output_lw_rev[i]
 	}
-	for i, elt := range input_lw {
-		input_rev[reverseBits(uint32(i), logN-1)] = elt
+
+	for b := 0; b < batch/4; b++ {
+		print_vec("output ("+strconv.Itoa(b)+")", output, in_wid*2, b)
 	}
-	output_rev = comprs_full_hf(input_rev, in_wid, pos, padding)
-	for i, elt := range output_rev {
-		output[uint32(N/2)+reverseBits(uint32(i), logN-1)] = elt
-		if padding {
-			output[uint32(N/2)+reverseBits(uint32(i), logN-1)] = 0
-		}
-	}
-	for b := 0; b < batch*4; b++ {
-		print_vec("output ("+strconv.Itoa(b)+")", output, in_wid/2, b)
-	}
-	fmt.Println(output)
+	// fmt.Println(output)
 }
 
 func testCyc(logN, iter int, printResult bool) {

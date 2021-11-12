@@ -125,7 +125,8 @@ def conv_bnReLU_BL_bench():
 
 def trans_conv_bnReLU_BL_bench():
     input_width = 3
-    batch = 2
+    batch = 4
+    out_batch = batch//4
     vec_size = batch*input_width**2
     ker_width = 5
     bn_a = 1.0
@@ -138,18 +139,18 @@ def trans_conv_bnReLU_BL_bench():
     #data = np.loadtxt("./weights/batch0.txt")
 
     ## Correctness Check: Compare with TF NN CONV2D
-    raw_input = [1.0 for i in range(vec_size)]
-    ker =  [1.0*i for i in range(batch * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    raw_input = [1.0*i/vec_size for i in range(vec_size)]
+    ker =  [1.0*i /(batch*out_batch*ker_size) for i in range(batch * out_batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
 
     ten_x = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, input_width, input_width, batch])
     print("input: \n", ten_x)
-    ten_k = tf.reshape(tf.constant(np.array(ker), tf.float32), [ker_width, ker_width, batch, batch])
+    ten_k = tf.reshape(tf.constant(np.array(ker), tf.float32), [ker_width, ker_width, out_batch, batch])
 
     # print(tf.reshape(ten_k, [-1]))
     # print("kernel: \n", ten_k)
 
     # print("ker0: ", ten_k[:,:,0,0])
-    conv = tf.nn.conv2d_transpose(ten_x, ten_k, output_shape=(1, 2*input_width, 2*input_width, batch), strides=[1, 2, 2, 1])
+    conv = tf.nn.conv2d_transpose(ten_x, ten_k, output_shape=(1, 2*input_width, 2*input_width, out_batch), strides=[1, 2, 2, 1], padding="SAME")
     # conv = tf.nn.relu(conv)
     print("result: \n", conv, "\n")
 
@@ -226,11 +227,13 @@ def post_process(iter_num):
 
     acc = 0
     total = 0
+    no_iters = []
     for iter in range(iter_num):
         if os.path.exists(result_dir+'class_result_'+str(iter)+'.csv'):
             read = np.loadtxt(result_dir+'class_result_'+str(iter)+'.csv')
             total+=1
         else:
+            no_iters.append(iter)
             continue
         if len(read) > 256:
             post_process = True
@@ -251,10 +254,14 @@ def post_process(iter_num):
         print("plain: ", pred[iter], "argmax: ", np.argmax(pred[iter]))
         if (np.argmax(res_np) == np.argmax(pred[iter])):
             acc += 1
+        else:
+            print(iter, "wrong!!")
+            
         
 
     print("precision: ", acc, "/", total)
     print("among ", iter_num, " samples.")
+    print("missing: ", no_iters)
     # tf_images = tf.reshape(tf.constant(np.loadtxt('test_images_'+str(num_samples)+'.csv'), tf.float32), [num_samples, 32, 32, 3])
     # pred = plain_resnet(tf_images)
     # print("enc == plain?", tf.argmax(tf.squeeze(conv, axis=[1,2]),1) == tf.argmax(pred[iter],1))
