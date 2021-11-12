@@ -85,8 +85,8 @@ func testDCGAN() {
 			in_cfs_2_pBoot[i] = in_cfs[reverseBits(uint32(i), cont.params.LogSlots())+uint32(cont.params.Slots())]
 			in_slots[i] = complex(in_cfs_1_pBoot[i]/math.Pow(2, float64(pow)), 0)
 		}
-		ext1_tmp := extend_full_fl(in_cfs_1_pBoot, in_wids[1], 3, true, true)
-		ext2_tmp := extend_full_fl(in_cfs_2_pBoot, in_wids[1], 3, true, true)
+		ext1_tmp := extend_full_nhf(in_cfs_1_pBoot, in_wids[1], 3, true, true)
+		ext2_tmp := extend_full_nhf(in_cfs_2_pBoot, in_wids[1], 3, true, true)
 		for i := range in_cfs_1_pBoot {
 			in_cfs_1_pBoot[i] = ext1_tmp[reverseBits(uint32(i), cont.params.LogSlots())]
 			in_cfs_2_pBoot[i] = ext2_tmp[reverseBits(uint32(i), cont.params.LogSlots())]
@@ -210,8 +210,8 @@ func testDCGAN() {
 			in_cfs_2_pBoot[i] = 0                                                      // in_cfs[reverseBits(uint32(i), cont.params.LogSlots())+uint32(cont.params.Slots())]
 			in_slots[i] = complex(in_cfs_1_pBoot[i]/math.Pow(2, float64(pow)), 0)
 		}
-		ext1_tmp = extend_full_fl(in_cfs_1_pBoot, in_wids[2], 0, true, true)
-		ext2_tmp = extend_full_fl(in_cfs_2_pBoot, in_wids[2], 0, true, true)
+		ext1_tmp = extend_full_nhf(in_cfs_1_pBoot, in_wids[2], 0, true, true)
+		ext2_tmp = extend_full_nhf(in_cfs_2_pBoot, in_wids[2], 0, true, true)
 		for i := range in_cfs_1_pBoot {
 			in_cfs_1_pBoot[i] = ext1_tmp[reverseBits(uint32(i), cont.params.LogSlots())]
 			in_cfs_2_pBoot[i] = ext2_tmp[reverseBits(uint32(i), cont.params.LogSlots())]
@@ -320,8 +320,8 @@ func testDCGAN() {
 			in_cfs_2_pBoot[i] = 0                                                      // in_cfs[reverseBits(uint32(i), cont.params.LogSlots())+uint32(cont.params.Slots())]
 			in_slots[i] = complex(in_cfs_1_pBoot[i]/math.Pow(2, float64(pow)), 0)
 		}
-		ext1_tmp = extend_full_fl(in_cfs_1_pBoot, in_wids[3], 0, true, true)
-		ext2_tmp = extend_full_fl(in_cfs_2_pBoot, in_wids[3], 0, true, true)
+		ext1_tmp = extend_full_nhf(in_cfs_1_pBoot, in_wids[3], 0, true, true)
+		ext2_tmp = extend_full_nhf(in_cfs_2_pBoot, in_wids[3], 0, true, true)
 		for i := range in_cfs_1_pBoot {
 			in_cfs_1_pBoot[i] = ext1_tmp[reverseBits(uint32(i), cont.params.LogSlots())]
 			in_cfs_2_pBoot[i] = ext2_tmp[reverseBits(uint32(i), cont.params.LogSlots())]
@@ -431,7 +431,7 @@ func testDCGAN_old() {
 	r_idx := make([]map[int][]int, 4)
 	m_idx := make([]map[int][]int, 4)
 	for pos := 0; pos < 4; pos++ {
-		r_idx[pos], m_idx[pos] = gen_extend_full(N/2, in_wid[1], pos, true, true)
+		r_idx[pos], m_idx[pos] = gen_extend_full_nhf(N/2, in_wid[1], pos, true, true)
 		for k := range r_idx[pos] {
 			rotations = append(rotations, k)
 		}
@@ -442,7 +442,7 @@ func testDCGAN_old() {
 	r_idx1 := make([]map[int][]int, 4)
 	m_idx1 := make([]map[int][]int, 4)
 	for pos := 0; pos < 4; pos++ {
-		r_idx1[pos], m_idx1[pos] = gen_extend_full(N/2, in_wid[2], pos, true, true)
+		r_idx1[pos], m_idx1[pos] = gen_extend_full_nhf(N/2, in_wid[2], pos, true, true)
 		for k := range r_idx1[pos] {
 			rotations = append(rotations, k)
 		}
@@ -453,7 +453,7 @@ func testDCGAN_old() {
 	r_idx2 := make([]map[int][]int, 4)
 	m_idx2 := make([]map[int][]int, 4)
 	for pos := 0; pos < 4; pos++ {
-		r_idx2[pos], m_idx2[pos] = gen_extend_full(N/2, in_wid[3], pos, true, true)
+		r_idx2[pos], m_idx2[pos] = gen_extend_full_nhf(N/2, in_wid[3], pos, true, true)
 		for k := range r_idx2[pos] {
 			rotations = append(rotations, k)
 		}
@@ -575,8 +575,8 @@ func testDCGAN_old() {
 			in_cfs_2_pBoot[i] = in_cfs[reverseBits(uint32(i), params.LogSlots())+uint32(params.Slots())]
 			in_slots[i] = complex(in_cfs_1_pBoot[i]/math.Pow(2, float64(pow)), 0)
 		}
-		ext1_tmp := extend_full_fl(in_cfs_1_pBoot, in_wid[1], 3, true, true)
-		ext2_tmp := extend_full_fl(in_cfs_2_pBoot, in_wid[1], 3, true, true)
+		ext1_tmp := extend_full_nhf(in_cfs_1_pBoot, in_wid[1], 3, true, true)
+		ext2_tmp := extend_full_nhf(in_cfs_2_pBoot, in_wid[1], 3, true, true)
 		for i := range in_cfs_1_pBoot {
 			in_cfs_1_pBoot[i] = ext1_tmp[reverseBits(uint32(i), params.LogSlots())]
 			in_cfs_2_pBoot[i] = ext2_tmp[reverseBits(uint32(i), params.LogSlots())]
@@ -700,8 +700,8 @@ func testDCGAN_old() {
 			in_cfs_2_pBoot[i] = 0                                                 // in_cfs[reverseBits(uint32(i), params.LogSlots())+uint32(params.Slots())]
 			in_slots[i] = complex(in_cfs_1_pBoot[i]/math.Pow(2, float64(pow)), 0)
 		}
-		ext1_tmp = extend_full_fl(in_cfs_1_pBoot, in_wid[2], 0, true, true)
-		ext2_tmp = extend_full_fl(in_cfs_2_pBoot, in_wid[2], 0, true, true)
+		ext1_tmp = extend_full_nhf(in_cfs_1_pBoot, in_wid[2], 0, true, true)
+		ext2_tmp = extend_full_nhf(in_cfs_2_pBoot, in_wid[2], 0, true, true)
 		for i := range in_cfs_1_pBoot {
 			in_cfs_1_pBoot[i] = ext1_tmp[reverseBits(uint32(i), params.LogSlots())]
 			in_cfs_2_pBoot[i] = ext2_tmp[reverseBits(uint32(i), params.LogSlots())]
@@ -810,8 +810,8 @@ func testDCGAN_old() {
 			in_cfs_2_pBoot[i] = 0                                                 // in_cfs[reverseBits(uint32(i), params.LogSlots())+uint32(params.Slots())]
 			in_slots[i] = complex(in_cfs_1_pBoot[i]/math.Pow(2, float64(pow)), 0)
 		}
-		ext1_tmp = extend_full_fl(in_cfs_1_pBoot, in_wid[3], 0, true, true)
-		ext2_tmp = extend_full_fl(in_cfs_2_pBoot, in_wid[3], 0, true, true)
+		ext1_tmp = extend_full_nhf(in_cfs_1_pBoot, in_wid[3], 0, true, true)
+		ext2_tmp = extend_full_nhf(in_cfs_2_pBoot, in_wid[3], 0, true, true)
 		for i := range in_cfs_1_pBoot {
 			in_cfs_1_pBoot[i] = ext1_tmp[reverseBits(uint32(i), params.LogSlots())]
 			in_cfs_2_pBoot[i] = ext2_tmp[reverseBits(uint32(i), params.LogSlots())]
@@ -1401,7 +1401,7 @@ func testConv_BNRelu() {
 	elt := in_wid
 	r_idx[elt] = make([]map[int][]int, 4)
 	for ul := 0; ul < 2; ul++ {
-		r_idx[elt][ul] = gen_extend_full_hf(N/2, elt, kp_wid, 0, ul)
+		r_idx[elt][ul] = gen_extend_full(N/2, elt, kp_wid, 0, ul)
 		for k := range r_idx[elt][ul] {
 			rotations = append(rotations, k)
 		}
@@ -1463,7 +1463,7 @@ func testConv_BNRelu() {
 	}
 	prt_mat(input, batch, 0)
 	for b := 0; b < batch; b++ {
-		print_vec_fl("input ("+strconv.Itoa(b)+")", input, in_wid, b)
+		print_vec("input ("+strconv.Itoa(b)+")", input, in_wid, b)
 	}
 
 	ker_in := make([]float64, batch*out_batch*ker_size)
@@ -1553,8 +1553,8 @@ func testConv_BNRelu() {
 		in_slots1[i] = complex(in_cfs1_preB[i]/math.Pow(2, float64(pow)), 0)
 		in_slots2[i] = complex(in_cfs2_preB[i]/math.Pow(2, float64(pow)), 0)
 	}
-	ext1_tmp := keep_vec_fl(in_cfs1_preB, in_wid, kp_wid, 0)
-	ext2_tmp := keep_vec_fl(in_cfs2_preB, in_wid, kp_wid, 1)
+	ext1_tmp := keep_vec(in_cfs1_preB, in_wid, kp_wid, 0)
+	ext2_tmp := keep_vec(in_cfs2_preB, in_wid, kp_wid, 1)
 	for i := range in_cfs1_preB {
 		in_cfs1_preB[i] = ext1_tmp[reverseBits(uint32(i), params.LogSlots())]
 		in_cfs2_preB[i] = ext2_tmp[reverseBits(uint32(i), params.LogSlots())]
@@ -1618,10 +1618,10 @@ func testConv_BNRelu() {
 		}
 
 		for b := 0; b < batch; b++ {
-			print_vec_fl("input ("+strconv.Itoa(b)+")", input, in_wid, b)
+			print_vec("input ("+strconv.Itoa(b)+")", input, in_wid, b)
 		}
 		for b := 0; b < out_batch; b++ {
-			print_vec_fl("output ("+strconv.Itoa(b)+")", cfs_tmp, in_wid*2, b)
+			print_vec("output ("+strconv.Itoa(b)+")", cfs_tmp, in_wid*2, b)
 		}
 
 	}
@@ -2155,7 +2155,7 @@ func testBootFast_Conv(ext_input []int, logN, in_wid, ker_wid int, printResult b
 		params.LogN(), params.LogSlots(), btpParams.H, params.LogQP(), params.QCount(), math.Log2(params.Scale()), params.Sigma())
 
 	// Generate rotations for EXT_FULL
-	r_idx, m_idx := gen_extend_full(N/2, 2*in_wid, pos, true, true)
+	r_idx, m_idx := gen_extend_full_nhf(N/2, 2*in_wid, pos, true, true)
 	var rotations []int
 	for k := range r_idx {
 		rotations = append(rotations, k)
@@ -2192,7 +2192,7 @@ func testBootFast_Conv(ext_input []int, logN, in_wid, ker_wid int, printResult b
 		fmt.Print("Input: \n")
 
 		for b := 0; b < batch/4; b++ {
-			print_vec("input ("+strconv.Itoa(b)+")", int_tmp, 2*in_wid, b)
+			print_vec_int("input ("+strconv.Itoa(b)+")", int_tmp, 2*in_wid, b)
 		}
 	}
 
@@ -2326,8 +2326,8 @@ func testBootFast_Conv(ext_input []int, logN, in_wid, ker_wid int, printResult b
 		values_tmp2[i] = values_test[reverseBits(uint32(i), params.LogSlots())+uint32(params.Slots())]
 	}
 
-	values_tmp11 := extend_full_fl(values_tmp1, 2*in_wid, pos, true, true)
-	values_tmp22 := extend_full_fl(values_tmp2, 2*in_wid, pos, true, true)
+	values_tmp11 := extend_full_nhf(values_tmp1, 2*in_wid, pos, true, true)
+	values_tmp22 := extend_full_nhf(values_tmp2, 2*in_wid, pos, true, true)
 	for i := range values_tmp1 {
 		values_tmp1[i] = values_tmp11[reverseBits(uint32(i), params.LogSlots())]
 		values_tmp2[i] = values_tmp22[reverseBits(uint32(i), params.LogSlots())]
@@ -2376,14 +2376,14 @@ func testBootFast_Conv(ext_input []int, logN, in_wid, ker_wid int, printResult b
 			fmt.Print("Result: \n")
 			// fmt.Println(int_tmp)
 			for b := 0; b < batch_real; b++ {
-				print_vec("input ("+strconv.Itoa(b)+")", int_tmp, in_wid_out, b)
+				print_vec_int("input ("+strconv.Itoa(b)+")", int_tmp, in_wid_out, b)
 			}
 
 			for i := range values_test {
 				int_tmp[i] = int(float64(N) * values_test[i])
 			}
 			for b := 0; b < batch_real; b++ {
-				print_vec("cp_input ("+strconv.Itoa(b)+")", int_tmp, in_wid_out, b)
+				print_vec_int("cp_input ("+strconv.Itoa(b)+")", int_tmp, in_wid_out, b)
 			}
 		}
 
@@ -2457,7 +2457,7 @@ func testBRrot() {
 	}
 
 	for b := 0; b < batch; b++ {
-		print_vec("input ("+strconv.Itoa(b)+")", input, in_wid, b)
+		print_vec_int("input ("+strconv.Itoa(b)+")", input, in_wid, b)
 	}
 
 	input_up := input[0 : N/2]
@@ -2471,8 +2471,8 @@ func testBRrot() {
 	// output_lw_rev := keep_vec(input_lw_rev, in_wid, 4, 1)
 	// output_up_rev := comprs_full_hf(input_up_rev, in_wid, kp_wid, pos, 0)
 	// output_lw_rev := comprs_full_hf(input_lw_rev, in_wid, kp_wid, pos, 1)
-	output_up_rev := extend_full_hf(input_up_rev, in_wid, kp_wid, pos, 0)
-	output_lw_rev := extend_full_hf(input_lw_rev, in_wid, kp_wid, pos, 1)
+	output_up_rev := extend_full_int(input_up_rev, in_wid, kp_wid, pos, 0)
+	output_lw_rev := extend_full_int(input_lw_rev, in_wid, kp_wid, pos, 1)
 
 	// "Now, to do extract_full_hf"
 
@@ -2482,7 +2482,7 @@ func testBRrot() {
 	}
 
 	for b := 0; b < batch/4; b++ {
-		print_vec("output ("+strconv.Itoa(b)+")", output, in_wid*2, b)
+		print_vec_int("output ("+strconv.Itoa(b)+")", output, in_wid*2, b)
 	}
 	// fmt.Println(output)
 }

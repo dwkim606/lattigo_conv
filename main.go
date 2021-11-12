@@ -77,7 +77,7 @@ func newContext(logN, ECD_LV int, in_wids []int, padding bool, kind string) *con
 			}
 			cont.r_idx[elt] = make([]map[int][]int, 4)
 			for pos := 0; pos < 4; pos++ {
-				cont.r_idx[elt][pos] = gen_comprs_full_hf(cont.N/2, elt, elt/2, pos, 0)
+				cont.r_idx[elt][pos] = gen_comprs_full(cont.N/2, elt, elt/2, pos, 0)
 				for k := range cont.r_idx[elt][pos] {
 					rotations = append(rotations, k)
 				}
@@ -88,7 +88,7 @@ func newContext(logN, ECD_LV int, in_wids []int, padding bool, kind string) *con
 			cont.r_idx[elt] = make([]map[int][]int, 4)
 			cont.m_idx[elt] = make([]map[int][]int, 4)
 			for pos := 0; pos < 4; pos++ {
-				cont.r_idx[elt][pos], cont.m_idx[elt][pos] = gen_extend_full(cont.N/2, elt, pos, padding, half)
+				cont.r_idx[elt][pos], cont.m_idx[elt][pos] = gen_extend_full_nhf(cont.N/2, elt, pos, padding, half)
 				for k := range cont.r_idx[elt][pos] {
 					rotations = append(rotations, k)
 				}

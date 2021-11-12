@@ -76,8 +76,8 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 		in_slots1[i] = complex(in_cfs1_preB[i]/math.Pow(2, float64(pow)), 0)
 		in_slots2[i] = complex(in_cfs2_preB[i]/math.Pow(2, float64(pow)), 0)
 	}
-	ext1_tmp := keep_vec_fl(in_cfs1_preB, in_wid, kp_wid, 0)
-	ext2_tmp := keep_vec_fl(in_cfs2_preB, in_wid, kp_wid, 1)
+	ext1_tmp := keep_vec(in_cfs1_preB, in_wid, kp_wid, 0)
+	ext2_tmp := keep_vec(in_cfs2_preB, in_wid, kp_wid, 1)
 	for i := range in_cfs1_preB {
 		in_cfs1_preB[i] = ext1_tmp[reverseBits(uint32(i), cont.params.LogSlots())]
 		in_cfs2_preB[i] = ext2_tmp[reverseBits(uint32(i), cont.params.LogSlots())]
