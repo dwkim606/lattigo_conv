@@ -228,6 +228,7 @@ def post_process(iter_num):
     acc = 0
     total = 0
     no_iters = []
+    wrong_result = {}
     for iter in range(iter_num):
         if os.path.exists(result_dir+'class_result_'+str(iter)+'.csv'):
             read = np.loadtxt(result_dir+'class_result_'+str(iter)+'.csv')
@@ -255,21 +256,27 @@ def post_process(iter_num):
         if (np.argmax(res_np) == np.argmax(pred[iter])):
             acc += 1
         else:
-            print(iter, "wrong!!")
-            
-        
+            wrong_result[str(iter)] = []
+            wrong_result[str(iter)].insert(0, res_np)
+            wrong_result[str(iter)].insert(1, pred[iter])
 
     print("precision: ", acc, "/", total)
     print("among ", iter_num, " samples.")
     print("missing: ", no_iters)
+    print("\n wrong results: \n")
+    for i, result in wrong_result.items():
+        print(i, "-th iter.")
+        print("enc: ", result[0], "argmax: ", np.argmax(result[0]))
+        print("plain: ", result[1], "argmax: ", np.argmax(result[1]), "\n")
+
     # tf_images = tf.reshape(tf.constant(np.loadtxt('test_images_'+str(num_samples)+'.csv'), tf.float32), [num_samples, 32, 32, 3])
     # pred = plain_resnet(tf_images)
     # print("enc == plain?", tf.argmax(tf.squeeze(conv, axis=[1,2]),1) == tf.argmax(pred[iter],1))
 
 #### Main Start #### 
 
-trans_conv_bnReLU_BL_bench()
-# post_process(100)
+# trans_conv_bnReLU_BL_bench()
+post_process(100)
 # num_samples = 100
 # pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
 
