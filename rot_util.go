@@ -109,10 +109,9 @@ func inputExt(input []float64, logN, in_wid int, print bool) []float64 {
 // ul: up or low
 // assume N/2 sized input
 func keep_vec(input []float64, in_wid, kp_wid, ul int) []float64 {
-	bits := int(math.Logb(float64(len(input))))
 	output := make([]float64, len(input))
 
-	tmp := gen_keep_vec(bits+1, in_wid, kp_wid, ul)
+	tmp := gen_keep_vec(len(input), in_wid, kp_wid, ul)
 
 	for i := range output {
 		output[i] = input[i] * float64(tmp[i])
@@ -124,10 +123,12 @@ func keep_vec(input []float64, in_wid, kp_wid, ul int) []float64 {
 // returns the idx for keep_vec
 // N: length of input (upper + lower)
 // ul = 0 -> upper part, ul = 1 -> lower part
-func gen_keep_vec(logN, in_wid, kp_wid, ul int) (idx []int) {
-	N2 := 1 << (logN - 1)
-	idx = make([]int, N2)
-	batch := 2 * N2 / (in_wid * in_wid)
+func gen_keep_vec(vec_size, in_wid, kp_wid, ul int) (idx []int) {
+	logN := 0
+	for ; (1 << logN) < (2 * vec_size); logN++ {
+	}
+	idx = make([]int, vec_size)
+	batch := 2 * vec_size / (in_wid * in_wid)
 	if kp_wid < in_wid/2 {
 		panic("keep width too small. less than in_wid/2")
 	}

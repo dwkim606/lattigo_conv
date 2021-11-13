@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"math"
 )
 
 // print out arrg vec input from pos position
@@ -44,10 +43,9 @@ func addSlice_int(a []int, b []int) []int {
 
 // same as keep_vec. Only for Test
 func keep_vec_int(input []int, in_wid, kp_wid, ul int) []int {
-	bits := int(math.Logb(float64(len(input))))
 	output := make([]int, len(input))
 
-	tmp := gen_keep_vec(bits+1, in_wid, kp_wid, ul)
+	tmp := gen_keep_vec(len(input), in_wid, kp_wid, ul)
 
 	for i := range output {
 		output[i] = input[i] * tmp[i]

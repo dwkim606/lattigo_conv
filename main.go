@@ -26,7 +26,8 @@ type context struct {
 	logN    int
 	N       int
 	ECD_LV  int
-	in_wids []int // possible input widths
+	in_wids []int // input widths including padding
+	kp_wids []int // keep widths among input widths
 	// pads           map[int]int
 	ext_idx        map[int][][]int         // ext_idx for keep_vec (saved for each possible input width) map: in_wid, [up/low]
 	r_idx          map[int][]map[int][]int // r_idx for compr_vec (or ext_vec) map: in_wid [pos] map: rot
@@ -41,11 +42,12 @@ type context struct {
 	btp            *ckks.Bootstrapper
 }
 
-func newContext(logN, ECD_LV int, in_wids []int, padding bool, kind string) *context {
-	cont := context{N: (1 << logN), logN: logN, ECD_LV: ECD_LV}
+func newContext(logN int, in_wids, kp_wids []int, boot bool, kind string) *context {
+	cont := context{N: (1 << logN), logN: logN, ECD_LV: 1}
 	cont.in_wids = make([]int, len(in_wids))
 	copy(cont.in_wids, in_wids)
-	// cont.pads = make(map[int]int)
+	cont.kp_wids = make([]int, len(kp_wids))
+	copy(cont.kp_wids, kp_wids)
 
 	btpParams := ckks.DefaultBootstrapParams[6]
 	cont.params, err = btpParams.Params()
@@ -54,26 +56,48 @@ func newContext(logN, ECD_LV int, in_wids []int, padding bool, kind string) *con
 	}
 	fmt.Printf("CKKS parameters: logN = %d, logSlots = %d, h = %d, logQP = %d, levels = %d, scale= 2^%f, sigma = %f \n",
 		cont.params.LogN(), cont.params.LogSlots(), btpParams.H, cont.params.LogQP(), cont.params.QCount(), math.Log2(cont.params.Scale()), cont.params.Sigma())
-
+	if cont.params.N() != cont.N {
+		fmt.Println("Set Boot logN to", logN)
+		panic("Boot N != N")
+	}
 	// Gen rotations
 	var rotations []int
 	cont.ext_idx = make(map[int][][]int)
 	cont.r_idx = make(map[int][]map[int][]int)
 	cont.m_idx = make(map[int][]map[int][]int)
 	var iter int
-	half := padding // only for DCGAN
+	half := true // only for DCGAN
 
 	switch kind {
-	case "Resnet": // Generate ext_idx for extracting valid values from conv with "same" padding
-		if padding {
-			iter = 1
-		} else {
-			iter = 2
+	case "Conv": // we assume manual padding using kp_wid
+		if boot {
+			iter = 2 // we assume full padding, i.e., up and low is both nonzero
+			for i, elt := range cont.in_wids {
+				cont.ext_idx[elt] = make([][]int, iter)
+				for ul := 0; ul < iter; ul++ {
+					cont.ext_idx[elt][ul] = gen_keep_vec(cont.N/2, elt, cont.kp_wids[i], ul)
+				}
+			}
 		}
+	case "TransConv": // we assume manual padding using kp_wid
+		if boot {
+			iter = 2 // we assume full padding, i.e., up and low is both nonzero
+			for i, elt := range cont.in_wids {
+				cont.r_idx[elt] = make([]map[int][]int, 4)
+				for ul := 0; ul < iter; ul++ {
+					cont.r_idx[elt][ul] = gen_extend_full(cont.N/2, elt, kp_wids[i], 0, ul)
+					for k := range cont.r_idx[elt][ul] {
+						rotations = append(rotations, k)
+					}
+				}
+			}
+		}
+	case "Resnet": // Generate ext_idx for extracting valid values from conv with "same" padding
+		iter = 1 // since we use half padding, i.e., lower part is all zero
 		for _, elt := range cont.in_wids {
 			cont.ext_idx[elt] = make([][]int, iter)
-			for i := 0; i < iter; i++ {
-				cont.ext_idx[elt][i] = gen_keep_vec(cont.logN, elt, elt/2, i)
+			for ul := 0; ul < iter; ul++ {
+				cont.ext_idx[elt][ul] = gen_keep_vec(cont.N/2, elt, elt/2, ul)
 			}
 			cont.r_idx[elt] = make([]map[int][]int, 4)
 			for pos := 0; pos < 4; pos++ {
@@ -88,7 +112,7 @@ func newContext(logN, ECD_LV int, in_wids []int, padding bool, kind string) *con
 			cont.r_idx[elt] = make([]map[int][]int, 4)
 			cont.m_idx[elt] = make([]map[int][]int, 4)
 			for pos := 0; pos < 4; pos++ {
-				cont.r_idx[elt][pos], cont.m_idx[elt][pos] = gen_extend_full_nhf(cont.N/2, elt, pos, padding, half)
+				cont.r_idx[elt][pos], cont.m_idx[elt][pos] = gen_extend_full_nhf(cont.N/2, elt, pos, half, half)
 				for k := range cont.r_idx[elt][pos] {
 					rotations = append(rotations, k)
 				}
@@ -97,7 +121,6 @@ func newContext(logN, ECD_LV int, in_wids []int, padding bool, kind string) *con
 				}
 			}
 		}
-		// fmt.Println("Rotations: ", rotations)
 	default:
 		panic("Wrong kinds!")
 	}
@@ -112,22 +135,19 @@ func newContext(logN, ECD_LV int, in_wids []int, padding bool, kind string) *con
 	cont.encryptor = ckks.NewEncryptor(cont.params, sk)
 	cont.evaluator = ckks.NewEvaluator(cont.params, rlwe.EvaluationKey{Rlk: rlk, Rtks: rotkeys})
 
-	switch kind {
-	case "Resnet":
-		cont.pl_idx, cont.pack_evaluator = gen_idxNlogs(cont.ECD_LV, kgen, sk, cont.encoder, cont.params)
-	case "DCGAN":
-		cont.pl_idx, cont.pack_evaluator = gen_idxNlogs(cont.ECD_LV, kgen, sk, cont.encoder, cont.params)
-	}
+	cont.pl_idx, cont.pack_evaluator = gen_idxNlogs(cont.ECD_LV, kgen, sk, cont.encoder, cont.params)
 
-	fmt.Println("Generating bootstrapping keys...")
-	start = time.Now()
-	rotations = btpParams.RotationsForBootstrapping(cont.params.LogSlots())
-	rotkeys = kgen.GenRotationKeysForRotations(rotations, true, sk)
-	btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
-	if cont.btp, err = ckks.NewBootstrapper_mod(cont.params, btpParams, btpKey); err != nil {
-		panic(err)
+	if boot {
+		fmt.Println("Generating bootstrapping keys...")
+		start = time.Now()
+		rotations = btpParams.RotationsForBootstrapping(cont.params.LogSlots())
+		rotkeys = kgen.GenRotationKeysForRotations(rotations, true, sk)
+		btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
+		if cont.btp, err = ckks.NewBootstrapper_mod(cont.params, btpParams, btpKey); err != nil {
+			panic(err)
+		}
+		fmt.Printf("Done in %s \n", time.Since(start))
 	}
-	fmt.Printf("Done in %s \n", time.Since(start))
 
 	return &cont
 }
@@ -143,9 +163,9 @@ func main() {
 	// testConv_noBoot_BL(6, 4, 3, false)
 
 	// testBRrot()
-	// testConv_noBoot(5, 4, 3, true, true)
+	// testConv_noBoot(true, true)
 	// testConv_noBoot(7, 8, 5, true, true)
-	testConv_BNRelu()
+	testConv_BNRelu(false, false, true)
 	// testReduceMean()
 	// testResNet()
 	// testDCGAN()
@@ -316,9 +336,10 @@ func prt_mat_BL(vec []complex128, batch, show int) {
 // print (i,j)-th position in [batches], only shows (show, show) entries show = 0 : print all
 func prt_mat(vec []float64, batch, show int) {
 	mat_size := len(vec) / batch
+	row := int(math.Sqrt(float64(mat_size)))
 	j, k := 1, 1
 	for i := 0; i < len(vec); i += batch {
-		if (show == 0) || (((j == 1) || (j == show)) && ((k <= 3) || (k >= show-3))) {
+		if (show == 0) || (((j <= show) || (j > row-show)) && ((k <= show) || (k > (row - show)))) {
 			fmt.Printf("(%d, %d): ", j, k)
 			prt_vec(vec[i : i+batch])
 		}
@@ -388,4 +409,41 @@ func writeTxt(name_file string, input []float64) {
 
 	datawriter.Flush()
 	file.Close()
+}
+
+func prep_Input(input []float64, raw_in_wid, in_wid, N int, trans, printResult bool) (out []float64) {
+	out = make([]float64, N)
+	batch := N / (in_wid * in_wid)
+	k := 0
+
+	if trans {
+		for i := 0; i < in_wid/2; i++ {
+			for j := 0; j < in_wid/2; j++ {
+				for b := 0; b < batch; b++ {
+					if (i < raw_in_wid) && (j < raw_in_wid) {
+						out[(2*i+1)*in_wid*batch+(2*j+1)*batch+b] = input[k]
+						k++
+					}
+				}
+			}
+		}
+	} else {
+		for i := 0; i < in_wid; i++ {
+			for j := 0; j < in_wid; j++ {
+				for b := 0; b < batch; b++ {
+					if (i < raw_in_wid) && (j < raw_in_wid) {
+						out[i*in_wid*batch+j*batch+b] = input[k]
+						k++
+					}
+				}
+			}
+		}
+	}
+
+	if printResult {
+		fmt.Println("Input matrix: ")
+		prt_mat(out, batch, 3)
+	}
+
+	return out
 }

@@ -8,18 +8,44 @@ import (
 	"github.com/ldsec/lattigo/v2/ckks"
 )
 
-// Eval Conv, BN, relu with Boot
-// in_wid must be Po2, BN is fold with Kernel
-// stride = true: apply [1,2,2,1] stride; false: [1,1,1,1]
-// pack_pos: position to pack (0,1,2,3): only for strided case
-// real_ib, real_ob: real number of batches (less or equal than max_batch)
-func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, ker_wid, real_ib, real_ob, pack_pos int, padding, stride, printResult bool) (ct_res *ckks.Ciphertext) {
-	trans := false
-	in_size := in_wid * in_wid
-	max_batch := cont.N / in_size
-	kp_wid := in_wid - ((ker_wid - 1) / 2)
+func set_Variables(batch, raw_in_wid, in_wid, ker_wid int, trans bool) (kp_wid, out_batch, logN int, kind string) {
+	N := batch * in_wid * in_wid
+	logN = 0
+	for ; (1 << logN) < N; logN++ {
+	}
+	max_kp_wid := in_wid - ((ker_wid - 1) / 2) // max possible size of raw_in_wid
+	if trans {
+		kp_wid = 2 * raw_in_wid
+		out_batch = batch / 4
+		kind = "TransConv"
+		if kp_wid > max_kp_wid {
+			fmt.Println("max raw_in_wid: ", max_kp_wid/2)
+			panic("too large raw_in_wid.")
+		}
+	} else {
+		kp_wid = raw_in_wid
+		out_batch = batch
+		kind = "Conv"
+		if kp_wid > max_kp_wid {
+			fmt.Println("max raw_in_wid: ", max_kp_wid)
+			panic("too large raw_in_wid.")
+		}
+	}
 
+	return
+}
+
+// Eval Conv only, always assume max batch
+// in_wid must be Po2 (also include padding),
+// include kernel preparation
+func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob int, printResult, trans bool) (ct_res *ckks.Ciphertext) {
+	max_batch := cont.N / (in_wid * in_wid)
+
+	fmt.Println()
+	fmt.Println("===============  (KER) PREPARATION  ===============")
+	fmt.Println()
 	start = time.Now()
+	pl_ker := prep_Ker(cont.params, cont.encoder, ker_in, bn_a, in_wid, ker_wid, real_ib, real_ob, cont.ECD_LV, 0, trans)
 	b_coeffs := make([]float64, cont.N)
 	for i := range bn_b {
 		for j := 0; j < in_wid; j++ {
@@ -28,36 +54,36 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 			}
 		}
 	}
-	pl_ker := prepKer_in(cont.params, cont.encoder, ker_in, bn_a, in_wid, ker_wid, real_ib, real_ob, cont.ECD_LV, 0, trans)
+	scale_exp := cont.params.Scale() * cont.params.Scale() * float64(max_batch)
+	pl_bn_b := ckks.NewPlaintext(cont.params, cont.ECD_LV, scale_exp) // contain plaintext values
+	cont.encoder.EncodeCoeffs(b_coeffs, pl_bn_b)
+	cont.encoder.ToNTT(pl_bn_b)
 	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
 
-	fmt.Println("Ker1_in (1st part): ")
-	prt_vec(ker_in)
-
 	fmt.Println()
-	fmt.Println("===============================================")
-	fmt.Println("     			   EVALUATION					")
-	fmt.Println("===============================================")
+	fmt.Println("===============  EVALUATION  ===============")
 	fmt.Println()
 
 	start = time.Now()
-	ct_conv := conv_then_pack(cont.params, cont.pack_evaluator, ct_input, pl_ker, cont.pl_idx, max_batch)
-
-	// for Batch Normalization (BN)
-	pl_bn_b := ckks.NewPlaintext(cont.params, ct_conv.Level(), ct_conv.Scale) // contain plaintext values
-	cont.encoder.EncodeCoeffs(b_coeffs, pl_bn_b)
-	cont.encoder.ToNTT(pl_bn_b)
-	cont.evaluator.Add(ct_conv, pl_bn_b, ct_conv)
+	ct_res = conv_then_pack(cont.params, cont.pack_evaluator, ct_input, pl_ker, cont.pl_idx, max_batch, cont.ECD_LV, scale_exp)
+	cont.evaluator.Add(ct_res, pl_bn_b, ct_res) // for Batch Normalization (BN)
 	fmt.Printf("Conv (with BN) Done in %s \n", time.Since(start))
 
-	pl_conv := ckks.NewPlaintext(cont.params, ct_conv.Level(), cont.params.Scale())
-	cont.decryptor.Decrypt(ct_conv, pl_conv)
-	val_preB := cont.encoder.DecodeCoeffs(pl_conv)
+	return ct_res
+}
 
-	fmt.Println("Boot in: ")
-	fmt.Println("Precision of values vs. ciphertext")
-	in_cfs := printDebugCfs(cont.params, ct_conv, val_preB, cont.decryptor, cont.encoder)
+// Eval Conv, BN, relu with Boot
+// in_wid must be Po2, BN is fold with Kernel
+// stride = true: apply [1,2,2,1] stride; false: [1,1,1,1]
+// pack_pos: position to pack (0,1,2,3): only for strided case
+// real_ib, real_ob: real number of batches (less or equal than max_batch)
+func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, ker_wid, real_ib, real_ob, pack_pos int, padding, stride, printResult bool) (ct_res *ckks.Ciphertext) {
+	trans := false
+	kp_wid := in_wid - ((ker_wid - 1) / 2)
 
+	ct_conv := evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, printResult, trans)
+
+	val_preB := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
 	fmt.Println("Bootstrapping... Ours (until CtoS):")
 	start = time.Now()
 	ct_boots := make([]*ckks.Ciphertext, 2)
@@ -71,8 +97,8 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 	in_slots1 := make([]complex128, cont.params.Slots()) // first part of ceffs
 	in_slots2 := make([]complex128, cont.params.Slots()) // second part of ceffs
 	for i := range in_cfs1_preB {
-		in_cfs1_preB[i] = in_cfs[reverseBits(uint32(i), cont.params.LogSlots())] // first part of coeffs
-		in_cfs2_preB[i] = in_cfs[reverseBits(uint32(i), cont.params.LogSlots())+uint32(cont.params.Slots())]
+		in_cfs1_preB[i] = val_preB[reverseBits(uint32(i), cont.params.LogSlots())] // first part of coeffs
+		in_cfs2_preB[i] = val_preB[reverseBits(uint32(i), cont.params.LogSlots())+uint32(cont.params.Slots())]
 		in_slots1[i] = complex(in_cfs1_preB[i]/math.Pow(2, float64(pow)), 0)
 		in_slots2[i] = complex(in_cfs2_preB[i]/math.Pow(2, float64(pow)), 0)
 	}
@@ -134,66 +160,6 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 
 	fmt.Printf("Boot out: ")
 	printDebugCfs(cont.params, ct_res, in_cfs_pBoot, cont.decryptor, cont.encoder)
-
-	start = time.Now()
-	cont.decryptor.Decrypt(ct_res, pl_conv)
-	cfs_tmp := cont.encoder.DecodeCoeffs(pl_conv)
-	fmt.Printf("Decryption Done in %s \n", time.Since(start))
-
-	if printResult {
-		fmt.Println()
-		fmt.Println("=========================================")
-		fmt.Println("              DECRYPTION                 ")
-		fmt.Println("=========================================")
-		fmt.Println()
-
-		fmt.Print("Result: \n")
-		if stride {
-			prt_mat(cfs_tmp, max_batch*4, 3)
-		} else {
-			prt_mat(cfs_tmp, max_batch, 3)
-		}
-	}
-
-	return ct_res
-}
-
-// Eval Conv only, always assume max batch
-// in_wid must be Po2 (also include padding),
-func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob int, printResult, trans bool) (ct_res *ckks.Ciphertext) {
-	in_size := in_wid * in_wid
-	max_batch := cont.N / in_size
-
-	start = time.Now()
-	b_coeffs := make([]float64, cont.N)
-	for i := range bn_b {
-		for j := 0; j < in_wid; j++ {
-			for k := 0; k < in_wid; k++ {
-				b_coeffs[i+(j+k*in_wid)*max_batch] = bn_b[i]
-			}
-		}
-	}
-	pl_ker := prepKer_in(cont.params, cont.encoder, ker_in, bn_a, in_wid, ker_wid, real_ib, real_ob, cont.ECD_LV, 0, trans)
-	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
-
-	fmt.Println("Ker1_in (1st part): ")
-	prt_vec(ker_in)
-
-	fmt.Println()
-	fmt.Println("===============================================")
-	fmt.Println("     			   EVALUATION					")
-	fmt.Println("===============================================")
-	fmt.Println()
-
-	start = time.Now()
-	ct_conv := conv_then_pack(cont.params, cont.pack_evaluator, ct_input, pl_ker, cont.pl_idx, max_batch)
-
-	// for Batch Normalization (BN)
-	pl_bn_b := ckks.NewPlaintext(cont.params, ct_conv.Level(), ct_conv.Scale) // contain plaintext values
-	cont.encoder.EncodeCoeffs(b_coeffs, pl_bn_b)
-	cont.encoder.ToNTT(pl_bn_b)
-	ct_res = cont.evaluator.AddNew(ct_conv, pl_bn_b)
-	fmt.Printf("Conv (with BN) Done in %s \n", time.Since(start))
 
 	return ct_res
 }

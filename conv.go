@@ -556,7 +556,7 @@ func postConv_BL(param ckks.Parameters, encoder ckks.Encoder, evaluator ckks.Eva
 // in_wid : width of input (include padding)
 // BN_a: coefficient to be multiplied (for BN)
 // real_ib, real_ob: real batches for kernel <=> set the same as python
-func prepKer_in(params ckks.Parameters, encoder ckks.Encoder, ker_in, BN_a []float64, in_wid, ker_wid, real_ib, real_ob, ECD_LV, pos int, trans bool) (pl_ker []*ckks.Plaintext) {
+func prep_Ker(params ckks.Parameters, encoder ckks.Encoder, ker_in, BN_a []float64, in_wid, ker_wid, real_ib, real_ob, ECD_LV, pos int, trans bool) (pl_ker []*ckks.Plaintext) {
 	max_bat := params.N() / (in_wid * in_wid)
 	ker_size := ker_wid * ker_wid
 	ker_rs := reshape_ker(ker_in, ker_size, real_ob, trans) // ker1[i][j] = j-th kernel for i-th output
@@ -616,7 +616,7 @@ func conv_then_pack_trans(params ckks.Parameters, pack_evaluator ckks.Evaluator,
 
 // Eval Conv, then Pack
 // The ciphertexts must be packed into full (without vacant position)
-func conv_then_pack(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_in *ckks.Ciphertext, pl_ker []*ckks.Plaintext, plain_idx []*ckks.Plaintext, max_ob int) *ckks.Ciphertext {
+func conv_then_pack(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_in *ckks.Ciphertext, pl_ker []*ckks.Plaintext, plain_idx []*ckks.Plaintext, max_ob, ECD_LV int, scale_exp float64) *ckks.Ciphertext {
 	start := time.Now()
 	ctxt_out := make([]*ckks.Ciphertext, max_ob)
 	for i := 0; i < max_ob; i++ {
@@ -627,6 +627,10 @@ func conv_then_pack(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_
 	fmt.Println("Result Scale: ", math.Log2(ctxt_result.Scale))
 	fmt.Println("Result LV: ", ctxt_result.Level())
 	fmt.Printf("Done in %s \n", time.Since(start))
+
+	if (scale_exp != ctxt_result.Scale) || (ECD_LV != ctxt_result.Level()) {
+		panic("LV or scale after conv then pack, inconsistent")
+	}
 
 	return ctxt_result
 }
