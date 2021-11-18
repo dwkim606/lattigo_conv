@@ -127,10 +127,6 @@ func reshape_ker_BL(input, BN_a []float64, ker_wid, inB, outB, max_bat int) (max
 	return max_ker_rs
 }
 
-func prepKer_BL() {
-
-}
-
 // Reshape 1-D ker_in (from python) into batch number of ker_outs: ker_out[i][j] = j-th kernel (elements then batch order) for i-th output
 // i.e., ker_out is of the shape (out_batch, (in_batch * ker_size))
 // ker_out[i] = [k1 for 1st input, ..., ,kk for 1st input, k1 for 2nd input, ...]

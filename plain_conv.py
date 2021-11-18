@@ -94,8 +94,8 @@ def plain_resnet_bench():
     print("after 3rd block\n", conv, "\n")
 
 def conv_bnReLU_BL_bench(trans):
-    batch = 4
-    input_width = 6
+    batch = 8
+    input_width = 4
     vec_size = batch*input_width**2
     ker_width = 3
     bn_a = 1.0
@@ -104,7 +104,7 @@ def conv_bnReLU_BL_bench(trans):
 
     ## Correctness Check: Compare with TF NN CONV2D
     raw_input = [1.0*i/vec_size for i in range(vec_size)]
-    ker =  [1.0*i/(batch * out_batch * ker_size) for i in range(batch * out_batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker =  [1.0 - 1.0*i/(batch * out_batch * ker_size) for i in range(batch * out_batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
 
     print("input width:", input_width)
     print("batch:", batch)
@@ -124,11 +124,11 @@ def conv_bnReLU_BL_bench(trans):
     print("result: \n", conv, "\n")
 
 def trans_conv_bnReLU_BL_bench():
-    input_width = 3
+    input_width = 2
     batch = 4
     out_batch = batch//4
     vec_size = batch*input_width**2
-    ker_width = 5
+    ker_width = 7
     bn_a = 1.0
 
     ker_size = ker_width**2 
@@ -140,7 +140,7 @@ def trans_conv_bnReLU_BL_bench():
 
     ## Correctness Check: Compare with TF NN CONV2D
     raw_input = [1.0*i/vec_size for i in range(vec_size)]
-    ker =  [1.0*i /(batch*out_batch*ker_size) for i in range(batch * out_batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker =  [1.0 - 1.0*i /(batch*out_batch*ker_size) for i in range(batch * out_batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
 
     ten_x = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, input_width, input_width, batch])
     print("input: \n", ten_x)
@@ -218,7 +218,7 @@ def load_save_data(num_samples):
 # compare enc result (after post process: reduce_mean) with plain result
 def post_process(iter_num):
     ## First load plain result
-    num_samples = 100
+    num_samples = 1000
     pred = np.reshape(np.loadtxt('Resnet_plain_data/plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
     result_dir = 'Resnet_test_result_enc/'
     in_dir = 'weight_h5/'
@@ -287,10 +287,11 @@ def separate_data(num_outs):
 
 # load_save_data(100)
 
+# separate_data(300)
 # trans_conv_bnReLU_BL_bench()
-# conv_bnReLU_BL_bench(False)
+conv_bnReLU_BL_bench(False)
 # plain_resnet_bench()
-# post_process(100)
+# post_process(300)
 # num_samples = 100
 # pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
 

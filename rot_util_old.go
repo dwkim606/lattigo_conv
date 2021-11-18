@@ -414,7 +414,7 @@ func extend_full_int(input []int, in_wid, kp_wid, pos, ul int) []int {
 		tmp := make([]int, len(input))
 		for b := 0; b < min_batch; b++ {
 			for i := 0; i < min_wid; i++ {
-				fmt.Println(reverseBits(uint32(j), log_in_wid))
+				// fmt.Println(reverseBits(uint32(j), log_in_wid))
 				if (ul == 0) && (reverseBits(uint32(j), log_in_wid) < uint32(kp_wid)) || (ul == 1) && (reverseBits(uint32(j), log_in_wid) < uint32(kp_wid)) && (reverseBits(uint32(i), log_in_wid-1) < uint32(kp_wid-min_wid)) {
 					idx := 4*in_wid*min_wid*b + in_wid*min_wid*pos_ + min_wid*j + i
 					tmp[idx] = input[idx]

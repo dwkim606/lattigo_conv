@@ -42,7 +42,7 @@ type context struct {
 	btp            *ckks.Bootstrapper
 }
 
-func newContext(logN int, in_wids, kp_wids []int, boot bool, kind string) *context {
+func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind string) *context {
 	cont := context{N: (1 << logN), logN: logN, ECD_LV: 1}
 	cont.in_wids = make([]int, len(in_wids))
 	copy(cont.in_wids, in_wids)
@@ -69,6 +69,18 @@ func newContext(logN int, in_wids, kp_wids []int, boot bool, kind string) *conte
 	half := true // only for DCGAN
 
 	switch kind {
+	case "BL_Conv":
+		for _, elt := range cont.in_wids {
+			for k := -(ker_wid / 2); k <= ker_wid/2; k++ {
+				for k2 := -(ker_wid / 2); k2 <= ker_wid/2; k2++ {
+					rotations = append(rotations, k*elt+k2)
+				}
+			}
+			out_batch := (cont.N / 2) / (elt * elt)
+			for k := 1; k < out_batch; k++ {
+				rotations = append(rotations, k*elt*elt)
+			}
+		}
 	case "Conv": // we assume manual padding using kp_wid
 		if boot {
 			iter = 2 // we assume full padding, i.e., up and low is both nonzero
@@ -79,13 +91,26 @@ func newContext(logN int, in_wids, kp_wids []int, boot bool, kind string) *conte
 				}
 			}
 		}
+	case "StrConv":
+		if boot {
+			iter = 2 // we assume full padding, i.e., up and low is both nonzero
+			for i, elt := range cont.in_wids {
+				cont.r_idx[elt] = make([]map[int][]int, 4)
+				for ul := 0; ul < iter; ul++ {
+					cont.r_idx[elt][ul] = gen_comprs_full(cont.N/2, elt, cont.kp_wids[i], 0, ul)
+					for k := range cont.r_idx[elt][ul] {
+						rotations = append(rotations, k)
+					}
+				}
+			}
+		}
 	case "TransConv": // we assume manual padding using kp_wid
 		if boot {
 			iter = 2 // we assume full padding, i.e., up and low is both nonzero
 			for i, elt := range cont.in_wids {
 				cont.r_idx[elt] = make([]map[int][]int, 4)
 				for ul := 0; ul < iter; ul++ {
-					cont.r_idx[elt][ul] = gen_extend_full(cont.N/2, elt, kp_wids[i], 0, ul)
+					cont.r_idx[elt][ul] = gen_extend_full(cont.N/2, elt, cont.kp_wids[i], 0, ul)
 					for k := range cont.r_idx[elt][ul] {
 						rotations = append(rotations, k)
 					}
@@ -135,7 +160,9 @@ func newContext(logN int, in_wids, kp_wids []int, boot bool, kind string) *conte
 	cont.encryptor = ckks.NewEncryptor(cont.params, sk)
 	cont.evaluator = ckks.NewEvaluator(cont.params, rlwe.EvaluationKey{Rlk: rlk, Rtks: rotkeys})
 
-	cont.pl_idx, cont.pack_evaluator = gen_idxNlogs(cont.ECD_LV, kgen, sk, cont.encoder, cont.params)
+	if kind != "BL_Conv" {
+		cont.pl_idx, cont.pack_evaluator = gen_idxNlogs(cont.ECD_LV, kgen, sk, cont.encoder, cont.params)
+	}
 
 	if boot {
 		fmt.Println("Generating bootstrapping keys...")
@@ -160,12 +187,12 @@ func main() {
 	// testResNet_in(0)
 
 	// testConv_BNRelu_BL(15, 16, 3, true)
-	// testConv_noBoot_BL(6, 4, 3, false)
+	testConv_noBoot_BL("Conv", true)
 
 	// testBRrot()
 	// testConv_noBoot(true, true)
 	// testConv_noBoot(7, 8, 5, true, true)
-	testConv_BNRelu(false, false, true)
+	// testConv_BNRelu("StrConv", true)
 	// testReduceMean()
 	// testResNet()
 	// testDCGAN()

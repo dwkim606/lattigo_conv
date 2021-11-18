@@ -24,7 +24,7 @@ func print_vec(title string, input []float64, in_wid int, pos int) {
 	fmt.Println(title, ": ")
 	for j := 0; j < in_wid; j++ {
 		for i := range row {
-			row[i] = toFixed(input[(j*in_wid+i)*step+pos], 2)
+			row[i] = toFixed(input[(j*in_wid+i)*step+pos], 3)
 		}
 		fmt.Println(row)
 	}
@@ -188,7 +188,7 @@ func extend_full(input []float64, in_wid, kp_wid, pos, ul int) []float64 {
 		tmp := make([]float64, len(input))
 		for b := 0; b < min_batch; b++ {
 			for i := 0; i < min_wid; i++ {
-				fmt.Println(reverseBits(uint32(j), log_in_wid))
+				// fmt.Println(reverseBits(uint32(j), log_in_wid))
 				if (ul == 0) && (reverseBits(uint32(j), log_in_wid) < uint32(kp_wid)) || (ul == 1) && (reverseBits(uint32(j), log_in_wid) < uint32(kp_wid)) && (reverseBits(uint32(i), log_in_wid-1) < uint32(kp_wid-min_wid)) {
 					idx := 4*in_wid*min_wid*b + in_wid*min_wid*pos_ + min_wid*j + i
 					tmp[idx] = input[idx]
