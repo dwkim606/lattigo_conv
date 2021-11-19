@@ -50,6 +50,9 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	copy(cont.kp_wids, kp_wids)
 
 	btpParams := ckks.DefaultBootstrapParams[6]
+	if kind == "BL_Conv" {
+		btpParams = ckks.DefaultBootstrapParams[7]
+	}
 	cont.params, err = btpParams.Params()
 	if err != nil {
 		panic(err)
@@ -170,8 +173,15 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 		rotations = btpParams.RotationsForBootstrapping(cont.params.LogSlots())
 		rotkeys = kgen.GenRotationKeysForRotations(rotations, true, sk)
 		btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
-		if cont.btp, err = ckks.NewBootstrapper_mod(cont.params, btpParams, btpKey); err != nil {
-			panic(err)
+
+		if kind == "BL_Conv" {
+			if cont.btp, err = ckks.NewBootstrapper(cont.params, btpParams, btpKey); err != nil {
+				panic(err)
+			}
+		} else {
+			if cont.btp, err = ckks.NewBootstrapper_mod(cont.params, btpParams, btpKey); err != nil {
+				panic(err)
+			}
 		}
 		fmt.Printf("Done in %s \n", time.Since(start))
 	}
@@ -186,13 +196,13 @@ func main() {
 	// iter, _ := strconv.Atoi(os.Args[1])
 	// testResNet_in(0)
 
-	// testConv_BNRelu_BL(15, 16, 3, true)
-	testConv_noBoot_BL("Conv", true)
+	// testConv_BNRelu_BL("Conv", true)
+	// testConv_noBoot_BL("Conv", true)
 
 	// testBRrot()
 	// testConv_noBoot(true, true)
 	// testConv_noBoot(7, 8, 5, true, true)
-	// testConv_BNRelu("StrConv", true)
+	testConv_BNRelu("Conv", true)
 	// testReduceMean()
 	// testResNet()
 	// testDCGAN()

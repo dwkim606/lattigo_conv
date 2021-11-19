@@ -449,50 +449,17 @@ func testConv_noBoot_BL(in_kind string, printResult bool) {
 	if printResult {
 		prt_mat_BL(input_rs, in_batch, 0)
 	}
-	real_input_rs := make([]float64, len(input_rs))
-	for i, elt := range input_rs {
-		real_input_rs[i] = real(elt)
-	}
-	prt_vec(real_input_rs)
 	start = time.Now()
-	plain_tmp := ckks.NewPlaintext(cont.params, cont.ECD_LV, cont.params.Scale()) // contain plaintext values
-	cont.encoder.Encode(plain_tmp, input_rs, log_slots)
-	ctxt_input := cont.encryptor.EncryptNew(plain_tmp)
+	ct_input := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input_rs, log_slots))
 	fmt.Printf("Encryption done in %s \n", time.Since(start))
 
-	fmt.Println()
-	fmt.Println("===============  EVALUATION  ===============")
-	fmt.Println()
-
-	start = time.Now()
-	max_ker_rs := reshape_ker_BL(ker_in, bn_a, ker_wid, in_batch, in_batch, in_batch)
-	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
-
-	start = time.Now()
-	ct_inputs_rots := preConv_BL(cont.evaluator, ctxt_input, raw_in_wid, ker_wid)
-	fmt.Printf("preConv done in %s \n", time.Since(start))
-
-	var ct_result *ckks.Ciphertext
-	for i := 0; i < in_batch; i++ {
-		ct_tmp := postConv_BL(cont.params, cont.encoder, cont.evaluator, ct_inputs_rots, raw_in_wid, ker_wid, i, max_ker_rs)
-		if i == 0 {
-			ct_result = ct_tmp
-		} else {
-			cont.evaluator.Add(ct_result, cont.evaluator.RotateNew(ct_tmp, i*in_size), ct_result)
-		}
-	}
-	fmt.Printf("Eval Done in %s \n", time.Since(start))
+	ct_result := evalConv_BN_BL(cont, ct_input, ker_in, bn_a, bn_b, raw_in_wid, ker_wid, in_batch, out_batch, printResult)
 
 	fmt.Println()
 	fmt.Println("===============  DECRYPTION  ===============")
 	fmt.Println()
 	start = time.Now()
-	cont.decryptor.Decrypt(ct_result, plain_tmp)
-	vals_tmp := cont.encoder.Decode(plain_tmp, log_slots)
-	real_vals_tmp := make([]float64, len(vals_tmp))
-	for i, elt := range vals_tmp {
-		real_vals_tmp[i] = real(elt)
-	}
+	vals_tmp := cont.encoder.Decode(cont.decryptor.DecryptNew(ct_result), log_slots)
 	fmt.Printf("Decryption Done in %s \n", time.Since(start))
 
 	if printResult {
@@ -504,119 +471,56 @@ func testConv_noBoot_BL(in_kind string, printResult bool) {
 // BaseLine Conv without boot, Assume full batch with Po2 in_wid & N
 // Normal Conv without output modification (e.g., trimming or expanding)
 // Input does not need padding
-func testConv_BNRelu_BL(log_slots, in_wid, ker_wid int, printResult bool) {
-	slots := (1 << log_slots)
-	in_size := in_wid * in_wid
-	batch := slots / in_size
-	ker_size := ker_wid * ker_wid
-	ECD_LV := 1
+func testConv_BNRelu_BL(in_kind string, printResult bool) {
+	in_batch := 8
+	raw_in_wid := 4 // = in_wid
+	ker_wid := 3
 	alpha := 0.0
 
-	var btp *ckks.Bootstrapper
-	btpParams := ckks.DefaultBootstrapParams[7]
-	params, err := btpParams.Params()
-	if err != nil {
-		panic(err)
+	in_size := raw_in_wid * raw_in_wid
+	slots := in_batch * in_size
+	log_slots := 0
+	for ; (1 << log_slots) < slots; log_slots++ {
 	}
-	fmt.Printf("CKKS parameters: logN = %d, logSlots = %d, h = %d, logQP = %d, levels = %d, scale= 2^%f, sigma = %f \n",
-		params.LogN(), params.LogSlots(), btpParams.H, params.LogQP(), params.QCount(), math.Log2(params.Scale()), params.Sigma())
+	out_batch := in_batch
+	kp_wid := 0
+	kind := "BL_" + in_kind
 
-	var rotations []int
-	for k := -(ker_wid / 2); k <= ker_wid/2; k++ {
-		for k2 := -(ker_wid / 2); k2 <= ker_wid/2; k2++ {
-			rotations = append(rotations, k*in_wid+k2)
-		}
-	}
-	for k := 1; k <= batch; k++ {
-		rotations = append(rotations, k*in_size)
-	}
-	// fmt.Println("Rotations: ", rotations)
-
-	start := time.Now()
-	kgen := ckks.NewKeyGenerator(params)
-	sk, _ := kgen.GenKeyPairSparse(btpParams.H)
-	rlk := kgen.GenRelinearizationKey(sk, 2)
-	rotkeys := kgen.GenRotationKeysForRotations(rotations, false, sk)
-	encryptor := ckks.NewEncryptor(params, sk)
-	decryptor := ckks.NewDecryptor(params, sk)
-	encoder := ckks.NewEncoder(params)
-	evaluator := ckks.NewEvaluator(params, rlwe.EvaluationKey{Rlk: rlk, Rtks: rotkeys})
-
-	fmt.Println("Generating bootstrapping keys...")
-	start = time.Now()
-	rotations = btpParams.RotationsForBootstrapping(params.LogSlots())
-	rotkeys = kgen.GenRotationKeysForRotations(rotations, true, sk)
-	btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
-	if btp, err = ckks.NewBootstrapper(params, btpParams, btpKey); err != nil {
-		panic(err)
-	}
-	fmt.Printf("Done in %s \n", time.Since(start))
-
-	input := make([]float64, slots)
+	input := make([]float64, raw_in_wid*raw_in_wid*in_batch)
+	ker_in := make([]float64, in_batch*out_batch*ker_wid*ker_wid)
+	bn_a := make([]float64, out_batch)
+	bn_b := make([]float64, out_batch)
 	for i := range input {
 		input[i] = 1.0 * float64(i) / float64(len(input))
 	}
-	input_rs := reshape_input_BL(input, in_wid)
-	if printResult {
-		prt_mat_BL(input_rs, batch, 0)
-	}
-
-	ker_in := make([]float64, batch*batch*ker_size)
 	for i := range ker_in {
-		ker_in[i] = 1.0 * float64(i) / float64(len(ker_in)) //0.1 * float64(i) / float64(batch*batch*ker_size)
+		ker_in[i] = 1.0 - 1.0*float64(i)/float64(len(ker_in))
 	}
-	bn_a := make([]float64, batch)
 	for i := range bn_a {
-		bn_a[i] = 0.001
+		bn_a[i] = 1.0
+		bn_b[i] = 0.0
 	}
-	start = time.Now()
-	max_ker_rs := reshape_ker_BL(ker_in, bn_a, ker_wid, batch, batch, batch)
-	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
 
-	fmt.Println("vec size: ", slots)
-	fmt.Println("input width: ", in_wid)
+	// generate Context: params, Keys, rotations, general plaintexts
+	cont := newContext(log_slots+1, ker_wid, []int{raw_in_wid}, []int{kp_wid}, true, kind)
+	fmt.Println("vec size: log2 = ", cont.logN)
+	fmt.Println("raw input width: ", raw_in_wid)
 	fmt.Println("kernel width: ", ker_wid)
-	fmt.Println("num batches: ", batch)
-	fmt.Println("Input matrix: ")
-	real_input_rs := make([]float64, len(input_rs))
-	for i, elt := range input_rs {
-		real_input_rs[i] = real(elt)
-	}
-	prt_vec(real_input_rs)
-	fmt.Println("Ker1_in (1st to 1st part): ")
-	for i := 0; i < ker_wid; i++ {
-		for j := 0; j < ker_wid; j++ {
-			fmt.Print(max_ker_rs[i][j][0][0], ", ")
-		}
-	}
-	fmt.Print("\n\n")
+	fmt.Println("num batches in & out: ", in_batch, ", ", out_batch)
 
+	// input encryption
+	fmt.Println()
+	fmt.Println("===============  ENCRYPTION  ===============")
+	fmt.Println()
+	input_rs := reshape_input_BL(input, raw_in_wid)
+	if printResult {
+		prt_mat_BL(input_rs, in_batch, 0)
+	}
 	start = time.Now()
-	plain_tmp := ckks.NewPlaintext(params, ECD_LV, params.Scale()) // contain plaintext values
-	encoder.Encode(plain_tmp, input_rs, log_slots)
-	ct_input := encryptor.EncryptNew(plain_tmp)
+	ct_input := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input_rs, log_slots))
 	fmt.Printf("Encryption done in %s \n", time.Since(start))
 
-	fmt.Println()
-	fmt.Println("===============================================")
-	fmt.Println("     			   EVALUATION					")
-	fmt.Println("===============================================")
-	fmt.Println()
-
-	start = time.Now()
-	ct_inputs_rots := preConv_BL(evaluator, ct_input, in_wid, ker_wid)
-	fmt.Printf("preConv done in %s \n", time.Since(start))
-
-	var ct_conv *ckks.Ciphertext
-	for i := 0; i < batch; i++ {
-		ct_tmp := postConv_BL(params, encoder, evaluator, ct_inputs_rots, in_wid, ker_wid, i, max_ker_rs)
-		if i == 0 {
-			ct_conv = ct_tmp
-		} else {
-			evaluator.Add(ct_conv, evaluator.RotateNew(ct_tmp, i*in_size), ct_conv)
-		}
-	}
-	fmt.Printf("Eval (Conv) Done in %s \n", time.Since(start))
+	ct_result := evalConv_BNRelu_BL(cont, ct_input, ker_in, bn_a, bn_b, alpha, raw_in_wid, ker_wid, in_batch, out_batch, printResult)
 
 	fmt.Println()
 	fmt.Println("=========================================")
@@ -625,62 +529,12 @@ func testConv_BNRelu_BL(log_slots, in_wid, ker_wid int, printResult bool) {
 	fmt.Println()
 
 	start = time.Now()
-	decryptor.Decrypt(ct_conv, plain_tmp)
-	vals_tmp := encoder.Decode(plain_tmp, log_slots)
-	real_vals_tmp := make([]float64, len(vals_tmp))
-	for i, elt := range vals_tmp {
-		real_vals_tmp[i] = real(elt)
-	}
-	fmt.Printf("Decryption (Conv) Done in %s \n", time.Since(start))
-
-	if printResult {
-		fmt.Print("Result: \n")
-		prt_mat_BL(vals_tmp, batch, 0)
-	}
-
-	fmt.Println("Boot in: ")
-	fmt.Println("inputs: ")
-	in_vals := printDebug(params, ct_conv, vals_tmp, decryptor, encoder)
-
-	fmt.Println("Bootstrapping... (original):")
-	start_boot := time.Now()
-	ct_boot := btp.Bootstrapp(ct_conv)
-	fmt.Printf("Done in %s \n", time.Since(start_boot))
-	fmt.Println("after Boot: LV = ", ct_boot.Level(), " Scale = ", math.Log2(ct_boot.Scale))
-	fmt.Println()
-	fmt.Println("Precision of ciphertext vs. Bootstrapp(ciphertext)")
-	in_relu := printDebug(params, ct_boot, in_vals, decryptor, encoder)
-	for i, elt := range in_relu {
-		in_relu[i] = complex(math.Max(0, real(elt)), 0)
-	}
-
-	start = time.Now()
-	in_relu = printDebug(params, ct_boot, in_relu, decryptor, encoder)
-	evaluator.Rescale(ct_boot, params.Scale(), ct_boot)
-	evaluator.ScaleUp(ct_boot, params.Scale()/ct_boot.Scale, ct_boot)
-	fmt.Println("after Rescale: LV = ", ct_boot.Level(), " Scale = 2^", math.Log2(ct_boot.Scale))
-	in_relu = printDebug(params, ct_boot, in_relu, decryptor, encoder)
-
-	ct_relu := evalReLU(params, evaluator, ct_boot, alpha)
-	evaluator.SetScale(ct_relu, params.Scale())
-	fmt.Printf("Relu Done in %s \n", time.Since(start))
-	fmt.Println("Precision of relu")
-	printDebug(params, ct_relu, in_relu, decryptor, encoder)
-
-	fmt.Println()
-	fmt.Println("=========================================")
-	fmt.Println("              DECRYPTION                 ")
-	fmt.Println("=========================================")
-	fmt.Println()
-
-	start = time.Now()
-	decryptor.Decrypt(ct_relu, plain_tmp)
-	vals_tmp = encoder.Decode(plain_tmp, log_slots)
+	vals_res := cont.encoder.Decode(cont.decryptor.DecryptNew(ct_result), cont.logN-1)
 	fmt.Printf("Decryption (Relu) Done in %s \n", time.Since(start))
-	fmt.Println("after relu: LV = ", ct_relu.Level(), " Scale = 2^", math.Log2(ct_relu.Scale))
+	fmt.Println("after relu: LV = ", ct_result.Level(), " Scale = 2^", math.Log2(ct_result.Scale))
 	if printResult {
 		fmt.Print("Result: \n")
-		prt_mat_BL(vals_tmp, batch, 0)
+		prt_mat_BL(vals_res, out_batch, 0)
 	}
 }
 

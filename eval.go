@@ -43,6 +43,98 @@ func set_Variables(batch, raw_in_wid, in_wid, ker_wid int, kind string) (kp_wid,
 // Eval Conv only, always assume max batch
 // in_wid must be Po2 (also include padding),
 // include kernel preparation
+func evalConv_BN_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob int, printResult bool) (ct_res *ckks.Ciphertext) {
+	in_size := in_wid * in_wid
+	out_size := in_size // should be *4 for transposed case
+	max_batch := cont.N / (2 * in_size)
+
+	fmt.Println()
+	fmt.Println("===============  (KER) PREPARATION  ===============")
+	fmt.Println()
+	start = time.Now()
+	max_ker_rs := reshape_ker_BL(ker_in, bn_a, ker_wid, real_ib, real_ob, max_batch)
+	scale_exp := cont.params.Scale() * cont.params.Scale()
+	bn_b_slots := make([]complex128, cont.N/2)
+	for i, elt := range bn_b {
+		for j := 0; j < out_size; j++ {
+			bn_b_slots[j+out_size*i] = complex(elt, 0)
+		}
+	}
+	pl_bn_b := ckks.NewPlaintext(cont.params, cont.ECD_LV, scale_exp)
+	cont.encoder.EncodeNTT(pl_bn_b, bn_b_slots, cont.logN-1)
+	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
+
+	fmt.Println()
+	fmt.Println("===============  EVALUATION  ===============")
+	fmt.Println()
+	start = time.Now()
+	ct_inputs_rots := preConv_BL(cont.evaluator, ct_input, in_wid, ker_wid)
+	fmt.Printf("preConv done in %s \n", time.Since(start))
+
+	for i := 0; i < real_ib; i++ {
+		ct_tmp := postConv_BL(cont.params, cont.encoder, cont.evaluator, ct_inputs_rots, in_wid, ker_wid, i, max_ker_rs)
+		if i == 0 {
+			ct_res = ct_tmp
+		} else {
+			cont.evaluator.Add(ct_res, cont.evaluator.RotateNew(ct_tmp, i*in_size), ct_res)
+		}
+	}
+	if ct_res.Scale != scale_exp {
+		panic("Different scale between pl_bn_b and ctxt")
+	}
+	cont.evaluator.Add(ct_res, pl_bn_b, ct_res)
+	fmt.Printf("Conv (with BN) Done in %s \n", time.Since(start))
+
+	return ct_res
+}
+
+// Eval Conv only, always assume max batch
+// in_wid must be Po2 (also include padding),
+// include kernel preparation
+func evalConv_BNRelu_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, ker_wid, real_ib, real_ob int, printResult bool) (ct_res *ckks.Ciphertext) {
+	ct_conv := evalConv_BN_BL(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, printResult)
+	ct_conv.Scale = ct_conv.Scale * math.Pow(2, pow)
+	vals_preB := cont.encoder.Decode(cont.decryptor.DecryptNew(ct_conv), cont.logN-1)
+	fmt.Println("Bootstrapping... (original):")
+	start_boot := time.Now()
+	// cont.evaluator.SetScale(ct_conv, ct_conv.Scale*8)
+	// cont.evaluator.SetScale(ct_conv, ct_conv.Scale*math.Pow(2, pow))
+	fmt.Println("after scale: LV = ", ct_conv.Level(), " Scale = ", math.Log2(ct_conv.Scale))
+
+	ct_boot := cont.btp.Bootstrapp(ct_conv)
+	fmt.Printf("Done in %s \n", time.Since(start_boot))
+	fmt.Println("after Boot: LV = ", ct_boot.Level(), " Scale = ", math.Log2(ct_boot.Scale))
+
+	// Only for checking the correctness (for Boot)
+	vals_postB := printDebug(cont.params, ct_boot, vals_preB, cont.decryptor, cont.encoder)
+	vals_relu := make([]complex128, len(vals_postB))
+	for i, elt := range vals_postB {
+		vals_relu[i] = complex((math.Max(0, real(elt))+math.Min(0, real(elt)*alpha))*math.Pow(2, pow), 0)
+	}
+
+	start = time.Now()
+	pl_scale := ckks.NewPlaintext(cont.params, ct_boot.Level(), math.Pow(2, 30)*float64(cont.params.Q()[14])*float64(cont.params.Q()[13])/ct_boot.Scale)
+	val_scale := make([]complex128, cont.N/2)
+	for i := range val_scale {
+		val_scale[i] = complex(1.0, 0) // val_scale[i] = complex(1.0/math.Pow(2, pow), 0)
+	}
+	cont.encoder.EncodeNTT(pl_scale, val_scale, cont.logN-1)
+	cont.evaluator.Mul(ct_boot, pl_scale, ct_boot)
+	cont.evaluator.Rescale(ct_boot, cont.params.Scale(), ct_boot)
+
+	fmt.Println("after Rescale: LV = ", ct_boot.Level(), " Scale = 2^", math.Log2(ct_boot.Scale))
+	ct_res = evalReLU(cont.params, cont.evaluator, ct_boot, alpha)
+	cont.evaluator.MulByPow2(ct_res, pow, ct_res)
+	cont.evaluator.SetScale(ct_res, cont.params.Scale())
+	fmt.Printf("Relu Done in %s \n", time.Since(start))
+	printDebug(cont.params, ct_res, vals_relu, cont.decryptor, cont.encoder)
+
+	return ct_res
+}
+
+// Eval Conv only, always assume max batch
+// in_wid must be Po2 (also include padding),
+// include kernel preparation
 func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob int, printResult, trans bool) (ct_res *ckks.Ciphertext) {
 	max_batch := cont.N / (in_wid * in_wid)
 
@@ -86,8 +178,8 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 	trans := false
 	kp_wid := in_wid - ((ker_wid - 1) / 2)
 	ct_conv := evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, printResult, trans)
-
-	val_preB := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
+	ct_conv.Scale = ct_conv.Scale * math.Pow(2, pow)
+	cfs_preB := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
 	fmt.Println("Bootstrapping... Ours (until CtoS):")
 	start = time.Now()
 	ct_boots := make([]*ckks.Ciphertext, 2)
@@ -95,26 +187,10 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 	fmt.Printf("Done in %s \n", time.Since(start))
 	fmt.Println("after Boot (CtoS): LV = ", ct_boots[0].Level(), " Scale = ", math.Log2(ct_boots[0].Scale))
 
-	// Only for checking the correctness
-	in_cfs1_preB := make([]float64, cont.params.Slots())
-	in_cfs2_preB := make([]float64, cont.params.Slots())
-	in_slots1 := make([]complex128, cont.params.Slots()) // first part of ceffs
-	in_slots2 := make([]complex128, cont.params.Slots()) // second part of ceffs
-	for i := range in_cfs1_preB {
-		in_cfs1_preB[i] = val_preB[reverseBits(uint32(i), cont.params.LogSlots())] // first part of coeffs
-		in_cfs2_preB[i] = val_preB[reverseBits(uint32(i), cont.params.LogSlots())+uint32(cont.params.Slots())]
-		in_slots1[i] = complex(in_cfs1_preB[i]/math.Pow(2, float64(pow)), 0)
-		in_slots2[i] = complex(in_cfs2_preB[i]/math.Pow(2, float64(pow)), 0)
-	}
-	ext1_tmp := keep_vec(in_cfs1_preB, in_wid, kp_wid, 0)
-	ext2_tmp := keep_vec(in_cfs2_preB, in_wid, kp_wid, 1)
-	for i := range in_cfs1_preB {
-		in_cfs1_preB[i] = ext1_tmp[reverseBits(uint32(i), cont.params.LogSlots())]
-		in_cfs2_preB[i] = ext2_tmp[reverseBits(uint32(i), cont.params.LogSlots())]
-	}
-	in_cfs_pBoot := append(in_cfs1_preB, in_cfs2_preB...)                                     // After rot(ext) and boot
-	in_slots1 = printDebug(cont.params, ct_boots[0], in_slots1, cont.decryptor, cont.encoder) // Compare before & after CtoS
-	in_slots2 = printDebug(cont.params, ct_boots[1], in_slots2, cont.decryptor, cont.encoder) // Compare before & after CtoS
+	// Only for checking the correctness (for CtoS)
+	slot1, slot2 := debugCtoS(cont, cfs_preB)
+	slot1 = printDebug(cont.params, ct_boots[0], slot1, cont.decryptor, cont.encoder) // Compare before & after CtoS
+	slot2 = printDebug(cont.params, ct_boots[1], slot2, cont.decryptor, cont.encoder) // Compare before & after CtoS
 
 	var iter int
 	if padding {
@@ -129,27 +205,26 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 	}
 	fmt.Printf("ReLU Done in %s \n", time.Since(start))
 
-	values_ReLU := make([]complex128, len(in_slots1))
-	for i := range values_ReLU {
-		values_ReLU[i] = complex(math.Max(0, real(in_slots1[i])*math.Pow(2, float64(pow))), 0)
+	// Only for checking the correctness (for ReLU)
+	relu1, relu2 := debugReLU(cont, slot1, slot2, alpha)
+	relu1 = printDebug(cont.params, ct_boots[0], relu1, cont.decryptor, cont.encoder)
+	relu2 = printDebug(cont.params, ct_boots[1], relu2, cont.decryptor, cont.encoder)
+	var kind string
+	if stride {
+		kind = "StrConv"
+	} else {
+		kind = "Conv"
 	}
-	printDebug(cont.params, ct_boots[0], values_ReLU, cont.decryptor, cont.encoder)
-	for i := range values_ReLU {
-		values_ReLU[i] = complex(math.Max(0, real(in_slots2[i])*math.Pow(2, float64(pow))), 0)
-	}
-	printDebug(cont.params, ct_boots[1], values_ReLU, cont.decryptor, cont.encoder)
+	cfs_postB := debugStoC(cont, relu1, relu2, in_wid, kp_wid, kind)
 
-	ct_keep := make([]*ckks.Ciphertext, iter) // for extend (rotation) of ctxt_in
-
+	// needs to be modified for pack_pos consideration!!
 	start = time.Now()
+	ct_keep := make([]*ckks.Ciphertext, iter) // for extend (rotation) of ctxt_in
 	for ul := 0; ul < iter; ul++ {
 		if stride {
 			ct_keep[ul] = ext_ctxt(cont.evaluator, cont.encoder, ct_boots[ul], cont.r_idx[in_wid][pack_pos], cont.params)
 		} else {
 			ct_keep[ul] = keep_ctxt(cont.params, cont.evaluator, cont.encoder, ct_boots[ul], cont.ext_idx[in_wid][ul])
-			// dec_tmp := cont.decryptor.DecryptNew(ct_keep[ul])
-			// cf_ttmp := cont.encoder.Decode(dec_tmp, cont.params.LogSlots())
-			// fmt.Println("itermediate: ", cf_ttmp)
 		}
 	}
 	if padding {
@@ -161,9 +236,8 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 	cont.evaluator.Rescale(ct_res, cont.params.Scale(), ct_res)
 
 	fmt.Printf("Boot (StoC) Done in %s \n", time.Since(start))
-
 	fmt.Printf("Boot out: ")
-	printDebugCfs(cont.params, ct_res, in_cfs_pBoot, cont.decryptor, cont.encoder)
+	printDebugCfs(cont.params, ct_res, cfs_postB, cont.decryptor, cont.encoder)
 
 	return ct_res
 }
@@ -190,7 +264,7 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	}
 
 	ct_conv := evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, printResult, trans)
-
+	ct_conv.Scale = ct_conv.Scale * math.Pow(2, pow)
 	cfs_preB := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
 	fmt.Println("Bootstrapping... Ours (until CtoS):")
 	start = time.Now()
@@ -250,8 +324,10 @@ func debugCtoS(cont *context, cfs_preB []float64) (slot1, slot2 []complex128) {
 	for i := range preB_cfs1 {
 		preB_cfs1[i] = cfs_preB[reverseBits(uint32(i), cont.params.LogSlots())] // first part of coeffs
 		preB_cfs2[i] = cfs_preB[reverseBits(uint32(i), cont.params.LogSlots())+uint32(cont.params.Slots())]
-		slot1[i] = complex(preB_cfs1[i]/math.Pow(2, float64(pow)), 0)
-		slot2[i] = complex(preB_cfs2[i]/math.Pow(2, float64(pow)), 0)
+		slot1[i] = complex(preB_cfs1[i], 0)
+		slot2[i] = complex(preB_cfs2[i], 0)
+		// slot1[i] = complex(preB_cfs1[i]/math.Pow(2, float64(pow)), 0)
+		// slot2[i] = complex(preB_cfs2[i]/math.Pow(2, float64(pow)), 0)
 	}
 	return
 }
