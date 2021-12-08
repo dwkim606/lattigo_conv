@@ -1,3 +1,5 @@
 test_images_1000.csv
 test_labels_1000.csv
 test_data
+class_result
+Resnet_test_result_enc
