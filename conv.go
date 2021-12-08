@@ -323,6 +323,50 @@ func pack_ctxts(pack_eval ckks.Evaluator, ctxts_in []*ckks.Ciphertext, cnum int,
 	return ctxts[0]
 }
 
+// rotate and add input with m_idx then r_idx so that it outputs a result ctxt.
+func bsgs_ctxt(eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext, m_idx, r_idx map[int][]int, params ckks.Parameters) (result *ckks.Ciphertext) {
+	st := true
+	var mid_result *ckks.Ciphertext
+	for rot, elt := range m_idx { // rot should be in increasing order
+		tmp := make([]complex128, params.Slots())
+		for i := range elt {
+			tmp[i] = complex(float64(elt[i]), 0)
+		}
+		plain_tmp := ckks.NewPlaintext(params, input.Level(), math.Sqrt(params.Scale())) // set scale of rot idx to be 2^(scale/2)
+		encoder.EncodeNTT(plain_tmp, tmp, params.LogSlots())
+
+		if st {
+			mid_result = eval.RotateNew(eval.MulNew(input, plain_tmp), rot)
+			st = false
+		} else {
+			ctxt_tmp := eval.RotateNew(eval.MulNew(input, plain_tmp), rot)
+			eval.Add(mid_result, ctxt_tmp, mid_result)
+		}
+	}
+
+	st = true
+	for rot, elt := range r_idx {
+		tmp := make([]complex128, params.Slots())
+		for i := range elt {
+			tmp[i] = complex(float64(elt[i]), 0)
+		}
+		plain_tmp := ckks.NewPlaintext(params, input.Level(), math.Sqrt(params.Scale())) // set scale of rot idx to be 2^(scale/2)
+		encoder.EncodeNTT(plain_tmp, tmp, params.LogSlots())
+
+		if st {
+			result = eval.RotateNew(eval.MulNew(mid_result, plain_tmp), rot)
+			st = false
+		} else {
+			ctxt_tmp := eval.RotateNew(eval.MulNew(mid_result, plain_tmp), rot)
+			eval.Add(result, ctxt_tmp, result)
+		}
+	}
+
+	// eval.Rescale(result, params.Scale(), result)
+
+	return result
+}
+
 // extend ctxt using given rotations so that it outputs a ctxt to be convolved with filter
 func ext_ctxt(eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext, r_idx map[int][]int, params ckks.Parameters) (result *ckks.Ciphertext) {
 	st := true
@@ -501,10 +545,25 @@ func preConv_BL(evaluator ckks.Evaluator, ct_in *ckks.Ciphertext, in_wid, ker_wi
 
 	st := -(ker_wid / 2)
 	end := ker_wid / 2
+	// k := 0
+	// for i := st; i <= end; i++ {
+	// 	for j := st; j <= end; j++ {
+	// 		ct_in_rots[k] = evaluator.RotateNew(ct_in, i*in_wid+j)
+	// 		k++
+	// 	}
+	// }
+
+	var rotations []int
+	for i := st; i <= end; i++ {
+		for j := st; j <= end; j++ {
+			rotations = append(rotations, i*in_wid+j)
+		}
+	}
+	ct_rots_test := evaluator.RotateHoisted(ct_in, rotations)
 	k := 0
 	for i := st; i <= end; i++ {
 		for j := st; j <= end; j++ {
-			ct_in_rots[k] = evaluator.RotateNew(ct_in, i*in_wid+j)
+			ct_in_rots[k] = ct_rots_test[i*in_wid+j]
 			k++
 		}
 	}

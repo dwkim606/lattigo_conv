@@ -9,6 +9,7 @@ import (
 )
 
 // take raw_in_wid then outputs appropriate kp_wid and out_batch
+// only for our convs Test (not for BL)
 func set_Variables(batch, raw_in_wid, in_wid, ker_wid int, kind string) (kp_wid, out_batch, logN int, trans bool) {
 	N := batch * in_wid * in_wid
 	logN = 0
@@ -40,9 +41,21 @@ func set_Variables(batch, raw_in_wid, in_wid, ker_wid int, kind string) (kp_wid,
 	return
 }
 
+// apply rotation for strided conv (compress) or transposed conv (extend)
+// the same rotation for all batches; use BSGS to reduce rotations
+// assume that input batches are well-ordered. compress: (0,4) (1,5) (2,6) (3,7) to (0,1,2,...6,7) extend: (0,2,4,6,1,3,5,7) to (0,1) (2,3) (4,5) (6,7)
+// rotation for each batch position (0 to 3) is applied after or before compress or extend, resp.
+// total rotation = 2*in_wid*4 + (4-1); depth = 2
+func evalRot_BL(cont *context, ct_input *ckks.Ciphertext, in_wid, pos int) (ct_res *ckks.Ciphertext) {
+	out_size := in_wid * in_wid / 4
+	ct_res = bsgs_ctxt(cont.evaluator, cont.encoder, ct_input, cont.m_idx[in_wid][0], cont.r_idx[in_wid][0], cont.params)
+	cont.evaluator.Rotate(ct_res, -pos*out_size, ct_res)
+
+	return
+}
+
 // Eval Conv only, always assume max batch
-// in_wid must be Po2 (also include padding),
-// include kernel preparation
+// in_wid must be Po2 (also include padding), includes kernel preparation
 func evalConv_BN_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob int, printResult bool) (ct_res *ckks.Ciphertext) {
 	in_size := in_wid * in_wid
 	out_size := in_size // should be *4 for transposed case
@@ -91,7 +104,7 @@ func evalConv_BN_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b
 // Eval Conv only, always assume max batch
 // in_wid must be Po2 (also include padding),
 // include kernel preparation
-func evalConv_BNRelu_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, ker_wid, real_ib, real_ob int, printResult bool) (ct_res *ckks.Ciphertext) {
+func evalConv_BNRelu_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, ker_wid, real_ib, real_ob int, strides, printResult bool) (ct_res *ckks.Ciphertext) {
 	ct_conv := evalConv_BN_BL(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, printResult)
 	ct_conv.Scale = ct_conv.Scale * math.Pow(2, pow)
 	vals_preB := cont.encoder.Decode(cont.decryptor.DecryptNew(ct_conv), cont.logN-1)

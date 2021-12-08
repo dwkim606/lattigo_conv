@@ -50,7 +50,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	copy(cont.kp_wids, kp_wids)
 
 	btpParams := ckks.DefaultBootstrapParams[6]
-	if kind == "BL_Conv" {
+	if (kind == "BL_Conv") || (kind == "BL_StrConv") {
 		btpParams = ckks.DefaultBootstrapParams[7]
 	}
 	cont.params, err = btpParams.Params()
@@ -82,6 +82,31 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 			out_batch := (cont.N / 2) / (elt * elt)
 			for k := 1; k < out_batch; k++ {
 				rotations = append(rotations, k*elt*elt)
+			}
+		}
+	case "BL_StrConv":
+		for _, elt := range cont.in_wids {
+			for k := -(ker_wid / 2); k <= ker_wid/2; k++ {
+				for k2 := -(ker_wid / 2); k2 <= ker_wid/2; k2++ {
+					rotations = append(rotations, k*elt+k2)
+				}
+			}
+			out_batch := (cont.N / 2) / (elt * elt)
+			for k := 1; k < out_batch; k++ {
+				rotations = append(rotations, k*elt*elt)
+			}
+			for pos := 0; pos < 4; pos++ { // for final rotations for strides
+				rotations = append(rotations, -pos*elt*elt/4)
+			}
+			cont.m_idx[elt] = make([]map[int][]int, 1)
+			cont.r_idx[elt] = make([]map[int][]int, 1)
+			cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_comprs_BL(cont.N/2, elt)
+
+			for k := range cont.m_idx[elt][0] {
+				rotations = append(rotations, k)
+			}
+			for k := range cont.r_idx[elt][0] {
+				rotations = append(rotations, k)
 			}
 		}
 	case "Conv": // we assume manual padding using kp_wid
@@ -163,7 +188,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	cont.encryptor = ckks.NewEncryptor(cont.params, sk)
 	cont.evaluator = ckks.NewEvaluator(cont.params, rlwe.EvaluationKey{Rlk: rlk, Rtks: rotkeys})
 
-	if kind != "BL_Conv" {
+	if !((kind == "BL_Conv") || (kind == "BL_StrConv")) {
 		cont.pl_idx, cont.pack_evaluator = gen_idxNlogs(cont.ECD_LV, kgen, sk, cont.encoder, cont.params)
 	}
 
@@ -174,7 +199,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 		rotkeys = kgen.GenRotationKeysForRotations(rotations, true, sk)
 		btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
 
-		if kind == "BL_Conv" {
+		if (kind == "BL_Conv") || (kind == "BL_StrConv") {
 			if cont.btp, err = ckks.NewBootstrapper(cont.params, btpParams, btpKey); err != nil {
 				panic(err)
 			}
@@ -197,12 +222,12 @@ func main() {
 	// testResNet_in(0)
 
 	// testConv_BNRelu_BL("Conv", true)
-	// testConv_noBoot_BL("Conv", true)
+	testConv_noBoot_BL("StrConv", true)
 
 	// testBRrot()
 	// testConv_noBoot(true, true)
 	// testConv_noBoot(7, 8, 5, true, true)
-	testConv_BNRelu("Conv", true)
+	// testConv_BNRelu("Conv", true)
 	// testReduceMean()
 	// testResNet()
 	// testDCGAN()

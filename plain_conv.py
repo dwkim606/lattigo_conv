@@ -93,18 +93,23 @@ def plain_resnet_bench():
         print(i+1,"layer done\n")
     print("after 3rd block\n", conv, "\n")
 
-def conv_bnReLU_BL_bench(trans):
-    batch = 8
-    input_width = 4
+def conv_bnReLU_BL_bench(trans, strides):
+    batch = 4
+    input_width = 8
     vec_size = batch*input_width**2
     ker_width = 3
     bn_a = 1.0
     ker_size = ker_width**2 
-    out_batch = batch//4 if trans else batch
+    if trans:
+        out_batch = batch//4 
+    elif strides:
+        out_batch = batch
+    else:
+        out_batch = batch
 
     ## Correctness Check: Compare with TF NN CONV2D
-    raw_input = [1.0*i/vec_size for i in range(vec_size)]
-    ker =  [1.0 - 1.0*i/(batch * out_batch * ker_size) for i in range(batch * out_batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    raw_input = [1.0*i/vec_size for i in range(vec_size)] #[1.0*i for i in range(vec_size)] 
+    ker = [1.0 - 1.0*i/(batch * out_batch * ker_size) for i in range(batch * out_batch * ker_size)] #[1.0 for i in range(batch * out_batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
 
     print("input width:", input_width)
     print("batch:", batch)
@@ -112,16 +117,19 @@ def conv_bnReLU_BL_bench(trans):
     #data = np.loadtxt("./weights/batch0.txt")
 
     ten_x = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, input_width, input_width, batch])
-    print("input: \n", ten_x)
+    print("\n input: \n", ten_x)
     if trans:
         ten_k = tf.reshape(tf.constant(np.array(ker), tf.float32), [ker_width, ker_width, out_batch, batch])
         conv = tf.nn.conv2d_transpose(ten_x, ten_k, output_shape=(1, 2*input_width, 2*input_width, out_batch), strides=[1, 2, 2, 1], padding="SAME")*bn_a
+    elif strides:
+        ten_k = tf.reshape(tf.constant(np.array(ker), tf.float32), [ker_width, ker_width, batch, out_batch])
+        conv = tf.nn.conv2d(ten_x, ten_k, strides = [1,2,2,1], padding = "SAME")*bn_a
     else:
         ten_k = tf.reshape(tf.constant(np.array(ker), tf.float32), [ker_width, ker_width, batch, out_batch])
         conv = tf.nn.conv2d(ten_x, ten_k, strides = [1,1,1,1], padding = "SAME")*bn_a
     
     # conv = tf.nn.relu(conv)
-    print("result: \n", conv, "\n")
+    print("\n result: \n", conv, "\n")
 
 def trans_conv_bnReLU_BL_bench():
     input_width = 2
@@ -289,11 +297,15 @@ def separate_data(num_outs):
 
 # separate_data(300)
 # trans_conv_bnReLU_BL_bench()
-conv_bnReLU_BL_bench(False)
+#conv_bnReLU_BL_bench(False)
 # plain_resnet_bench()
-# post_process(300)
+# post_process(1000)
 # num_samples = 100
 # pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
+
+trans = False
+strides = True
+conv_bnReLU_BL_bench(trans, strides)
 
 # conv = np.reshape(np.loadtxt('class_result_'+str(5)+'.csv'), [256])
 # print("enc: ", conv[:10], "argmax: ", np.argmax(conv[:10]))

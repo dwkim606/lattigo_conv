@@ -103,6 +103,43 @@ func inputExt(input []float64, logN, in_wid int, print bool) []float64 {
 	return test_out_fl
 }
 
+func gen_comprs_BL(vec_size, in_wid int) (m_idx, r_idx map[int][]int) {
+	m_idx = make(map[int][]int)
+	r_idx = make(map[int][]int)
+	batch := vec_size / (in_wid * in_wid)
+
+	min_wid := in_wid / 2
+	if in_wid%2 != 0 {
+		panic("in wid not divisible by 2")
+	}
+
+	for j := 1; j <= min_wid; j++ { // kinds of mov depends on j
+		tmp := make([]int, vec_size)
+		for i := 1; i <= min_wid; i++ {
+			for b := 0; b < batch; b++ {
+				idx := (2*i-1)*in_wid + 2*j - 1 + b*in_wid*in_wid
+				tmp[idx] = 1
+			}
+		}
+		rot := j
+		m_idx[rot] = tmp
+	}
+
+	for i := 1; i <= min_wid; i++ { // kinds of mov depends on i
+		tmp := make([]int, vec_size)
+		for j := 1; j <= min_wid; j++ {
+			for b := 0; b < batch; b++ {
+				idx := (2*i-1)*in_wid + j - 1 + b*in_wid*in_wid
+				tmp[idx] = 1
+			}
+		}
+		rot := 3*min_wid*i - min_wid
+		r_idx[rot] = tmp
+	}
+
+	return m_idx, r_idx
+}
+
 // (bit-reversed) input vector := (upper or lower part) of the total vector having in_wid * in_wid size elts
 // Keep only the kp_wid*kp_wid values
 // e.g., 1* // ** -> 10 // 00 (before bitreversed, pad = 1)
