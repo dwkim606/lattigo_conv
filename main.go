@@ -50,7 +50,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	copy(cont.kp_wids, kp_wids)
 
 	btpParams := ckks.DefaultBootstrapParams[6]
-	if (kind == "BL_Conv") || (kind == "BL_StrConv") {
+	if (kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") {
 		btpParams = ckks.DefaultBootstrapParams[7]
 	}
 	cont.params, err = btpParams.Params()
@@ -86,21 +86,46 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 		}
 	case "BL_StrConv":
 		for _, elt := range cont.in_wids {
-			for k := -(ker_wid / 2); k <= ker_wid/2; k++ {
+			for k := -(ker_wid / 2); k <= ker_wid/2; k++ { // rotations for conv
 				for k2 := -(ker_wid / 2); k2 <= ker_wid/2; k2++ {
 					rotations = append(rotations, k*elt+k2)
 				}
 			}
 			out_batch := (cont.N / 2) / (elt * elt)
-			for k := 1; k < out_batch; k++ {
+			for k := 1; k < out_batch; k++ { // rotations for conv
 				rotations = append(rotations, k*elt*elt)
 			}
-			for pos := 0; pos < 4; pos++ { // for final rotations for strides
+			for pos := 0; pos < 4; pos++ { // for final rotations for after strides
 				rotations = append(rotations, -pos*elt*elt/4)
 			}
 			cont.m_idx[elt] = make([]map[int][]int, 1)
 			cont.r_idx[elt] = make([]map[int][]int, 1)
 			cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_comprs_BL(cont.N/2, elt)
+
+			for k := range cont.m_idx[elt][0] {
+				rotations = append(rotations, k)
+			}
+			for k := range cont.r_idx[elt][0] {
+				rotations = append(rotations, k)
+			}
+		}
+	case "BL_TransConv":
+		for _, elt := range cont.in_wids {
+			for k := -(ker_wid / 2); k <= ker_wid/2; k++ { // rotations for conv
+				for k2 := -(ker_wid / 2); k2 <= ker_wid/2; k2++ {
+					rotations = append(rotations, k*elt+k2)
+				}
+			}
+			out_batch := (cont.N / 2) / (elt * elt)
+			for k := 1; k < out_batch; k++ { // rotations for conv
+				rotations = append(rotations, k*elt*elt)
+			}
+			for pos := 0; pos < 4; pos++ { // for final rotations for prep expand
+				rotations = append(rotations, pos*elt*elt/4)
+			}
+			cont.m_idx[elt] = make([]map[int][]int, 1)
+			cont.r_idx[elt] = make([]map[int][]int, 1)
+			cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_expand_BL(cont.N/2, elt)
 
 			for k := range cont.m_idx[elt][0] {
 				rotations = append(rotations, k)
@@ -221,8 +246,8 @@ func main() {
 	// iter, _ := strconv.Atoi(os.Args[1])
 	// testResNet_in(0)
 
-	// testConv_BNRelu_BL("Conv", true)
-	testConv_noBoot_BL("StrConv", true)
+	// testConv_BNRelu_BL("TransConv", true)
+	testConv_noBoot_BL("TransConv", true)
 
 	// testBRrot()
 	// testConv_noBoot(true, true)

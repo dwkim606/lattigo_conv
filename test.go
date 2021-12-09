@@ -407,7 +407,7 @@ func testDCGAN() {
 // Input does not need padding
 func testConv_noBoot_BL(in_kind string, printResult bool) {
 	in_batch := 4
-	raw_in_wid := 8 // = in_wid
+	raw_in_wid := 4 // = in_wid
 	ker_wid := 3
 
 	in_size := raw_in_wid * raw_in_wid
@@ -418,6 +418,14 @@ func testConv_noBoot_BL(in_kind string, printResult bool) {
 	out_batch := in_batch
 	kp_wid := 0
 	kind := "BL_" + in_kind
+	strides := false
+	trans := false
+	if in_kind == "StrConv" {
+		strides = true
+	}
+	if in_kind == "TransConv" {
+		trans = true
+	}
 
 	input := make([]float64, raw_in_wid*raw_in_wid*in_batch)
 	ker_in := make([]float64, in_batch*out_batch*ker_wid*ker_wid)
@@ -453,10 +461,15 @@ func testConv_noBoot_BL(in_kind string, printResult bool) {
 	ct_input := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input_rs, log_slots))
 	fmt.Printf("Encryption done in %s \n", time.Since(start))
 
-	ct_result := evalConv_BN_BL(cont, ct_input, ker_in, bn_a, bn_b, raw_in_wid, ker_wid, in_batch, out_batch, printResult)
-	if in_kind == "StrConv" {
+	if trans {
 		start = time.Now()
-		ct_result = evalRot_BL(cont, ct_result, raw_in_wid, 0)
+		ct_input = evalRot_BL(cont, ct_input, raw_in_wid, 0, trans)
+		fmt.Printf("Rotation (for transConv) Done in %s \n", time.Since(start))
+	}
+	ct_result := evalConv_BN_BL(cont, ct_input, ker_in, bn_a, bn_b, raw_in_wid, ker_wid, in_batch, out_batch, trans, printResult)
+	if strides {
+		start = time.Now()
+		ct_result = evalRot_BL(cont, ct_result, raw_in_wid, 0, trans)
 		fmt.Printf("Rotation (for strided Conv) Done in %s \n", time.Since(start))
 	}
 
@@ -468,8 +481,11 @@ func testConv_noBoot_BL(in_kind string, printResult bool) {
 	fmt.Printf("Decryption Done in %s \n", time.Since(start))
 
 	f_out_batch := out_batch
-	if in_kind == "StrConv" {
+	if strides {
 		f_out_batch = out_batch * 4
+	}
+	if trans {
+		f_out_batch = out_batch / 4
 	}
 
 	if printResult {
@@ -482,7 +498,7 @@ func testConv_noBoot_BL(in_kind string, printResult bool) {
 // Normal Conv without output modification (e.g., trimming or expanding)
 // Input does not need padding
 func testConv_BNRelu_BL(in_kind string, printResult bool) {
-	in_batch := 8
+	in_batch := 4
 	raw_in_wid := 4 // = in_wid
 	ker_wid := 3
 	alpha := 0.0
@@ -495,6 +511,14 @@ func testConv_BNRelu_BL(in_kind string, printResult bool) {
 	out_batch := in_batch
 	kp_wid := 0
 	kind := "BL_" + in_kind
+	strides := false
+	trans := false
+	if in_kind == "StrConv" {
+		strides = true
+	}
+	if in_kind == "TransConv" {
+		trans = true
+	}
 
 	input := make([]float64, raw_in_wid*raw_in_wid*in_batch)
 	ker_in := make([]float64, in_batch*out_batch*ker_wid*ker_wid)
@@ -530,18 +554,23 @@ func testConv_BNRelu_BL(in_kind string, printResult bool) {
 	ct_input := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input_rs, log_slots))
 	fmt.Printf("Encryption done in %s \n", time.Since(start))
 
-	ct_result := evalConv_BNRelu_BL(cont, ct_input, ker_in, bn_a, bn_b, alpha, raw_in_wid, ker_wid, in_batch, out_batch, false, printResult)
+	ct_result := evalConv_BNRelu_BL(cont, ct_input, ker_in, bn_a, bn_b, alpha, raw_in_wid, ker_wid, in_batch, out_batch, strides, trans, printResult)
 
 	fmt.Println()
 	fmt.Println("===============  DECRYPTION  ===============")
 	fmt.Println()
 	start = time.Now()
-	vals_res := cont.encoder.Decode(cont.decryptor.DecryptNew(ct_result), cont.logN-1)
+	vals_tmp := cont.encoder.Decode(cont.decryptor.DecryptNew(ct_result), cont.logN-1)
 	fmt.Printf("Decryption (Relu) Done in %s \n", time.Since(start))
 	fmt.Println("after relu: LV = ", ct_result.Level(), " Scale = 2^", math.Log2(ct_result.Scale))
+	f_out_batch := out_batch
+	if in_kind == "StrConv" {
+		f_out_batch = out_batch * 4
+	}
+
 	if printResult {
 		fmt.Print("Result: \n")
-		prt_mat_BL(vals_res, out_batch, 0)
+		prt_mat_BL(vals_tmp, f_out_batch, 0)
 	}
 }
 

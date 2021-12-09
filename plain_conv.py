@@ -95,7 +95,7 @@ def plain_resnet_bench():
 
 def conv_bnReLU_BL_bench(trans, strides):
     batch = 4
-    input_width = 8
+    input_width = 4
     vec_size = batch*input_width**2
     ker_width = 3
     bn_a = 1.0
@@ -303,7 +303,7 @@ def separate_data(num_outs):
 # num_samples = 100
 # pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
 
-trans = False
+trans = True
 strides = True
 conv_bnReLU_BL_bench(trans, strides)
 

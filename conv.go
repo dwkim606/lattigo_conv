@@ -94,7 +94,7 @@ func reshape_input_BL(input []float64, in_wid int) (out []complex128) {
 // Reshape 1-D kernel (from python) into (H,W,in,out) format, and applies BN, then into max ker
 // ker[i][j][ib][ob]: (i,j)-th elt of kernel for ib-th input to ob-th output
 // only for BL test // for transposed conv, we should add rearragement!!
-func reshape_ker_BL(input, BN_a []float64, ker_wid, inB, outB, max_bat int) (max_ker_rs [][][][]float64) {
+func reshape_ker_BL(input, BN_a []float64, ker_wid, inB, outB, max_bat int, trans bool) (max_ker_rs [][][][]float64) {
 	ker_rs := make([][][][]float64, ker_wid)
 	for i := 0; i < ker_wid; i++ {
 		ker_rs[i] = make([][][]float64, ker_wid)
@@ -103,7 +103,11 @@ func reshape_ker_BL(input, BN_a []float64, ker_wid, inB, outB, max_bat int) (max
 			for ib := 0; ib < inB; ib++ {
 				ker_rs[i][j][ib] = make([]float64, outB)
 				for ob := 0; ob < outB; ob++ {
-					ker_rs[i][j][ib][ob] = input[ob+ib*outB+j*outB*inB+i*outB*inB*ker_wid] * BN_a[ob] // Apply BN
+					if trans {
+						ker_rs[i][j][ib][ob] = input[ib+ob*inB+(ker_wid-j-1)*outB*inB+(ker_wid-i-1)*outB*inB*ker_wid] * BN_a[ob] // Apply BN
+					} else {
+						ker_rs[i][j][ib][ob] = input[ob+ib*outB+j*outB*inB+i*outB*inB*ker_wid] * BN_a[ob] // Apply BN
+					}
 				}
 			}
 		}
@@ -130,7 +134,7 @@ func reshape_ker_BL(input, BN_a []float64, ker_wid, inB, outB, max_bat int) (max
 // Reshape 1-D ker_in (from python) into batch number of ker_outs: ker_out[i][j] = j-th kernel (elements then batch order) for i-th output
 // i.e., ker_out is of the shape (out_batch, (in_batch * ker_size))
 // ker_out[i] = [k1 for 1st input, ..., ,kk for 1st input, k1 for 2nd input, ...]
-// trans = true for transposed convolution (in trans convolution of python, ker_in[i][j] corresponds to i-th kernel for j-th output so we should rearrage ker_out according to this)
+// trans = true for transposed convolution (in trans convolution of python,  we should rearrage ker_out carefully)
 func reshape_ker(ker_in []float64, k_sz, out_batch int, trans bool) (ker_out [][]float64) {
 	ker_out = make([][]float64, out_batch)
 	in_batch := len(ker_in) / (k_sz * out_batch)

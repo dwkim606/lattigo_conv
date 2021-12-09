@@ -103,6 +103,43 @@ func inputExt(input []float64, logN, in_wid int, print bool) []float64 {
 	return test_out_fl
 }
 
+func gen_expand_BL(vec_size, in_wid int) (m_idx, r_idx map[int][]int) {
+	m_idx = make(map[int][]int)
+	r_idx = make(map[int][]int)
+	batch := vec_size / (in_wid * in_wid)
+
+	if batch%4 != 0 {
+		panic("batch not divisible by 4")
+	}
+	min_batch := batch / 4
+
+	for i := 1; i <= in_wid; i++ { // kinds of mov depends on i
+		tmp := make([]int, vec_size)
+		for j := 1; j <= in_wid; j++ {
+			for b := 0; b < min_batch; b++ {
+				idx := (i-1)*in_wid + j - 1 + 4*b*in_wid*in_wid
+				tmp[idx] = 1
+			}
+		}
+		rot := in_wid - 3*in_wid*i
+		m_idx[rot] = tmp
+	}
+
+	for j := 1; j <= in_wid; j++ { // kinds of mov depends on j
+		tmp := make([]int, vec_size)
+		for i := 1; i <= in_wid; i++ {
+			for b := 0; b < min_batch; b++ {
+				idx := (2*i-1)*2*in_wid + j - 1 + 4*b*in_wid*in_wid
+				tmp[idx] = 1
+			}
+		}
+		rot := -j
+		r_idx[rot] = tmp
+	}
+
+	return m_idx, r_idx
+}
+
 func gen_comprs_BL(vec_size, in_wid int) (m_idx, r_idx map[int][]int) {
 	m_idx = make(map[int][]int)
 	r_idx = make(map[int][]int)
