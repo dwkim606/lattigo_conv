@@ -61,16 +61,16 @@ func evalRot_BL(cont *context, ct_input *ckks.Ciphertext, in_wid, pos int, trans
 
 // Eval Conv only, always assume max batch
 // in_wid must be Po2 (also include padding), includes kernel preparation
-func evalConv_BN_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob int, trans, printResult bool) (ct_res *ckks.Ciphertext) {
+func evalConv_BN_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob, pos int, trans, printResult bool) (ct_res *ckks.Ciphertext) {
 	in_size := in_wid * in_wid
-	out_size := in_size // should be *4 for transposed case
+	out_size := in_size
 	max_batch := cont.N / (2 * in_size)
 
 	fmt.Println()
 	fmt.Println("===============  (KER) PREPARATION  ===============")
 	fmt.Println()
 	start = time.Now()
-	max_ker_rs := reshape_ker_BL(ker_in, bn_a, ker_wid, real_ib, real_ob, max_batch, trans)
+	max_ker_rs := reshape_ker_BL(ker_in, bn_a, ker_wid, real_ib, real_ob, max_batch, pos, trans)
 	scale_exp := cont.params.Scale() * cont.params.Scale()
 	if trans {
 		scale_exp = cont.params.Scale() * cont.params.Scale() * cont.params.Scale()
@@ -92,7 +92,7 @@ func evalConv_BN_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b
 	ct_inputs_rots := preConv_BL(cont.evaluator, ct_input, in_wid, ker_wid)
 	fmt.Printf("preConv done in %s \n", time.Since(start))
 
-	for i := 0; i < real_ib; i++ {
+	for i := 0; i < real_ob; i++ {
 		ct_tmp := postConv_BL(cont.params, cont.encoder, cont.evaluator, ct_inputs_rots, in_wid, ker_wid, i, max_ker_rs)
 		if i == 0 {
 			ct_res = ct_tmp
@@ -113,24 +113,53 @@ func evalConv_BN_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b
 // in_wid must be Po2 (also include padding),
 // include kernel preparation
 func evalConv_BNRelu_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, ker_wid, real_ib, real_ob int, strides, trans, printResult bool) (ct_res *ckks.Ciphertext) {
+	var ct_input_rot, ct_conv *ckks.Ciphertext
+	rot_time := time.Duration(0)
+	eval_time := time.Duration(0)
 	if trans {
-		start = time.Now()
-		ct_input = evalRot_BL(cont, ct_input, in_wid, 0, trans)
-		fmt.Printf("Rotation (for transConv) Done in %s \n", time.Since(start))
+		for pos := 0; pos < 4; pos++ {
+			start = time.Now()
+			ct_input_rot = evalRot_BL(cont, ct_input, in_wid, pos, trans)
+			rot_time += time.Since(start)
+			start = time.Now()
+			if pos == 0 {
+				ct_conv = evalConv_BN_BL(cont, ct_input_rot, ker_in, bn_a, bn_b, 2*in_wid, ker_wid, real_ib, real_ob, pos, trans, printResult)
+			} else {
+				ct_tmp := evalConv_BN_BL(cont, ct_input_rot, ker_in, bn_a, bn_b, 2*in_wid, ker_wid, real_ib, real_ob, pos, trans, printResult)
+				cont.evaluator.Add(ct_conv, ct_tmp, ct_conv)
+			}
+			eval_time += time.Since(start)
+		}
+		fmt.Printf("Rotation (for transConv) Done in %s \n", rot_time)
+		fmt.Printf("EvalConv total (for transConv) Done in %s \n", eval_time)
+	} else {
+		ct_conv = evalConv_BN_BL(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, 0, trans, printResult)
+		if strides {
+			start = time.Now()
+			ct_conv = evalRot_BL(cont, ct_conv, in_wid, 0, trans)
+			fmt.Printf("Rotation (for strided Conv) Done in %s \n", time.Since(start))
+		}
 	}
-	ct_conv := evalConv_BN_BL(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, trans, printResult)
-	if strides {
-		start = time.Now()
-		ct_conv = evalRot_BL(cont, ct_conv, in_wid, 0, trans)
-		fmt.Printf("Rotation (for strided Conv) Done in %s \n", time.Since(start))
-	}
+
+	// if trans {
+	// 	start = time.Now()
+	// 	ct_input = evalRot_BL(cont, ct_input, in_wid, 0, trans)
+	// 	fmt.Printf("Rotation (for transConv) Done in %s \n", time.Since(start))
+	// }
+	// ct_conv := evalConv_BN_BL(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, 0, trans, printResult)
+	// if strides {
+	// 	start = time.Now()
+	// 	ct_conv = evalRot_BL(cont, ct_conv, in_wid, 0, trans)
+	// 	fmt.Printf("Rotation (for strided Conv) Done in %s \n", time.Since(start))
+	// }
+
 	ct_conv.Scale = ct_conv.Scale * math.Pow(2, pow)
 	vals_preB := cont.encoder.Decode(cont.decryptor.DecryptNew(ct_conv), cont.logN-1)
-	fmt.Println("Bootstrapping... (original):")
+	fmt.Println("\n ========= Bootstrapping... (original) ========= ")
 	start_boot := time.Now()
 	// cont.evaluator.SetScale(ct_conv, ct_conv.Scale*8)
 	// cont.evaluator.SetScale(ct_conv, ct_conv.Scale*math.Pow(2, pow))
-	fmt.Println("after scale: LV = ", ct_conv.Level(), " Scale = ", math.Log2(ct_conv.Scale))
+	fmt.Println("initial (before boot): LV = ", ct_conv.Level(), " Scale = ", math.Log2(ct_conv.Scale))
 
 	ct_boot := cont.btp.Bootstrapp(ct_conv)
 	fmt.Printf("Done in %s \n", time.Since(start_boot))

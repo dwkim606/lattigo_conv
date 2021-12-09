@@ -94,10 +94,10 @@ def plain_resnet_bench():
     print("after 3rd block\n", conv, "\n")
 
 def conv_bnReLU_BL_bench(trans, strides):
-    batch = 4
-    input_width = 4
+    batch = 8
+    input_width = 8
     vec_size = batch*input_width**2
-    ker_width = 3
+    ker_width = 5
     bn_a = 1.0
     ker_size = ker_width**2 
     if trans:
@@ -108,8 +108,8 @@ def conv_bnReLU_BL_bench(trans, strides):
         out_batch = batch
 
     ## Correctness Check: Compare with TF NN CONV2D
-    raw_input = [1.0*i/vec_size for i in range(vec_size)] #[1.0*i for i in range(vec_size)] 
-    ker = [1.0 - 1.0*i/(batch * out_batch * ker_size) for i in range(batch * out_batch * ker_size)] #[1.0 for i in range(batch * out_batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    raw_input = [1.0*i/vec_size for i in range(vec_size)]  # #[1.0*i for i in range(vec_size)] 
+    ker = [1.0 - 1.0*i/(batch * out_batch * ker_size)for i in range(batch * out_batch * ker_size)] #  #[1.0 for i in range(batch * out_batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
 
     print("input width:", input_width)
     print("batch:", batch)

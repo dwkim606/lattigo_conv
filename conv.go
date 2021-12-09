@@ -94,7 +94,7 @@ func reshape_input_BL(input []float64, in_wid int) (out []complex128) {
 // Reshape 1-D kernel (from python) into (H,W,in,out) format, and applies BN, then into max ker
 // ker[i][j][ib][ob]: (i,j)-th elt of kernel for ib-th input to ob-th output
 // only for BL test // for transposed conv, we should add rearragement!!
-func reshape_ker_BL(input, BN_a []float64, ker_wid, inB, outB, max_bat int, trans bool) (max_ker_rs [][][][]float64) {
+func reshape_ker_BL(input, BN_a []float64, ker_wid, inB, outB, max_bat, pos int, trans bool) (max_ker_rs [][][][]float64) {
 	ker_rs := make([][][][]float64, ker_wid)
 	for i := 0; i < ker_wid; i++ {
 		ker_rs[i] = make([][][]float64, ker_wid)
@@ -104,7 +104,9 @@ func reshape_ker_BL(input, BN_a []float64, ker_wid, inB, outB, max_bat int, tran
 				ker_rs[i][j][ib] = make([]float64, outB)
 				for ob := 0; ob < outB; ob++ {
 					if trans {
-						ker_rs[i][j][ib][ob] = input[ib+ob*inB+(ker_wid-j-1)*outB*inB+(ker_wid-i-1)*outB*inB*ker_wid] * BN_a[ob] // Apply BN
+						if ib < (inB / 4) {
+							ker_rs[i][j][ib][ob] = input[(4*ib+pos)+ob*inB+(ker_wid-j-1)*outB*inB+(ker_wid-i-1)*outB*inB*ker_wid] * BN_a[ob] // Apply BN
+						}
 					} else {
 						ker_rs[i][j][ib][ob] = input[ob+ib*outB+j*outB*inB+i*outB*inB*ker_wid] * BN_a[ob] // Apply BN
 					}
@@ -112,6 +114,7 @@ func reshape_ker_BL(input, BN_a []float64, ker_wid, inB, outB, max_bat int, tran
 			}
 		}
 	}
+	// overload to max batch case
 	max_ker_rs = make([][][][]float64, ker_wid)
 	for i := 0; i < ker_wid; i++ {
 		max_ker_rs[i] = make([][][]float64, ker_wid)
