@@ -50,7 +50,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	copy(cont.kp_wids, kp_wids)
 
 	btpParams := ckks.DefaultBootstrapParams[6]
-	if (kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") {
+	if (kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet") {
 		btpParams = ckks.DefaultBootstrapParams[7]
 	}
 	cont.params, err = btpParams.Params()
@@ -134,6 +134,40 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 				rotations = append(rotations, k)
 			}
 		}
+	case "BL_Resnet": // need rots for strConv and Conv
+		for i, elt := range cont.in_wids {
+			for k := -(ker_wid / 2); k <= ker_wid/2; k++ { // rotations for conv
+				for k2 := -(ker_wid / 2); k2 <= ker_wid/2; k2++ {
+					rotations = append(rotations, k*elt+k2)
+				}
+			}
+			out_batch := ((cont.N / 2) / (elt * elt)) / (1 << (i + 1)) // originally (cont.N / 2) / (elt * elt)
+			for k := 1; k < out_batch; k++ {                           // rotations for conv
+				rotations = append(rotations, k*elt*elt)
+			}
+			for pos := 0; pos < 4; pos++ { // for final rotations for after strides
+				rotations = append(rotations, -pos*elt*elt/4)
+			}
+			cont.m_idx[elt] = make([]map[int][]int, 1)
+			cont.r_idx[elt] = make([]map[int][]int, 1)
+			cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_comprs_BL(cont.N/2, elt)
+
+			for k := range cont.m_idx[elt][0] {
+				rotations = append(rotations, k)
+			}
+			for k := range cont.r_idx[elt][0] {
+				rotations = append(rotations, k)
+			}
+			for i := 1; i < 64; i *= 2 { // for reduce mean & FC
+				rotations = append(rotations, i)
+			}
+			for i := 1; i < 4; i *= 2 {
+				rotations = append(rotations, i*16*64)
+			}
+			for i := 1; i < 16; i++ {
+				rotations = append(rotations, -(64-i)*64)
+			}
+		}
 	case "Conv": // we assume manual padding using kp_wid
 		if boot {
 			iter = 2 // we assume full padding, i.e., up and low is both nonzero
@@ -207,13 +241,14 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	kgen := ckks.NewKeyGenerator(cont.params)
 	sk, _ := kgen.GenKeyPairSparse(btpParams.H)
 	rlk := kgen.GenRelinearizationKey(sk, 2)
+	fmt.Println("Num Rotations: ", len(rotations))
 	rotkeys := kgen.GenRotationKeysForRotations(rotations, false, sk)
 	cont.encoder = ckks.NewEncoder(cont.params)
 	cont.decryptor = ckks.NewDecryptor(cont.params, sk)
 	cont.encryptor = ckks.NewEncryptor(cont.params, sk)
 	cont.evaluator = ckks.NewEvaluator(cont.params, rlwe.EvaluationKey{Rlk: rlk, Rtks: rotkeys})
 
-	if !((kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv")) {
+	if !((kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet")) {
 		cont.pl_idx, cont.pack_evaluator = gen_idxNlogs(cont.ECD_LV, kgen, sk, cont.encoder, cont.params)
 	}
 
@@ -224,7 +259,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 		rotkeys = kgen.GenRotationKeysForRotations(rotations, true, sk)
 		btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
 
-		if (kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") {
+		if (kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet") {
 			if cont.btp, err = ckks.NewBootstrapper(cont.params, btpParams, btpKey); err != nil {
 				panic(err)
 			}
@@ -246,8 +281,12 @@ func main() {
 	// iter, _ := strconv.Atoi(os.Args[1])
 	// testResNet_in(0)
 
-	testConv_BNRelu_BL("TransConv", true)
+	// testConv_BNRelu_BL("TransConv", true)
 	// testConv_noBoot_BL("TransConv", true)
+	// testResNet_BL()
+	testReduceMean_BL()
+
+	// basic()
 
 	// testBRrot()
 	// testConv_noBoot(true, true)
@@ -378,7 +417,7 @@ func prt_vecc(vec []complex128) {
 
 // print slice (back and forth prt_size elements)
 func prt_vec(vec []float64) {
-	prt_size := 5
+	prt_size := 10
 	total_size := len(vec)
 
 	if total_size <= 2*prt_size {

@@ -281,6 +281,22 @@ def post_process(iter_num):
     # pred = plain_resnet(tf_images)
     # print("enc == plain?", tf.argmax(tf.squeeze(conv, axis=[1,2]),1) == tf.argmax(pred[iter],1))
 
+def test_RMFC():
+    vec_size = 8*8*64
+    raw_input = [(i%27)*0.1 for i in range(vec_size)]
+    raw_ker = [(i%27)*0.1 for i in range(64*10)] #[1.0*i/640 for i in range(64*10)]
+    bias = [1*i for i in range(10)]
+    
+    conv = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, 8, 8, 64])
+    print(conv)
+    conv = tf.reduce_mean(conv, [1,2], keepdims = True)
+    print("RM:", conv)
+    ten_final = tf.reshape(tf.constant(np.array(raw_ker), tf.float32), [1,1,64,10])
+    print(ten_final)
+
+    conv = tf.nn.conv2d(conv, ten_final, strides = [1,1,1,1], padding = "SAME") + tf.reshape(tf.constant(np.array(bias), tf.float32), [1, 1, 1, 10])
+    print(conv)
+
 
 def separate_data(num_outs):
     num_samples = 1000 # or 1000
@@ -302,6 +318,9 @@ def separate_data(num_outs):
 # post_process(1000)
 # num_samples = 100
 # pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
+
+test_RMFC()
+exit(1)
 
 trans = True
 strides = True
