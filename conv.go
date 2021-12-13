@@ -94,8 +94,8 @@ func reshape_input_BL(input []float64, in_wid int) (out []complex128) {
 // Reshape 1-D kernel (from python) into (H,W,in,out) format, and applies BN, then into max ker
 // ker[i][j][ib][ob]: (i,j)-th elt of kernel for ib-th input to ob-th output
 // only for BL test // for transposed conv, we should add rearragement!!
-// normal := true : max batch in str conv, false: str conv, input & out batch (1,2,3,4) is distributed as (1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0)
-func reshape_ker_BL(input, BN_a []float64, ker_wid, inB, outB, max_bat, pos int, trans, normal bool) (max_ker_rs [][][][]float64) {
+// norm == 1 : normal case, norm == 4 : in & out batch is (1,0,0,0,2,0,0,0,3,0,0,0,4,0,0,0)
+func reshape_ker_BL(input, BN_a []float64, ker_wid, inB, outB, max_bat, pos, norm int, trans bool) (max_ker_rs [][][][]float64) {
 	ker_rs := make([][][][]float64, ker_wid)
 	for i := 0; i < ker_wid; i++ {
 		ker_rs[i] = make([][][]float64, ker_wid)
@@ -117,33 +117,16 @@ func reshape_ker_BL(input, BN_a []float64, ker_wid, inB, outB, max_bat, pos int,
 	}
 	// overload to max batch case
 	max_ker_rs = make([][][][]float64, ker_wid)
-	if normal {
-		for i := 0; i < ker_wid; i++ {
-			max_ker_rs[i] = make([][][]float64, ker_wid)
-			for j := 0; j < ker_wid; j++ {
-				max_ker_rs[i][j] = make([][]float64, max_bat)
-				for ib := 0; ib < max_bat; ib++ {
-					max_ker_rs[i][j][ib] = make([]float64, max_bat)
-					if ib < inB {
-						for ob := 0; ob < outB; ob++ {
-							max_ker_rs[i][j][ib][ob] = ker_rs[i][j][ib][ob]
-						}
-					}
-				}
+	for i := 0; i < ker_wid; i++ {
+		max_ker_rs[i] = make([][][]float64, ker_wid)
+		for j := 0; j < ker_wid; j++ {
+			max_ker_rs[i][j] = make([][]float64, max_bat)
+			for ib := 0; ib < max_bat; ib++ {
+				max_ker_rs[i][j][ib] = make([]float64, max_bat)
 			}
-		}
-	} else {
-		for i := 0; i < ker_wid; i++ {
-			max_ker_rs[i] = make([][][]float64, ker_wid)
-			for j := 0; j < ker_wid; j++ {
-				max_ker_rs[i][j] = make([][]float64, max_bat)
-				for ib := 0; ib < max_bat; ib++ {
-					max_ker_rs[i][j][ib] = make([]float64, max_bat)
-				}
-				for ib := 0; ib < inB; ib++ {
-					for ob := 0; ob < outB; ob++ {
-						max_ker_rs[i][j][4*ib][4*ob] = ker_rs[i][j][ib][ob]
-					}
+			for ib := 0; ib < inB; ib++ {
+				for ob := 0; ob < outB; ob++ {
+					max_ker_rs[i][j][norm*ib][norm*ob] = ker_rs[i][j][ib][ob]
 				}
 			}
 		}

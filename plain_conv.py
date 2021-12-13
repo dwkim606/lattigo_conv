@@ -25,7 +25,7 @@ def plain_resnet_bench():
     batch = 1
     vec_size = batch*input_width**2
     ker_width = 3
-    bn_a = [0.5, 0.5, 0.5]
+    bn_a = [0.3, 0.3, 0.1]
 
     batch2 = batch*2
     batch3 = batch2*2
@@ -41,7 +41,7 @@ def plain_resnet_bench():
     ker =  [(0.5 * i)/(batch * batch * ker_size) for i in range(batch * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
     ker12 = [(0.5 * i)/(batch * batch2 * ker_size) for i in range(batch * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
     ker2 = [(0.5 * i)/(batch2 * batch2 * ker_size) for i in range(batch2 * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
-    ker23 = [(0.5 * i)/(batch2 * batch3 * ker_size) for i in range(batch2 * batch3 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker23 = [(0.5 * i)/(batch2 * batch3 * ker_size) for i in range(batch2 * batch3 * ker_size)]  # (0.5 * i)/(batch2 * batch3 * ker_size) #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
     ker3 = [(0.5 * i)/(batch3 * batch3 * ker_size) for i in range(batch3 * batch3 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
 
     ten_x = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, input_width, input_width, batch])
@@ -55,9 +55,9 @@ def plain_resnet_bench():
 
     # conv = tf.nn.conv2d_transpose(ten_x, ten_k1, output_shape=(1, input_width[1], input_width[1], batch[1]), strides=[1, 2, 2, 1])
 
-    num_bl1 = 1
-    num_bl2 = 1
-    num_bl3 = 1
+    num_bl1 = 2
+    num_bl2 = 2
+    num_bl3 = 2
 
     conv = ten_x
     print("Input: ", conv)
@@ -314,17 +314,17 @@ def separate_data(num_outs):
 # separate_data(300)
 # trans_conv_bnReLU_BL_bench()
 #conv_bnReLU_BL_bench(False)
-# plain_resnet_bench()
+plain_resnet_bench()
 # post_process(1000)
 # num_samples = 100
 # pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
 
-test_RMFC()
-exit(1)
+# test_RMFC()
+# exit(1)
 
-trans = True
-strides = True
-conv_bnReLU_BL_bench(trans, strides)
+# trans = True
+# strides = True
+# conv_bnReLU_BL_bench(trans, strides)
 
 # conv = np.reshape(np.loadtxt('class_result_'+str(5)+'.csv'), [256])
 # print("enc: ", conv[:10], "argmax: ", np.argmax(conv[:10]))

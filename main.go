@@ -283,8 +283,8 @@ func main() {
 
 	// testConv_BNRelu_BL("TransConv", true)
 	// testConv_noBoot_BL("TransConv", true)
-	// testResNet_BL()
-	testReduceMean_BL()
+	testResNet_BL()
+	// testReduceMean_BL()
 
 	// basic()
 
@@ -417,7 +417,7 @@ func prt_vecc(vec []complex128) {
 
 // print slice (back and forth prt_size elements)
 func prt_vec(vec []float64) {
-	prt_size := 10
+	prt_size := 32
 	total_size := len(vec)
 
 	if total_size <= 2*prt_size {
@@ -447,7 +447,7 @@ func prt_mat_BL(vec []complex128, batch, show int) {
 	tmp := make([]float64, batch)
 	for i := 1; i < in_wid+1; i++ {
 		for j := 1; j < in_wid+1; j++ {
-			if (show == 0) || (((i == 1) || (i == show)) && ((j <= 3) || (j >= show-3))) {
+			if (show == 0) || (((i <= show) || (i+show > in_wid)) && ((j <= show) || (j+show > in_wid))) {
 				fmt.Printf("(%d, %d): ", i, j)
 				for b := 0; b < batch; b++ {
 					tmp[b] = real(vec[in_wid*in_wid*b+(i-1)*in_wid+(j-1)])
