@@ -162,10 +162,10 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 				rotations = append(rotations, i)
 			}
 			for i := 1; i < 4; i *= 2 {
-				rotations = append(rotations, i*16*64)
+				rotations = append(rotations, i*16*64*8)
 			}
 			for i := 1; i < 16; i++ {
-				rotations = append(rotations, -(64-i)*64)
+				rotations = append(rotations, i*64*8)
 			}
 		}
 	case "Conv": // we assume manual padding using kp_wid
@@ -285,6 +285,7 @@ func main() {
 	// testConv_noBoot_BL("TransConv", true)
 	testResNet_BL()
 	// testReduceMean_BL()
+	// testResNet_in_BL(iter)
 
 	// basic()
 
@@ -492,6 +493,18 @@ func prt_mat_one(vec []float64, batch, sj, sk int) (out []float64) {
 			j++
 		}
 	}
+	return out
+}
+
+// only 10, (1,1) element in all batches (1,0,0,0,0,0,0,0,2,0,0,0,0,0,...)
+func prt_mat_one_BL(vec []complex128, max_bat int) (out []float64) {
+	mat_size := len(vec) / max_bat
+	out = make([]float64, 10)
+
+	for i := range out {
+		out[i] = real(vec[i*mat_size*8])
+	}
+
 	return out
 }
 

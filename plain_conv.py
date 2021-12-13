@@ -314,12 +314,12 @@ def separate_data(num_outs):
 # separate_data(300)
 # trans_conv_bnReLU_BL_bench()
 #conv_bnReLU_BL_bench(False)
-plain_resnet_bench()
+# plain_resnet_bench()
 # post_process(1000)
 # num_samples = 100
 # pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
 
-# test_RMFC()
+test_RMFC()
 # exit(1)
 
 # trans = True

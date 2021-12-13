@@ -590,52 +590,6 @@ func testResNet_in(iter int) {
 	}
 	fmt.Println("Input: ")
 	prt_mat(input, max_batch[0], 3)
-
-	// ker_in1 := make([]float64, real_batch[0]*real_batch[0]*ker_size)
-	// for i := range ker_in1 {
-	// 	ker_in1[i] = 0.5 * float64(i) / float64(len(ker_in1))
-	// }
-	// ker_in12 := make([]float64, real_batch[0]*real_batch[1]*ker_size)
-	// for i := range ker_in12 {
-	// 	ker_in12[i] = 0.5 * float64(i) / float64(len(ker_in12))
-	// }
-	// ker_in12_0 := make([]float64, len(ker_in12)/2)
-	// ker_in12_1 := make([]float64, len(ker_in12)/2)
-	// for i := range ker_in12_0 {
-	// 	ker_in12_0[i] = ker_in12[(i/(real_batch[1]/2))*real_batch[1]+i%(real_batch[1]/2)]
-	// 	ker_in12_1[i] = ker_in12[(i/(real_batch[1]/2))*real_batch[1]+i%(real_batch[1]/2)+real_batch[1]/2]
-	// }
-	// ker_in2 := make([]float64, real_batch[1]*real_batch[1]*ker_size)
-	// for i := range ker_in2 {
-	// 	ker_in2[i] = 0.5 * float64(i) / float64(len(ker_in2))
-	// }
-	// ker_in23 := make([]float64, real_batch[1]*real_batch[2]*ker_size)
-	// for i := range ker_in23 {
-	// 	ker_in23[i] = 0.5 * float64(i) / float64(len(ker_in23))
-	// }
-	// ker_in3 := make([]float64, real_batch[2]*real_batch[2]*ker_size)
-	// for i := range ker_in3 {
-	// 	ker_in3[i] = 0.5 * float64(i) / float64(len(ker_in3))
-	// }
-	// bn_a := make([]float64, real_batch[0])
-	// bn_b := make([]float64, real_batch[0])
-	// for i := range bn_a {
-	// 	bn_a[i] = 0.02 // * float64(i) / float64(batch)
-	// 	bn_b[i] = 0.0  //0.1 * float64(i) // float64(real_batch[0])
-	// }
-	// bn_a2 := make([]float64, real_batch[1])
-	// bn_b2 := make([]float64, real_batch[1])
-	// for i := range bn_a2 {
-	// 	bn_a2[i] = 0.02 // * float64(i) / float64(batch)
-	// 	bn_b2[i] = 0.0  //0.1 * float64(i)
-	// }
-	// bn_a3 := make([]float64, real_batch[2])
-	// bn_b3 := make([]float64, real_batch[2])
-	// for i := range bn_a3 {
-	// 	bn_a3[i] = 0.02 // * float64(i) / float64(batch)
-	// 	bn_b3[i] = 0.0  //0.1 * float64(i)
-	// }
-
 	fmt.Println("vec size: ", cont.N)
 	fmt.Println("input width: ", raw_in_wids)
 	fmt.Println("kernel width: ", ker_wid)

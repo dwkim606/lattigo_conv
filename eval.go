@@ -206,9 +206,66 @@ func evalConv_BNRelu_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, 
 }
 
 // reduce mean and final FC layer (in_batch -> 16)
-// assume that ct_input has batch (1,0,0,0,2,0,0,0,3,0,0,0,4,0,0,0)
+// assume that ct_input has batch (1,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,3,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0)
 // ker_fc is of size in_batch*10 and 1-dim from [64,10] shape
 func evalRMFC_BL(cont *context, ct_input *ckks.Ciphertext, ker_fc, bias []float64, printResult bool) (ct_res *ckks.Ciphertext) {
+	rs_ker := make([][]float64, 64)
+	for i := 0; i < 64; i++ {
+		rs_ker[i] = make([]float64, 16)
+		for j := 0; j < 10; j++ {
+			rs_ker[i][j] = ker_fc[j+i*10] / 64.0 // we will add 64 elts instead of averaging them
+		}
+	}
+
+	// sum 64 elements instead of averaging them
+	ct_avg := ct_input
+	for i := 1; i < 64; i *= 2 {
+		ct_avg = cont.evaluator.AddNew(ct_avg, cont.evaluator.RotateNew(ct_avg, i))
+	}
+
+	// fmt.Println()
+	// fmt.Println("===============  DECRYPTION  ===============")
+	// fmt.Println()
+	// start = time.Now()
+	// vals_tmp := cont.encoder.Decode(cont.decryptor.DecryptNew(ct_avg), cont.logN-1)
+	// fmt.Printf("Decryption Done in %s \n", time.Since(start))
+	// fmt.Print("Result: \n")
+	// prt_mat_BL(vals_tmp, 512, 0)
+
+	for i := 0; i < 16; i++ {
+		tmp := make([]complex128, cont.N/2)
+		for j := 0; j < 64; j++ {
+			tmp[j*64*8] = complex(rs_ker[j][(j%16+16-i)%16], 0)
+		}
+		pl_ker := cont.encoder.EncodeNTTAtLvlNew(ct_avg.Level(), tmp, cont.logN-1)
+
+		if i == 0 {
+			ct_res = cont.evaluator.MulNew(ct_avg, pl_ker)
+		} else {
+			ct_tmp := cont.evaluator.MulNew(ct_avg, pl_ker)
+			cont.evaluator.Add(ct_res, cont.evaluator.RotateNew(ct_tmp, i*64*8), ct_res)
+		}
+	}
+
+	// final rotations to add up (4 = 64/16)
+	for i := 1; i < 4; i *= 2 {
+		ct_res = cont.evaluator.AddNew(ct_res, cont.evaluator.RotateNew(ct_res, i*16*64*8))
+	}
+
+	tmp := make([]complex128, cont.N/2)
+	for j := 0; j < 10; j++ {
+		tmp[j*64*8] = complex(bias[j], 0)
+	}
+	pl_bias := cont.encoder.EncodeNTTAtLvlNew(ct_res.Level(), tmp, cont.logN-1)
+	cont.evaluator.Add(ct_res, pl_bias, ct_res)
+
+	return
+}
+
+// reduce mean and final FC layer (in_batch -> 16)
+// assume that ct_input has batch (1,0,0,0,2,0,0,0,3,0,0,0,4,0,0,0 || 0, ..., 0)
+// ker_fc is of size in_batch*10 and 1-dim from [64,10] shape
+func evalRMFC_BL_old(cont *context, ct_input *ckks.Ciphertext, ker_fc, bias []float64, printResult bool) (ct_res *ckks.Ciphertext) {
 	rs_ker := make([][]float64, 64)
 	for i := 0; i < 64; i++ {
 		rs_ker[i] = make([]float64, 16)
