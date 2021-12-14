@@ -20,6 +20,53 @@ def prt_list(input, start, width, showAll):
         for i in range(width):
             print(input[start + i * width: start + i * width + width])
 
+def plain_imagenet_bench():
+    input_width = 16
+    num_bl1 = 2
+    num_bl2 = 2
+    batch = 2
+    vec_size = batch*input_width**2
+    ker_width = 3
+    bn_a = [0.3, 0.1]
+
+    batch2 = batch*2
+    ker_size = ker_width**2
+
+    print("input width:", input_width)
+    print("batch:", batch)
+    print("ker width:", ker_width)
+    #data = np.loadtxt("./weights/batch0.txt")
+
+    ## Correctness Check: Compare with TF NN CONV2D
+    raw_input = [(10.0 * i)/vec_size for i in range(vec_size)]
+    ker =  [(0.5 * i)/(batch * batch * ker_size) for i in range(batch * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker12 = [(0.5 * i)/(batch * batch2 * ker_size) for i in range(batch * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker2 = [(0.5 * i)/(batch2 * batch2 * ker_size) for i in range(batch2 * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+
+    ten_x = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, input_width, input_width, batch])
+    ten_k = tf.reshape(tf.constant(np.array(ker), tf.float32), [ker_width, ker_width, batch, batch])
+    ten_k12 = tf.reshape(tf.constant(np.array(ker12), tf.float32), [ker_width, ker_width, batch, batch2])
+    ten_k2 = tf.reshape(tf.constant(np.array(ker2), tf.float32), [ker_width, ker_width, batch2, batch2])
+
+    conv = ten_x
+    print("Input: ", conv)
+    for i in range(num_bl1):
+        conv = tf.nn.conv2d(conv, ten_k, strides = [1,1,1,1], padding = "SAME")*bn_a[0]
+        conv = tf.nn.relu(conv)
+        print(i+1,"layer done\n")
+    print("after 1st block\n", conv, "\n")
+
+    conv = tf.nn.conv2d(conv, ten_k12, strides = [1,2,2,1], padding = "SAME")*bn_a[1]
+    conv = tf.nn.relu(conv)
+    print("after 1st to 2nd block\n", conv, "\n")
+
+    for i in range(num_bl2):
+        conv = tf.nn.conv2d(conv, ten_k2, strides = [1,1,1,1], padding = "SAME")*bn_a[1]
+        conv = tf.nn.relu(conv)
+        print(i+1,"layer done\n")
+    print("after 2nd block\n", conv, "\n")
+
+
 def plain_resnet_bench():
     input_width = 32
     batch = 1
@@ -319,7 +366,8 @@ def separate_data(num_outs):
 # num_samples = 100
 # pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
 
-test_RMFC()
+plain_imagenet_bench()
+# test_RMFC()
 # exit(1)
 
 # trans = True

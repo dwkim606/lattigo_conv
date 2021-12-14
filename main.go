@@ -50,7 +50,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	copy(cont.kp_wids, kp_wids)
 
 	btpParams := ckks.DefaultBootstrapParams[6]
-	if (kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet") {
+	if (kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet") || (kind == "BL_Imagenet") {
 		btpParams = ckks.DefaultBootstrapParams[7]
 	}
 	cont.params, err = btpParams.Params()
@@ -142,7 +142,10 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 				}
 			}
 			out_batch := ((cont.N / 2) / (elt * elt)) / (1 << (i + 1)) // originally (cont.N / 2) / (elt * elt)
-			for k := 1; k < out_batch; k++ {                           // rotations for conv
+			if i == 0 {
+				out_batch = cont.N / (2 * elt * elt)
+			}
+			for k := 1; k < out_batch; k++ { // rotations for conv
 				rotations = append(rotations, k*elt*elt)
 			}
 			for pos := 0; pos < 4; pos++ { // for final rotations for after strides
@@ -167,6 +170,33 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 			for i := 1; i < 16; i++ {
 				rotations = append(rotations, i*64*8)
 			}
+			rotations = removeDuplicateInt(rotations)
+		}
+	case "BL_Imagenet":
+		for _, elt := range cont.in_wids {
+			for k := -(ker_wid / 2); k <= ker_wid/2; k++ { // rotations for conv
+				for k2 := -(ker_wid / 2); k2 <= ker_wid/2; k2++ {
+					rotations = append(rotations, k*elt+k2)
+				}
+			}
+			out_batch := (cont.N / 2) / (elt * elt)
+			for k := 1; k < out_batch; k++ { // rotations for conv
+				rotations = append(rotations, k*elt*elt)
+			}
+			for pos := 0; pos < 4; pos++ { // for final rotations for after strides
+				rotations = append(rotations, -pos*elt*elt/4)
+			}
+			cont.m_idx[elt] = make([]map[int][]int, 1)
+			cont.r_idx[elt] = make([]map[int][]int, 1)
+			cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_comprs_BL(cont.N/2, elt)
+
+			for k := range cont.m_idx[elt][0] {
+				rotations = append(rotations, k)
+			}
+			for k := range cont.r_idx[elt][0] {
+				rotations = append(rotations, k)
+			}
+			rotations = removeDuplicateInt(rotations)
 		}
 	case "Conv": // we assume manual padding using kp_wid
 		if boot {
@@ -248,7 +278,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	cont.encryptor = ckks.NewEncryptor(cont.params, sk)
 	cont.evaluator = ckks.NewEvaluator(cont.params, rlwe.EvaluationKey{Rlk: rlk, Rtks: rotkeys})
 
-	if !((kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet")) {
+	if !((kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet") || (kind == "BL_Imagenet")) {
 		cont.pl_idx, cont.pack_evaluator = gen_idxNlogs(cont.ECD_LV, kgen, sk, cont.encoder, cont.params)
 	}
 
@@ -259,7 +289,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 		rotkeys = kgen.GenRotationKeysForRotations(rotations, true, sk)
 		btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
 
-		if (kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet") {
+		if (kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet") || (kind == "BL_Imagenet") {
 			if cont.btp, err = ckks.NewBootstrapper(cont.params, btpParams, btpKey); err != nil {
 				panic(err)
 			}
@@ -278,14 +308,16 @@ func main() {
 
 	// testConv_noBoot(7, 8, 8, true)
 
+	testImageNet_BL()
+
 	// iter, _ := strconv.Atoi(os.Args[1])
+	// testResNet_in_BL(iter)
 	// testResNet_in(0)
 
 	// testConv_BNRelu_BL("TransConv", true)
 	// testConv_noBoot_BL("TransConv", true)
-	testResNet_BL()
+	// testResNet_BL()
 	// testReduceMean_BL()
-	// testResNet_in_BL(iter)
 
 	// basic()
 
@@ -585,4 +617,16 @@ func prep_Input(input []float64, raw_in_wid, in_wid, N int, trans, printResult b
 	}
 
 	return out
+}
+
+func removeDuplicateInt(intSlice []int) []int {
+	allKeys := make(map[int]bool)
+	list := []int{}
+	for _, item := range intSlice {
+		if _, value := allKeys[item]; !value {
+			allKeys[item] = true
+			list = append(list, item)
+		}
+	}
+	return list
 }
