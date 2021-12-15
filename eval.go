@@ -94,7 +94,13 @@ func evalConv_BN_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b
 	ct_inputs_rots := preConv_BL(cont.evaluator, ct_input, in_wid, ker_wid)
 	fmt.Printf("preConv done in %s \n", time.Since(start))
 
-	for i := 0; i < real_ob; i++ {
+	var rot_iters int
+	if norm*real_ob == max_batch {
+		rot_iters = real_ob
+	} else {
+		rot_iters = max_batch
+	}
+	for i := 0; i < rot_iters; i++ {
 		ct_tmp := postConv_BL(cont.params, cont.encoder, cont.evaluator, ct_inputs_rots, in_wid, ker_wid, norm*i, max_ker_rs)
 		if i == 0 {
 			ct_res = ct_tmp

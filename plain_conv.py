@@ -24,7 +24,7 @@ def plain_imagenet_bench():
     input_width = 16
     num_bl1 = 2
     num_bl2 = 2
-    batch = 2
+    batch = 16
     vec_size = batch*input_width**2
     ker_width = 3
     bn_a = [0.3, 0.1]
@@ -38,10 +38,10 @@ def plain_imagenet_bench():
     #data = np.loadtxt("./weights/batch0.txt")
 
     ## Correctness Check: Compare with TF NN CONV2D
-    raw_input = [(10.0 * i)/vec_size for i in range(vec_size)]
-    ker =  [(0.5 * i)/(batch * batch * ker_size) for i in range(batch * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
-    ker12 = [(0.5 * i)/(batch * batch2 * ker_size) for i in range(batch * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
-    ker2 = [(0.5 * i)/(batch2 * batch2 * ker_size) for i in range(batch2 * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    raw_input = [(1.0 * i)/vec_size for i in range(vec_size)]
+    ker =  [(0.1 * i)/(batch * batch * ker_size) for i in range(batch * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker12 = [(0.1 * i)/(batch * batch2 * ker_size) for i in range(batch * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker2 = [(0.1 * i)/(batch2 * batch2 * ker_size) for i in range(batch2 * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
 
     ten_x = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, input_width, input_width, batch])
     ten_k = tf.reshape(tf.constant(np.array(ker), tf.float32), [ker_width, ker_width, batch, batch])
@@ -69,10 +69,10 @@ def plain_imagenet_bench():
 
 def plain_resnet_bench():
     input_width = 32
-    batch = 1
-    vec_size = batch*input_width**2
+    batch = 4
+    vec_size = 3*input_width**2
     ker_width = 3
-    bn_a = [0.3, 0.3, 0.1]
+    bn_a = [0.2, 0.2, 0.1]
 
     batch2 = batch*2
     batch3 = batch2*2
@@ -84,15 +84,17 @@ def plain_resnet_bench():
     #data = np.loadtxt("./weights/batch0.txt")
 
     ## Correctness Check: Compare with TF NN CONV2D
-    raw_input = [(10.0 * i)/vec_size for i in range(vec_size)]
-    ker =  [(0.5 * i)/(batch * batch * ker_size) for i in range(batch * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
-    ker12 = [(0.5 * i)/(batch * batch2 * ker_size) for i in range(batch * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
-    ker2 = [(0.5 * i)/(batch2 * batch2 * ker_size) for i in range(batch2 * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
-    ker23 = [(0.5 * i)/(batch2 * batch3 * ker_size) for i in range(batch2 * batch3 * ker_size)]  # (0.5 * i)/(batch2 * batch3 * ker_size) #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
-    ker3 = [(0.5 * i)/(batch3 * batch3 * ker_size) for i in range(batch3 * batch3 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    raw_input = [(5.0 * i)/vec_size for i in range(vec_size)]
+    ker0 = [(0.25 * i)/(3 * batch * ker_size) for i in range(3 * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker =  [(0.25 * i)/(batch * batch * ker_size) for i in range(batch * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker12 = [(0.25 * i)/(batch * batch2 * ker_size) for i in range(batch * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker2 = [(0.25 * i)/(batch2 * batch2 * ker_size) for i in range(batch2 * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker23 = [(0.25 * i)/(batch2 * batch3 * ker_size) for i in range(batch2 * batch3 * ker_size)]  # (0.5 * i)/(batch2 * batch3 * ker_size) #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker3 = [(0.25 * i)/(batch3 * batch3 * ker_size) for i in range(batch3 * batch3 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
 
-    ten_x = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, input_width, input_width, batch])
+    ten_x = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, input_width, input_width, 3])
     # print(ten_x)
+    ten_k0 = tf.reshape(tf.constant(np.array(ker0), tf.float32), [ker_width, ker_width, 3, batch])
     ten_k = tf.reshape(tf.constant(np.array(ker), tf.float32), [ker_width, ker_width, batch, batch])
     ten_k12 = tf.reshape(tf.constant(np.array(ker12), tf.float32), [ker_width, ker_width, batch, batch2])
     ten_k2 = tf.reshape(tf.constant(np.array(ker2), tf.float32), [ker_width, ker_width, batch2, batch2])
@@ -102,14 +104,17 @@ def plain_resnet_bench():
 
     # conv = tf.nn.conv2d_transpose(ten_x, ten_k1, output_shape=(1, input_width[1], input_width[1], batch[1]), strides=[1, 2, 2, 1])
 
-    num_bl1 = 2
-    num_bl2 = 2
-    num_bl3 = 2
+    num_bl1 = 1
+    num_bl2 = 1
+    num_bl3 = 1
 
     conv = ten_x
     print("Input: ", conv)
     for i in range(num_bl1):
-        conv = tf.nn.conv2d(conv, ten_k, strides = [1,1,1,1], padding = "SAME")*bn_a[0]
+        if i == 0:
+            conv = tf.nn.conv2d(conv, ten_k0, strides = [1,1,1,1], padding = "SAME")*bn_a[0]    
+        else:
+            conv = tf.nn.conv2d(conv, ten_k, strides = [1,1,1,1], padding = "SAME")*bn_a[0]
         conv = tf.nn.relu(conv)
         print(i+1,"layer done\n")
     print("after 1st block\n", conv, "\n")
@@ -247,6 +252,10 @@ def plain_resnet(input_image):
             ten_b = tf.reshape(tf.constant(bn_b, tf.float32), [1, in_wid[blc], in_wid[blc], batch[blc]])
             conv = ten_a * conv + ten_b
             conv = tf.nn.relu(conv)
+            if i == 0:
+                print(blc," to ", blc+1," block. ", conv)
+            else:
+                print(blc+1,"-th block, ", i,"-th layer", conv)
             num += 1
             # print(i+1,"layer done\n")
         # print("after", blc_iter+1, "-th block\n", conv, "\n")
@@ -360,15 +369,15 @@ def separate_data(num_outs):
 
 # separate_data(300)
 # trans_conv_bnReLU_BL_bench()
-#conv_bnReLU_BL_bench(False)
+# conv_bnReLU_BL_bench(False)
 # plain_resnet_bench()
+# exit(1)
 # post_process(1000)
 # num_samples = 100
 # pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
 
 plain_imagenet_bench()
 # test_RMFC()
-# exit(1)
 
 # trans = True
 # strides = True
@@ -386,8 +395,11 @@ plain_imagenet_bench()
 # for i in range(num_samples):
 #     np.savetxt('test_data/test_image_'+str(i)+'.csv',np.reshape(tf_images[i,:,:,:], [-1]), fmt='%.18e', delimiter=',')
     
-
-# predictions = plain_resnet(tf_images)
+print("Resnet\n")
+tf_images = tf.reshape(tf.constant(np.loadtxt('Resnet_plain_data/test_images_'+str(100)+'.csv'), tf.float32), [100, 32, 32, 3])
+tf_image = tf.reshape(tf_images[0, :, :, :], [1,32,32,3])
+print(tf_image)
+plain_resnet(tf_image)
 # np.savetxt('plain_prediction'+str(num_samples)+'.csv',np.reshape(predictions, [-1]), fmt='%.18e', delimiter=',')
 # print("num samples: ", len(tf_labels), "precision: ", tf.reduce_mean(tf.cast(tf.equal(predictions, tf_labels), 'float32')))
 

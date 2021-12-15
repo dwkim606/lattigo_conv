@@ -141,12 +141,13 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 					rotations = append(rotations, k*elt+k2)
 				}
 			}
-			out_batch := ((cont.N / 2) / (elt * elt)) / (1 << (i + 1)) // originally (cont.N / 2) / (elt * elt)
+			max_out_batch := cont.N / (2 * elt * elt) // originally (cont.N / 2) / (elt * elt)
+			norm := 1 << (i + 1)
 			if i == 0 {
-				out_batch = cont.N / (2 * elt * elt)
+				norm = 1
 			}
-			for k := 1; k < out_batch; k++ { // rotations for conv
-				rotations = append(rotations, k*elt*elt)
+			for k := 1; k < max_out_batch/norm; k++ { // rotations for post conv
+				rotations = append(rotations, norm*k*elt*elt)
 			}
 			for pos := 0; pos < 4; pos++ { // for final rotations for after strides
 				rotations = append(rotations, -pos*elt*elt/4)

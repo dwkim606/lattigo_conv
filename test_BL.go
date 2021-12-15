@@ -209,13 +209,13 @@ func testConv_BNRelu_BL(in_kind string, printResult bool) {
 
 // alomst the same as ResNet, but use smaller batches for testing
 func testResNet_BL() {
-	num_blc1 := 2
-	num_blc2 := 2
-	num_blc3 := 2
-	logN := 12
-	in_wids := []int{32, 16, 8}  // = raw_in_wids = same as python
-	real_batch := []int{1, 2, 4} // same as python
-	py_bn_a := []float64{0.3, 0.3, 0.1}
+	num_blc1 := 1
+	num_blc2 := 1
+	num_blc3 := 1
+	logN := 14
+	in_wids := []int{32, 16, 8}   // = raw_in_wids = same as python
+	real_batch := []int{4, 8, 16} // same as python
+	py_bn_a := []float64{0.2, 0.2, 0.1}
 	ker_wid := 3
 	kp_wids := make([]int, len(in_wids)) // NOT used in BL
 	copy(kp_wids, in_wids)
@@ -233,31 +233,35 @@ func testResNet_BL() {
 	for i := 0; i < in_wids[0]; i++ {
 		for j := 0; j < in_wids[0]; j++ {
 			for b := 0; b < max_batch[0]; b++ {
-				if (i < in_wids[0]) && (j < in_wids[0]) && (b < real_batch[0]) {
+				if (i < in_wids[0]) && (j < in_wids[0]) && (b < 3) {
 					input[i*in_wids[0]*max_batch[0]+j*max_batch[0]+b] = k
-					k += (10.0 / float64(real_batch[0]*(in_wids[0])*(in_wids[0])))
+					k += (5.0 / float64(3*(in_wids[0])*(in_wids[0])))
 				}
 			}
 		}
 	}
 	fmt.Println("Input: ")
 	prt_mat(input, max_batch[0], 3)
+	ker_in0 := make([]float64, 3*real_batch[0]*ker_size)
+	for i := range ker_in0 {
+		ker_in0[i] = 0.25 * float64(i) / float64(len(ker_in0))
+	}
 	ker_in := make([]float64, real_batch[0]*real_batch[0]*ker_size)
 	for i := range ker_in {
-		ker_in[i] = 0.5 * float64(i) / float64(len(ker_in))
+		ker_in[i] = 0.25 * float64(i) / float64(len(ker_in))
 	}
 	ker_in12 := make([]float64, real_batch[0]*real_batch[1]*ker_size)
 	for i := range ker_in12 {
-		ker_in12[i] = 0.5 * float64(i) / float64(len(ker_in12))
+		ker_in12[i] = 0.25 * float64(i) / float64(len(ker_in12))
 	}
 	ker_in2 := make([]float64, real_batch[1]*real_batch[1]*ker_size)
 	for i := range ker_in2 {
-		ker_in2[i] = 0.5 * float64(i) / float64(len(ker_in2))
+		ker_in2[i] = 0.25 * float64(i) / float64(len(ker_in2))
 	}
 	ker_in23 := make([]float64, real_batch[1]*real_batch[2]*ker_size)
 	for i := range ker_in23 {
 		// ker_in23[i] = 1.0
-		ker_in23[i] = 0.5 * float64(i) / float64(len(ker_in23))
+		ker_in23[i] = 0.25 * float64(i) / float64(len(ker_in23))
 	}
 	ker_in23_0 := make([]float64, len(ker_in23)/2)
 	ker_in23_1 := make([]float64, len(ker_in23)/2)
@@ -274,7 +278,7 @@ func testResNet_BL() {
 
 	ker_in3 := make([]float64, real_batch[2]*real_batch[2]*ker_size)
 	for i := range ker_in3 {
-		ker_in3[i] = 0.5 * float64(i) / float64(len(ker_in3))
+		ker_in3[i] = 0.25 * float64(i) / float64(len(ker_in3))
 	}
 	bn_a := make([]float64, real_batch[0])
 	bn_b := make([]float64, real_batch[0])
@@ -330,7 +334,11 @@ func testResNet_BL() {
 		if i == num_blc1 {
 			prt_result = true
 		}
-		ct_layer = evalConv_BNRelu_BL(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], ker_wid, real_batch[0], real_batch[0], 1, false, false, prt_result)
+		if i == 1 {
+			ct_layer = evalConv_BNRelu_BL(cont, ct_layer, ker_in0, bn_a, bn_b, alpha, in_wids[0], ker_wid, 3, real_batch[0], 1, false, false, prt_result)
+		} else {
+			ct_layer = evalConv_BNRelu_BL(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], ker_wid, real_batch[0], real_batch[0], 1, false, false, prt_result)
+		}
 		fmt.Println("Block1, Layer ", i, "done!")
 	}
 	fmt.Println("done.")
@@ -492,7 +500,7 @@ func testResNet_in_BL(iter int) {
 
 	// ResNet Block 1
 	ct_layer := ct_input
-	prt_result := false
+	prt_result := true
 	for i := 1; i <= num_blc1; i++ {
 		if i == num_blc1 {
 			prt_result = true
@@ -520,7 +528,7 @@ func testResNet_in_BL(iter int) {
 
 	// ResNet Block 2
 	ct_layer2 := ct_result
-	prt_result = false
+	prt_result = true
 	for i := 1; i <= num_blc2; i++ {
 		if i == num_blc2 {
 			prt_result = true
@@ -608,7 +616,7 @@ func testResNet_in_BL(iter int) {
 
 	// ResNet Block 3
 	ct_layer3 := ct_result
-	prt_result = false
+	prt_result = true
 	for i := 1; i <= num_blc3; i++ {
 		if i == num_blc3 {
 			prt_result = true
@@ -719,9 +727,9 @@ func testReduceMean_BL() {
 func testImageNet_BL() {
 	num_blc1 := 2
 	num_blc2 := 2
-	logN := 9
-	in_wids := []int{16, 8}   // = raw_in_wids = same as python
-	real_batch := []int{2, 4} // same as python
+	logN := 16
+	in_wids := []int{256, 128}  // = raw_in_wids = same as python
+	real_batch := []int{16, 32} // same as python
 	py_bn_a := []float64{0.3, 0.1}
 	ker_wid := 3
 	kp_wids := make([]int, len(in_wids)) // NOT used in BL
@@ -741,7 +749,7 @@ func testImageNet_BL() {
 		for j := 0; j < in_wids[0]; j++ {
 			for b := 0; b < real_batch[0]; b++ {
 				input[i*in_wids[0]*real_batch[0]+j*real_batch[0]+b] = k
-				k += (10.0 / float64(real_batch[0]*in_wids[0]*in_wids[0]))
+				k += (1.0 / float64(real_batch[0]*in_wids[0]*in_wids[0]))
 			}
 		}
 	}
@@ -758,7 +766,7 @@ func testImageNet_BL() {
 
 	ker_in := make([]float64, real_batch[0]*real_batch[0]*ker_size)
 	for i := range ker_in {
-		ker_in[i] = 0.5 * float64(i) / float64(len(ker_in))
+		ker_in[i] = 0.1 * float64(i) / float64(len(ker_in))
 	}
 	ker_in_11 := make([]float64, len(ker_in)/4)
 	ker_in_12 := make([]float64, len(ker_in)/4)
@@ -779,7 +787,7 @@ func testImageNet_BL() {
 
 	ker_in12 := make([]float64, real_batch[0]*real_batch[1]*ker_size)
 	for i := range ker_in12 {
-		ker_in12[i] = 0.5 * float64(i) / float64(len(ker_in12))
+		ker_in12[i] = 0.1 * float64(i) / float64(len(ker_in12))
 	}
 	ker_in12_11 := make([]float64, len(ker_in12)/8)
 	ker_in12_21 := make([]float64, len(ker_in12)/8)
@@ -809,7 +817,7 @@ func testImageNet_BL() {
 
 	ker_in2 := make([]float64, real_batch[1]*real_batch[1]*ker_size)
 	for i := range ker_in2 {
-		ker_in2[i] = 0.5 * float64(i) / float64(len(ker_in2))
+		ker_in2[i] = 0.1 * float64(i) / float64(len(ker_in2))
 	}
 
 	bn_a := make([]float64, real_batch[0])
