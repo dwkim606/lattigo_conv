@@ -299,12 +299,16 @@ func gen_idxNlogs(E_lv int, keygen rlwe.KeyGenerator, sk *rlwe.SecretKey, encode
 // Pack cnum (alwyas Po2) number of ctxts(in_a[i]) into one
 // Each in_a[i] must be arrvec (i.e., sparse with steps) with full size
 // Also get the plaintexts idx[i] = X^i from gen_idx
-func pack_ctxts(pack_eval ckks.Evaluator, ctxts_in []*ckks.Ciphertext, cnum int, idx []*ckks.Plaintext, params ckks.Parameters) (ctxt *ckks.Ciphertext) {
-	step := cnum / 2
-	ctxts := make([]*ckks.Ciphertext, cnum)
-	for i := 0; i < cnum; i++ {
-		ctxts[i] = ctxts_in[i].CopyNew()
-		ctxts[i].SetScalingFactor(ctxts[i].Scale * float64(cnum))
+func pack_ctxts(pack_eval ckks.Evaluator, ctxts_in []*ckks.Ciphertext, max_cnum, real_cnum int, idx []*ckks.Plaintext, params ckks.Parameters) (ctxt *ckks.Ciphertext) {
+	step := max_cnum / 2
+	// step := real_cnum / 2
+	norm := max_cnum / real_cnum
+	ctxts := make([]*ckks.Ciphertext, max_cnum)
+	for i := 0; i < max_cnum; i++ {
+		if i%norm == 0 {
+			ctxts[i] = ctxts_in[i].CopyNew()
+			ctxts[i].SetScalingFactor(ctxts[i].Scale * float64(real_cnum))
+		}
 	}
 
 	var tmp1, tmp2 *ckks.Ciphertext
@@ -315,8 +319,8 @@ func pack_ctxts(pack_eval ckks.Evaluator, ctxts_in []*ckks.Ciphertext, cnum int,
 	}
 	j := params.LogN() - logStep
 
-	for step > 0 {
-		for i := 0; i < step; i++ {
+	for step >= norm {
+		for i := 0; i < step; i += norm {
 			tmp1 = pack_eval.MulNew(ctxts[i+step], idx[logStep])
 			tmp2 = pack_eval.SubNew(ctxts[i], tmp1)
 			pack_eval.Add(ctxts[i], tmp1, tmp1)
@@ -340,7 +344,7 @@ func bsgs_ctxt(eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext
 		for i := range elt {
 			tmp[i] = complex(float64(elt[i]), 0)
 		}
-		plain_tmp := ckks.NewPlaintext(params, input.Level(), math.Sqrt(params.Scale())) // set scale of rot idx to be 2^(scale/2)
+		plain_tmp := ckks.NewPlaintext(params, input.Level(), 32768.0) // set scale of rot idx to be 2^(scale/2)
 		encoder.EncodeNTT(plain_tmp, tmp, params.LogSlots())
 
 		if st {
@@ -358,7 +362,7 @@ func bsgs_ctxt(eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext
 		for i := range elt {
 			tmp[i] = complex(float64(elt[i]), 0)
 		}
-		plain_tmp := ckks.NewPlaintext(params, input.Level(), math.Sqrt(params.Scale())) // set scale of rot idx to be 2^(scale/2)
+		plain_tmp := ckks.NewPlaintext(params, input.Level(), 32768.0) // set scale of rot idx to be 2^(scale/2)
 		encoder.EncodeNTT(plain_tmp, tmp, params.LogSlots())
 
 		if st {
@@ -619,7 +623,7 @@ func postConv_BL(param ckks.Parameters, encoder ckks.Encoder, evaluator ckks.Eva
 // in_wid : width of input (include padding)
 // BN_a: coefficient to be multiplied (for BN)
 // real_ib, real_ob: real batches for kernel <=> set the same as python
-func prep_Ker(params ckks.Parameters, encoder ckks.Encoder, ker_in, BN_a []float64, in_wid, ker_wid, real_ib, real_ob, ECD_LV, pos int, trans bool) (pl_ker []*ckks.Plaintext) {
+func prep_Ker(params ckks.Parameters, encoder ckks.Encoder, ker_in, BN_a []float64, in_wid, ker_wid, real_ib, real_ob, norm, ECD_LV, pos int, trans bool) (pl_ker []*ckks.Plaintext) {
 	max_bat := params.N() / (in_wid * in_wid)
 	ker_size := ker_wid * ker_wid
 	ker_rs := reshape_ker(ker_in, ker_size, real_ob, trans) // ker1[i][j] = j-th kernel for i-th output
@@ -633,9 +637,11 @@ func prep_Ker(params ckks.Parameters, encoder ckks.Encoder, ker_in, BN_a []float
 	max_ker_rs := make([][]float64, max_bat) // overloading ker_rs to the case with max_batch
 	for i := 0; i < max_bat; i++ {
 		max_ker_rs[i] = make([]float64, max_bat*ker_size)
-		if i < real_ob {
-			for j := 0; j < real_ib*ker_size; j++ {
-				max_ker_rs[i][j] = ker_rs[i][j]
+	}
+	for i := 0; i < real_ob; i++ {
+		for j := 0; j < real_ib; j++ {
+			for k := 0; k < ker_size; k++ {
+				max_ker_rs[norm*i][norm*j*ker_size+k] = ker_rs[i][j*ker_size+k]
 			}
 		}
 	}
@@ -669,7 +675,7 @@ func conv_then_pack_trans(params ckks.Parameters, pack_evaluator ckks.Evaluator,
 		}
 	}
 
-	ctxt_result := pack_ctxts(pack_evaluator, ctxt_out, batch_out, plain_idx, params)
+	ctxt_result := pack_ctxts(pack_evaluator, ctxt_out, batch_out, batch_out, plain_idx, params)
 	fmt.Println("Result Scale: ", math.Log2(ctxt_result.Scale))
 	fmt.Println("Result LV: ", ctxt_result.Level())
 	fmt.Printf("Done in %s \n", time.Since(start))
@@ -679,13 +685,15 @@ func conv_then_pack_trans(params ckks.Parameters, pack_evaluator ckks.Evaluator,
 
 // Eval Conv, then Pack
 // The ciphertexts must be packed into full (without vacant position)
-func conv_then_pack(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_in *ckks.Ciphertext, pl_ker []*ckks.Plaintext, plain_idx []*ckks.Plaintext, max_ob, ECD_LV int, scale_exp float64) *ckks.Ciphertext {
+func conv_then_pack(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_in *ckks.Ciphertext, pl_ker []*ckks.Plaintext, plain_idx []*ckks.Plaintext, max_ob, norm, ECD_LV int, scale_exp float64) *ckks.Ciphertext {
 	start := time.Now()
 	ctxt_out := make([]*ckks.Ciphertext, max_ob)
 	for i := 0; i < max_ob; i++ {
-		ctxt_out[i] = pack_evaluator.MulNew(ctxt_in, pl_ker[i])
+		if i%norm == 0 {
+			ctxt_out[i] = pack_evaluator.MulNew(ctxt_in, pl_ker[i])
+		}
 	}
-	ctxt_result := pack_ctxts(pack_evaluator, ctxt_out, max_ob, plain_idx, params)
+	ctxt_result := pack_ctxts(pack_evaluator, ctxt_out, max_ob, max_ob/norm, plain_idx, params)
 
 	fmt.Println("Result Scale: ", math.Log2(ctxt_result.Scale))
 	fmt.Println("Result LV: ", ctxt_result.Level())

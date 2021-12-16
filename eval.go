@@ -105,7 +105,7 @@ func evalConv_BN_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b
 		if i == 0 {
 			ct_res = ct_tmp
 		} else {
-			cont.evaluator.Add(ct_res, cont.evaluator.RotateNew(ct_tmp, norm*i*in_size), ct_res)
+			cont.evaluator.Add(ct_res, cont.evaluator.RotateNew(ct_tmp, norm*i*out_size), ct_res)
 		}
 	}
 
@@ -229,15 +229,6 @@ func evalRMFC_BL(cont *context, ct_input *ckks.Ciphertext, ker_fc, bias []float6
 		ct_avg = cont.evaluator.AddNew(ct_avg, cont.evaluator.RotateNew(ct_avg, i))
 	}
 
-	// fmt.Println()
-	// fmt.Println("===============  DECRYPTION  ===============")
-	// fmt.Println()
-	// start = time.Now()
-	// vals_tmp := cont.encoder.Decode(cont.decryptor.DecryptNew(ct_avg), cont.logN-1)
-	// fmt.Printf("Decryption Done in %s \n", time.Since(start))
-	// fmt.Print("Result: \n")
-	// prt_mat_BL(vals_tmp, 512, 0)
-
 	for i := 0; i < 16; i++ {
 		tmp := make([]complex128, cont.N/2)
 		for j := 0; j < 64; j++ {
@@ -329,23 +320,22 @@ func evalRMFC_BL_old(cont *context, ct_input *ckks.Ciphertext, ker_fc, bias []fl
 // Eval Conv only, always assume max batch
 // in_wid must be Po2 (also include padding),
 // include kernel preparation
-func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob int, printResult, trans bool) (ct_res *ckks.Ciphertext) {
+// norm = 2 : in&out batches are (1,0,2,0,3,0,...)
+func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob, norm int, printResult, trans bool) (ct_res *ckks.Ciphertext) {
 	max_batch := cont.N / (in_wid * in_wid)
 
 	fmt.Println()
 	fmt.Println("===============  (KER) PREPARATION  ===============")
 	fmt.Println()
 	start = time.Now()
-	pl_ker := prep_Ker(cont.params, cont.encoder, ker_in, bn_a, in_wid, ker_wid, real_ib, real_ob, cont.ECD_LV, 0, trans)
+	pl_ker := prep_Ker(cont.params, cont.encoder, ker_in, bn_a, in_wid, ker_wid, real_ib, real_ob, norm, cont.ECD_LV, 0, trans)
 	b_coeffs := make([]float64, cont.N)
 	for i := range bn_b {
-		for j := 0; j < in_wid; j++ {
-			for k := 0; k < in_wid; k++ {
-				b_coeffs[i+(j+k*in_wid)*max_batch] = bn_b[i]
-			}
+		for j := 0; j < in_wid*in_wid; j++ {
+			b_coeffs[norm*i+j*max_batch] = bn_b[i]
 		}
 	}
-	scale_exp := cont.params.Scale() * cont.params.Scale() * float64(max_batch)
+	scale_exp := cont.params.Scale() * cont.params.Scale() * float64(max_batch/norm)
 	pl_bn_b := ckks.NewPlaintext(cont.params, cont.ECD_LV, scale_exp) // contain plaintext values
 	cont.encoder.EncodeCoeffs(b_coeffs, pl_bn_b)
 	cont.encoder.ToNTT(pl_bn_b)
@@ -356,7 +346,7 @@ func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []
 	fmt.Println()
 
 	start = time.Now()
-	ct_res = conv_then_pack(cont.params, cont.pack_evaluator, ct_input, pl_ker, cont.pl_idx, max_batch, cont.ECD_LV, scale_exp)
+	ct_res = conv_then_pack(cont.params, cont.pack_evaluator, ct_input, pl_ker, cont.pl_idx, max_batch, norm, cont.ECD_LV, scale_exp)
 	cont.evaluator.Add(ct_res, pl_bn_b, ct_res) // for Batch Normalization (BN)
 	fmt.Printf("Conv (with BN) Done in %s \n", time.Since(start))
 
@@ -368,10 +358,10 @@ func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []
 // stride = true: apply [1,2,2,1] stride; false: [1,1,1,1]
 // pack_pos: position to pack (0,1,2,3): only for strided case
 // real_ib, real_ob: real number of batches (less or equal than max_batch)
-func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, ker_wid, real_ib, real_ob, pack_pos int, padding, stride, printResult bool) (ct_res *ckks.Ciphertext) {
+func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, ker_wid, real_ib, real_ob, norm, pack_pos int, padding, stride, printResult bool) (ct_res *ckks.Ciphertext) {
 	trans := false
 	kp_wid := in_wid - ((ker_wid - 1) / 2)
-	ct_conv := evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, printResult, trans)
+	ct_conv := evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, printResult, trans)
 	ct_conv.Scale = ct_conv.Scale * math.Pow(2, pow)
 	cfs_preB := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
 	fmt.Println("Bootstrapping... Ours (until CtoS):")
@@ -441,7 +431,7 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 // stride = true: apply [1,2,2,1] stride; false: [1,1,1,1]
 // pack_pos: position to pack (0,1,2,3): only for strided case
 // real_ib, real_ob: real number of batches (less or equal than max_batch)
-func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, kp_wid, ker_wid, real_ib, real_ob, pack_pos int, kind string, printResult bool) (ct_res *ckks.Ciphertext) {
+func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, kp_wid, ker_wid, real_ib, real_ob, norm, pack_pos int, kind string, printResult bool) (ct_res *ckks.Ciphertext) {
 	// kp_wid := in_wid - ((ker_wid - 1) / 2)
 	iter := 2 // for full packing (contrary to half packing)
 	var trans, stride bool
@@ -457,7 +447,7 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 		stride = false
 	}
 
-	ct_conv := evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, printResult, trans)
+	ct_conv := evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, printResult, trans)
 	ct_conv.Scale = ct_conv.Scale * math.Pow(2, pow)
 	cfs_preB := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
 	fmt.Println("Bootstrapping... Ours (until CtoS):")

@@ -309,7 +309,7 @@ func main() {
 
 	// testConv_noBoot(7, 8, 8, true)
 
-	testImageNet_BL()
+	// testImageNet_BL()
 
 	// iter, _ := strconv.Atoi(os.Args[1])
 	// testResNet_in_BL(iter)
@@ -323,7 +323,7 @@ func main() {
 	// basic()
 
 	// testBRrot()
-	// testConv_noBoot(true, true)
+	testConv_noBoot("Conv", true)
 	// testConv_noBoot(7, 8, 5, true, true)
 	// testConv_BNRelu("Conv", true)
 	// testReduceMean()
@@ -583,7 +583,7 @@ func writeTxt(name_file string, input []float64) {
 	file.Close()
 }
 
-func prep_Input(input []float64, raw_in_wid, in_wid, N int, trans, printResult bool) (out []float64) {
+func prep_Input(input []float64, raw_in_wid, in_wid, N, norm int, trans, printResult bool) (out []float64) {
 	out = make([]float64, N)
 	batch := N / (in_wid * in_wid)
 	k := 0
@@ -591,9 +591,9 @@ func prep_Input(input []float64, raw_in_wid, in_wid, N int, trans, printResult b
 	if trans {
 		for i := 0; i < in_wid/2; i++ {
 			for j := 0; j < in_wid/2; j++ {
-				for b := 0; b < batch; b++ {
+				for b := 0; b < batch/norm; b++ {
 					if (i < raw_in_wid) && (j < raw_in_wid) {
-						out[(2*i+1)*in_wid*batch+(2*j+1)*batch+b] = input[k]
+						out[(2*i+1)*in_wid*batch+(2*j+1)*batch+b*norm] = input[k]
 						k++
 					}
 				}
@@ -602,9 +602,9 @@ func prep_Input(input []float64, raw_in_wid, in_wid, N int, trans, printResult b
 	} else {
 		for i := 0; i < in_wid; i++ {
 			for j := 0; j < in_wid; j++ {
-				for b := 0; b < batch; b++ {
+				for b := 0; b < batch/norm; b++ {
 					if (i < raw_in_wid) && (j < raw_in_wid) {
-						out[i*in_wid*batch+j*batch+b] = input[k]
+						out[i*in_wid*batch+j*batch+b*norm] = input[k]
 						k++
 					}
 				}

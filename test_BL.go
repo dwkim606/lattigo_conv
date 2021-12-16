@@ -209,9 +209,9 @@ func testConv_BNRelu_BL(in_kind string, printResult bool) {
 
 // alomst the same as ResNet, but use smaller batches for testing
 func testResNet_BL() {
-	num_blc1 := 1
-	num_blc2 := 1
-	num_blc3 := 1
+	num_blc1 := 2
+	num_blc2 := 2
+	num_blc3 := 2
 	logN := 14
 	in_wids := []int{32, 16, 8}   // = raw_in_wids = same as python
 	real_batch := []int{4, 8, 16} // same as python
@@ -298,9 +298,13 @@ func testResNet_BL() {
 		bn_a3[i] = py_bn_a[2] // * float64(i) / float64(batch)
 		bn_b3[i] = 0.0        //0.1 * float64(i)
 	}
+	bn_a3_0 := make([]float64, real_batch[2]/2)
+	bn_a3_1 := make([]float64, real_batch[2]/2)
 	bn_b3_0 := make([]float64, real_batch[2]/2)
 	bn_b3_1 := make([]float64, real_batch[2]/2)
 	for i := range bn_b3_0 {
+		bn_a3_0[i] = bn_a3[2*i]
+		bn_a3_1[i] = bn_a3[2*i+1]
 		bn_b3_0[i] = bn_b3[2*i]
 		bn_b3_1[i] = bn_b3[2*i+1]
 	}
@@ -548,9 +552,13 @@ func testResNet_in_BL(iter int) {
 	bn_b3 := readTxt("weight_h5/w"+strconv.Itoa(num_blc1+num_blc2+1)+"-b.csv", real_batch[2])
 	ker_in23_0 := make([]float64, len(ker_in23)/2) // ker_in23_0 part outputs (0,2,4,6,... ) outbatches
 	ker_in23_1 := make([]float64, len(ker_in23)/2) // ker_in23_1 part outputs (1,3,5,7,... ) outbatches
+	bn_a3_0 := make([]float64, real_batch[2]/2)
+	bn_a3_1 := make([]float64, real_batch[2]/2)
 	bn_b3_0 := make([]float64, real_batch[2]/2)
 	bn_b3_1 := make([]float64, real_batch[2]/2)
 	for i := range bn_b3_0 {
+		bn_a3_0[i] = bn_a3[2*i]
+		bn_a3_1[i] = bn_a3[2*i+1]
 		bn_b3_0[i] = bn_b3[2*i]
 		bn_b3_1[i] = bn_b3[2*i+1]
 	}
@@ -564,8 +572,8 @@ func testResNet_in_BL(iter int) {
 		}
 	}
 
-	ct_result1 := evalConv_BN_BL(cont, ct_layer2, ker_in23_0, bn_a3, bn_b3_0, in_wids[1], ker_wid, real_batch[1], real_batch[2]/2, 0, 4, false, prt_result)
-	ct_result2 := evalConv_BN_BL(cont, ct_layer2, ker_in23_1, bn_a3, bn_b3_1, in_wids[1], ker_wid, real_batch[1], real_batch[2]/2, 0, 4, false, prt_result)
+	ct_result1 := evalConv_BN_BL(cont, ct_layer2, ker_in23_0, bn_a3_0, bn_b3_0, in_wids[1], ker_wid, real_batch[1], real_batch[2]/2, 0, 4, false, prt_result)
+	ct_result2 := evalConv_BN_BL(cont, ct_layer2, ker_in23_1, bn_a3_1, bn_b3_1, in_wids[1], ker_wid, real_batch[1], real_batch[2]/2, 0, 4, false, prt_result)
 	ct_result1 = evalRot_BL(cont, ct_result1, in_wids[1], 0, false) // ct_result2 = evalRot_BL(cont, ct_result2, in_wids[1], 0, false)
 	ct_result2 = cont.evaluator.RotateNew(evalRot_BL(cont, ct_result2, in_wids[1], 0, false), -in_wids[1]*in_wids[1]*2)
 	ct_result = cont.evaluator.AddNew(ct_result1, ct_result2)
@@ -728,8 +736,8 @@ func testImageNet_BL() {
 	num_blc1 := 2
 	num_blc2 := 2
 	logN := 16
-	in_wids := []int{256, 128}  // = raw_in_wids = same as python
-	real_batch := []int{16, 32} // same as python
+	in_wids := []int{16, 32}      // = raw_in_wids = same as python
+	real_batch := []int{256, 128} // same as python
 	py_bn_a := []float64{0.3, 0.1}
 	ker_wid := 3
 	kp_wids := make([]int, len(in_wids)) // NOT used in BL

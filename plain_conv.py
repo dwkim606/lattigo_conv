@@ -104,9 +104,9 @@ def plain_resnet_bench():
 
     # conv = tf.nn.conv2d_transpose(ten_x, ten_k1, output_shape=(1, input_width[1], input_width[1], batch[1]), strides=[1, 2, 2, 1])
 
-    num_bl1 = 1
-    num_bl2 = 1
-    num_bl3 = 1
+    num_bl1 = 2
+    num_bl2 = 2
+    num_bl3 = 2
 
     conv = ten_x
     print("Input: ", conv)
@@ -145,11 +145,11 @@ def plain_resnet_bench():
         print(i+1,"layer done\n")
     print("after 3rd block\n", conv, "\n")
 
-def conv_bnReLU_BL_bench(trans, strides):
-    batch = 8
-    input_width = 8
+def conv_bnReLU_BL_bench(trans, strides, relu):
+    batch = 4
+    input_width = 4
     vec_size = batch*input_width**2
-    ker_width = 5
+    ker_width = 3
     bn_a = 1.0
     ker_size = ker_width**2 
     if trans:
@@ -158,10 +158,11 @@ def conv_bnReLU_BL_bench(trans, strides):
         out_batch = batch
     else:
         out_batch = batch
+    ker_len = batch * out_batch * ker_size
 
     ## Correctness Check: Compare with TF NN CONV2D
     raw_input = [1.0*i/vec_size for i in range(vec_size)]  # #[1.0*i for i in range(vec_size)] 
-    ker = [1.0 - 1.0*i/(batch * out_batch * ker_size)for i in range(batch * out_batch * ker_size)] #  #[1.0 for i in range(batch * out_batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker = [1.0*i/ker_len for i in range(ker_len)] #  #[1.0 for i in range(batch * out_batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
 
     print("input width:", input_width)
     print("batch:", batch)
@@ -180,7 +181,9 @@ def conv_bnReLU_BL_bench(trans, strides):
         ten_k = tf.reshape(tf.constant(np.array(ker), tf.float32), [ker_width, ker_width, batch, out_batch])
         conv = tf.nn.conv2d(ten_x, ten_k, strides = [1,1,1,1], padding = "SAME")*bn_a
     
-    # conv = tf.nn.relu(conv)
+    if relu:
+        conv = tf.nn.relu(conv)
+    
     print("\n result: \n", conv, "\n")
 
 def trans_conv_bnReLU_BL_bench():
@@ -284,7 +287,7 @@ def post_process(iter_num):
     ## First load plain result
     num_samples = 1000
     pred = np.reshape(np.loadtxt('Resnet_plain_data/plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
-    result_dir = 'Resnet_test_result_enc/'
+    result_dir = 'Resnet_test_result_enc_BL/'
     in_dir = 'weight_h5/'
     ten_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fckernel.csv'), tf.float32), [1, 1, 64, 10])
     bias_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fcbias.csv'), tf.float32), [10])
@@ -294,8 +297,8 @@ def post_process(iter_num):
     no_iters = []
     wrong_result = {}
     for iter in range(iter_num):
-        if os.path.exists(result_dir+'class_result_'+str(iter)+'.csv'):
-            read = np.loadtxt(result_dir+'class_result_'+str(iter)+'.csv')
+        if os.path.exists(result_dir+'class_result_BL_'+str(iter)+'.csv'):
+            read = np.loadtxt(result_dir+'class_result_BL_'+str(iter)+'.csv')
             total+=1
         else:
             no_iters.append(iter)
@@ -314,7 +317,7 @@ def post_process(iter_num):
             conv = tf.squeeze(conv, axis=[1,2])
             res_np = conv.numpy()
         else:
-            res_np = np.reshape(read, [256])[:10]
+            res_np = read[:10] #np.reshape(read, [-1])[:10]
         print("enc: ", res_np, "argmax: ", np.argmax(res_np))
         print("plain: ", pred[iter], "argmax: ", np.argmax(pred[iter]))
         if (np.argmax(res_np) == np.argmax(pred[iter])):
@@ -372,16 +375,18 @@ def separate_data(num_outs):
 # conv_bnReLU_BL_bench(False)
 # plain_resnet_bench()
 # exit(1)
-# post_process(1000)
+# post_process(100)
+# exit(1)
 # num_samples = 100
 # pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
 
-plain_imagenet_bench()
+# plain_imagenet_bench()
 # test_RMFC()
 
-# trans = True
-# strides = True
-# conv_bnReLU_BL_bench(trans, strides)
+trans = False
+strides = False
+relu = False
+conv_bnReLU_BL_bench(trans, strides, relu)
 
 # conv = np.reshape(np.loadtxt('class_result_'+str(5)+'.csv'), [256])
 # print("enc: ", conv[:10], "argmax: ", np.argmax(conv[:10]))
@@ -395,11 +400,11 @@ plain_imagenet_bench()
 # for i in range(num_samples):
 #     np.savetxt('test_data/test_image_'+str(i)+'.csv',np.reshape(tf_images[i,:,:,:], [-1]), fmt='%.18e', delimiter=',')
     
-print("Resnet\n")
-tf_images = tf.reshape(tf.constant(np.loadtxt('Resnet_plain_data/test_images_'+str(100)+'.csv'), tf.float32), [100, 32, 32, 3])
-tf_image = tf.reshape(tf_images[0, :, :, :], [1,32,32,3])
-print(tf_image)
-plain_resnet(tf_image)
+# print("Resnet\n")
+# tf_images = tf.reshape(tf.constant(np.loadtxt('Resnet_plain_data/test_images_'+str(100)+'.csv'), tf.float32), [100, 32, 32, 3])
+# tf_image = tf.reshape(tf_images[0, :, :, :], [1,32,32,3])
+# print(tf_image)
+# plain_resnet(tf_image)
 # np.savetxt('plain_prediction'+str(num_samples)+'.csv',np.reshape(predictions, [-1]), fmt='%.18e', delimiter=',')
 # print("num samples: ", len(tf_labels), "precision: ", tf.reduce_mean(tf.cast(tf.equal(predictions, tf_labels), 'float32')))
 
