@@ -9,7 +9,7 @@ import numpy as np
 in_dir = 'weight_h5/'
 
 blocks = [1, 2, 3]
-units = [1,2,3]
+units = [1, 2, 3]
 subs = [1,2]
 f_initial = 'w'
 f_mid = ''

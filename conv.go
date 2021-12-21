@@ -700,6 +700,9 @@ func conv_then_pack(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_
 	fmt.Printf("Done in %s \n", time.Since(start))
 
 	if (scale_exp != ctxt_result.Scale) || (ECD_LV != ctxt_result.Level()) {
+		fmt.Println("exp scale: ", scale_exp)
+		fmt.Println("ctxt scale: ", ctxt_result.Scale)
+		fmt.Println("ctxt lv: ", ctxt_result.Level())
 		panic("LV or scale after conv then pack, inconsistent")
 	}
 

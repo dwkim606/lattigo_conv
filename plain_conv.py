@@ -71,7 +71,7 @@ def plain_resnet_bench():
     input_width = 32
     batch = 4
     vec_size = 3*input_width**2
-    ker_width = 3
+    ker_width = 5
     bn_a = [0.2, 0.2, 0.1]
 
     batch2 = batch*2
@@ -104,9 +104,9 @@ def plain_resnet_bench():
 
     # conv = tf.nn.conv2d_transpose(ten_x, ten_k1, output_shape=(1, input_width[1], input_width[1], batch[1]), strides=[1, 2, 2, 1])
 
-    num_bl1 = 2
-    num_bl2 = 2
-    num_bl3 = 2
+    num_bl1 = 5
+    num_bl2 = 3
+    num_bl3 = 3
 
     conv = ten_x
     print("Input: ", conv)
@@ -146,7 +146,7 @@ def plain_resnet_bench():
     print("after 3rd block\n", conv, "\n")
 
 def conv_bnReLU_BL_bench(trans, strides, relu):
-    batch = 4
+    batch = 8
     input_width = 4
     vec_size = batch*input_width**2
     ker_width = 3
@@ -225,14 +225,14 @@ def plain_resnet(input_image):
     ker_size = ker_wid**2
     
     # load weights
-    blocks = [1, 2, 3]
-    units = range(6)
-    kinds = ['a', 'b', 'conv']
+    # blocks = [1, 2, 3]
+    # units = range(2)
+    # kinds = ['a', 'b', 'conv']
 
     # raw_input = [0.1*i/3000.0 for i in range(32*32*3)]
     # conv = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, in_wid[0], in_wid[0], 3])
     conv = input_image
-    blcs = [7,6,6]
+    blcs = [7,6,6] #ker7 [3,2,2] #ker5 [5,4,4] #ker3 [7,6,6]
 
     # print("Input: ", conv)
 
@@ -256,9 +256,9 @@ def plain_resnet(input_image):
             conv = ten_a * conv + ten_b
             conv = tf.nn.relu(conv)
             if i == 0:
-                print(blc," to ", blc+1," block. ", conv)
+                print(blc," to ", blc+1," block. ")
             else:
-                print(blc+1,"-th block, ", i,"-th layer", conv)
+                print(blc+1,"-th block, ", i,"-th layer")
             num += 1
             # print(i+1,"layer done\n")
         # print("after", blc_iter+1, "-th block\n", conv, "\n")
@@ -377,34 +377,32 @@ def separate_data(num_outs):
 # exit(1)
 # post_process(100)
 # exit(1)
-# num_samples = 100
+# num_samples = 1000
 # pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
 
 # plain_imagenet_bench()
 # test_RMFC()
 
-trans = False
-strides = False
-relu = False
-conv_bnReLU_BL_bench(trans, strides, relu)
+# trans = False
+# strides = True
+# relu = False
+# conv_bnReLU_BL_bench(trans, strides, relu)
 
 # conv = np.reshape(np.loadtxt('class_result_'+str(5)+'.csv'), [256])
 # print("enc: ", conv[:10], "argmax: ", np.argmax(conv[:10]))
 # print("plain: ", pred[5], "argmax: ", np.argmax(pred[5]))
 
-# num_samples = 1000 # or 1000
-# tf_labels = tf.constant(np.loadtxt('Resnet_plain_data/test_labels_'+str(num_samples)+'.csv'), tf.int64)
-# tf_images = tf.reshape(tf.constant(np.loadtxt('Resnet_plain_data/test_images_'+str(num_samples)+'.csv'), tf.float32), [num_samples, 32, 32, 3])
+num_samples = 1000 # or 1000
+tf_labels = tf.constant(np.loadtxt('Resnet_plain_data/test_labels_'+str(num_samples)+'.csv'), tf.int64)
+tf_images = tf.reshape(tf.constant(np.loadtxt('Resnet_plain_data/test_images_'+str(num_samples)+'.csv'), tf.float32), [num_samples, 32, 32, 3])
 
 # np.savetxt('test_data/test_labels.csv',tf_labels, fmt='%d', delimiter=',')
 # for i in range(num_samples):
 #     np.savetxt('test_data/test_image_'+str(i)+'.csv',np.reshape(tf_images[i,:,:,:], [-1]), fmt='%.18e', delimiter=',')
     
-# print("Resnet\n")
-# tf_images = tf.reshape(tf.constant(np.loadtxt('Resnet_plain_data/test_images_'+str(100)+'.csv'), tf.float32), [100, 32, 32, 3])
 # tf_image = tf.reshape(tf_images[0, :, :, :], [1,32,32,3])
 # print(tf_image)
-# plain_resnet(tf_image)
-# np.savetxt('plain_prediction'+str(num_samples)+'.csv',np.reshape(predictions, [-1]), fmt='%.18e', delimiter=',')
-# print("num samples: ", len(tf_labels), "precision: ", tf.reduce_mean(tf.cast(tf.equal(predictions, tf_labels), 'float32')))
+predictions = plain_resnet(tf_images)
+np.savetxt('plain_prediction_'+str(num_samples)+'.csv',np.reshape(predictions, [-1]), fmt='%.18e', delimiter=',')
+print("num samples: ", len(tf_labels), "precision: ", tf.reduce_mean(tf.cast(tf.equal(predictions, tf_labels), 'float32')))
 

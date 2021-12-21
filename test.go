@@ -554,25 +554,27 @@ func testConv_noBoot_old(kind string, printResult bool) (ct_result *ckks.Ciphert
 // in_wid must be Po2
 // For trans, assume that input: full bached ciphertext, outputs 1/4 batched 1ctxt due to expansion
 func testConv_BNRelu(kind string, printResult bool) {
-	in_batch := 4   // needs to be divided by 4 (to pack the output of transConv)
-	raw_in_wid := 6 // same as python
+	raw_in_batch := 8 // same as python
+	raw_in_wid := 4   // same as python
+	in_batch := 16    // needs to be divided by 4 (to pack the output of transConv)
 	in_wid := 8
-	ker_wid := 5
+	norm := in_batch / raw_in_batch
+	ker_wid := 3
 	alpha := 0.0 // for ReLU: 0.0 , leakyReLU : 0.3
-	norm := 1
 
 	// set basic variables for above input variables
 	kp_wid, out_batch, logN, trans := set_Variables(in_batch, raw_in_wid, in_wid, ker_wid, kind)
+	raw_out_batch := out_batch / norm
 
-	raw_input := make([]float64, raw_in_wid*raw_in_wid*in_batch)
-	ker_in := make([]float64, in_batch*out_batch*ker_wid*ker_wid)
-	bn_a := make([]float64, out_batch)
-	bn_b := make([]float64, out_batch)
+	raw_input := make([]float64, raw_in_wid*raw_in_wid*raw_in_batch)
+	ker_in := make([]float64, raw_in_batch*raw_out_batch*ker_wid*ker_wid)
+	bn_a := make([]float64, raw_out_batch)
+	bn_b := make([]float64, raw_out_batch)
 	for i := range raw_input {
 		raw_input[i] = 1.0 * float64(i) / float64(len(raw_input))
 	}
 	for i := range ker_in {
-		ker_in[i] = 1.0 - 1.0*float64(i)/float64(len(ker_in))
+		ker_in[i] = 1.0 * float64(i) / float64(len(ker_in))
 	}
 	for i := range bn_a {
 		bn_a[i] = 1.0
@@ -584,7 +586,7 @@ func testConv_BNRelu(kind string, printResult bool) {
 	fmt.Println("vec size: log2 = ", cont.logN)
 	fmt.Println("raw input width: ", raw_in_wid)
 	fmt.Println("kernel width: ", ker_wid)
-	fmt.Println("num batches in & out: ", in_batch, ", ", out_batch)
+	fmt.Println("num batches in & out: ", raw_in_batch, ", ", raw_out_batch)
 
 	// input encryption
 	fmt.Println()
@@ -598,7 +600,7 @@ func testConv_BNRelu(kind string, printResult bool) {
 	fmt.Printf("Encryption done in %s \n", time.Since(start))
 
 	// Kernel Prep & Conv (+BN) Evaluation
-	ct_result := evalConv_BNRelu_new(cont, ctxt_input, ker_in, bn_a, bn_b, alpha, in_wid, kp_wid, ker_wid, in_batch, out_batch, norm, 0, kind, printResult)
+	ct_result := evalConv_BNRelu_new(cont, ctxt_input, ker_in, bn_a, bn_b, alpha, in_wid, kp_wid, ker_wid, raw_in_batch, raw_out_batch, norm, 0, kind, printResult)
 	// ct_result := evalConv_BNRelu(cont, ctxt_input, ker_in, bn_a, bn_b, alpha, in_wid, ker_wid, in_batch, out_batch, 0, true, stride, printResult)
 
 	fmt.Println()
@@ -884,7 +886,10 @@ func testResNet() {
 	raw_in_wids := []int{32, 16, 8} // same as python
 	real_batch := []int{4, 8, 16}   // same as python
 	py_bn_a := []float64{0.2, 0.2, 0.1}
-	ker_wid := 3
+	num_blc1 := 3
+	num_blc2 := 1
+	num_blc3 := 1
+	ker_wid := 7
 	padding := true
 	in_wids := make([]int, len(raw_in_wids))
 	kp_wids := make([]int, len(raw_in_wids))
@@ -983,7 +988,6 @@ func testResNet() {
 	new_start := time.Now()
 
 	// ResNet Block 1
-	num_blc1 := 1
 	ct_layer := make([]*ckks.Ciphertext, num_blc1+1)
 	ct_layer[0] = ct_input
 	prt_result := false
@@ -1006,7 +1010,6 @@ func testResNet() {
 	new_start = time.Now()
 
 	// ResNet Block 2
-	num_blc2 := 1
 	ct_layer2 := make([]*ckks.Ciphertext, num_blc2+1)
 	ct_layer2[0] = ct_result
 	prt_result = false
@@ -1026,7 +1029,6 @@ func testResNet() {
 	new_start = time.Now()
 
 	// ResNet Block 3
-	num_blc3 := 1
 	ct_layer3 := make([]*ckks.Ciphertext, num_blc3+1)
 	ct_layer3[0] = ct_result
 	prt_result = false
@@ -1040,31 +1042,31 @@ func testResNet() {
 	timings[4] = time.Since(new_start).Seconds()
 
 	new_start = time.Now()
-	// ker_inf := readTxt("weight_h5/final-fckernel.csv", real_batch[2]*10)
-	ker_inf := make([]float64, real_batch[2]*10)
-	for i := range ker_inf {
-		ker_inf[i] = 1.0 * float64(i)
-	}
-	ker_inf_ := make([]float64, 9*9*real_batch[2]*10)
-	for i := range ker_inf {
-		for b := 0; b < 9*9; b++ {
-			if (b%9 != 0) && (b/9 != 0) {
-				ker_inf_[i+b*real_batch[2]*10] = ker_inf[i]
-			}
-		}
-	}
-	bn_af := make([]float64, 10)
-	for i := range bn_af {
-		bn_af[i] = 1.0 / (8 * 8) // for reduce mean on 8*8 elements
-	}
-	// bn_bf := readTxt("weight_h5/final-fcbias.csv", 10)
-	bn_bf := make([]float64, 10)
-	for i := range bn_bf {
-		bn_bf[i] = 1.0 * float64(i)
-	}
+	// // ker_inf := readTxt("weight_h5/final-fckernel.csv", real_batch[2]*10)
+	// ker_inf := make([]float64, real_batch[2]*10)
+	// for i := range ker_inf {
+	// 	ker_inf[i] = 1.0 * float64(i)
+	// }
+	// ker_inf_ := make([]float64, 9*9*real_batch[2]*10)
+	// for i := range ker_inf {
+	// 	for b := 0; b < 9*9; b++ {
+	// 		if (b%9 != 0) && (b/9 != 0) {
+	// 			ker_inf_[i+b*real_batch[2]*10] = ker_inf[i]
+	// 		}
+	// 	}
+	// }
+	// bn_af := make([]float64, 10)
+	// for i := range bn_af {
+	// 	bn_af[i] = 1.0 / (8 * 8) // for reduce mean on 8*8 elements
+	// }
+	// // bn_bf := readTxt("weight_h5/final-fcbias.csv", 10)
+	// bn_bf := make([]float64, 10)
+	// for i := range bn_bf {
+	// 	bn_bf[i] = 1.0 * float64(i)
+	// }
 
-	ct_result = evalConv_BN(cont, ct_input, ker_inf_, bn_af, bn_bf, in_wids[2], 9, real_batch[2], norm, 10, true, false)
-	cont.decryptor.Decrypt(ct_result, pl_input)
+	// ct_result = evalConv_BN(cont, ct_input, ker_inf_, bn_af, bn_bf, in_wids[2], 9, real_batch[2], norm, 10, true, false)
+	cont.decryptor.Decrypt(ct_layer3[num_blc3], pl_input)
 	res_tmp := cont.encoder.DecodeCoeffs(pl_input)
 	prt_mat_one(res_tmp, max_batch[2], 4, 4)
 	timings[5] = time.Since(new_start).Seconds()

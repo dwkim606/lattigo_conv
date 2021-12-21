@@ -311,8 +311,8 @@ func main() {
 
 	// testImageNet_BL()
 
-	// iter, _ := strconv.Atoi(os.Args[1])
-	// testResNet_in_BL(iter)
+	iter, _ := strconv.Atoi(os.Args[1])
+	testResNet_in_BL(iter)
 	// testResNet_in(0)
 
 	// testConv_BNRelu_BL("TransConv", true)
@@ -323,9 +323,8 @@ func main() {
 	// basic()
 
 	// testBRrot()
-	testConv_noBoot("Conv", true)
-	// testConv_noBoot(7, 8, 5, true, true)
-	// testConv_BNRelu("Conv", true)
+	// testConv_noBoot("Conv", true)
+	// testConv_BNRelu("StrConv", true)
 	// testReduceMean()
 	// testResNet()
 	// testDCGAN()

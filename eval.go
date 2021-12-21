@@ -335,7 +335,7 @@ func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []
 			b_coeffs[norm*i+j*max_batch] = bn_b[i]
 		}
 	}
-	scale_exp := cont.params.Scale() * cont.params.Scale() * float64(max_batch/norm)
+	scale_exp := ct_input.Scale * cont.params.Scale() * float64(max_batch/norm)
 	pl_bn_b := ckks.NewPlaintext(cont.params, cont.ECD_LV, scale_exp) // contain plaintext values
 	cont.encoder.EncodeCoeffs(b_coeffs, pl_bn_b)
 	cont.encoder.ToNTT(pl_bn_b)
