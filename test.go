@@ -634,11 +634,16 @@ func testConv_BNRelu(kind string, printResult bool) {
 func testResNet_in(iter int) {
 	// For ResNet, we use padding: i.e., in_wid**2 element is contained in (2*in_wid)**2 sized block
 	// So ReLU, keep or rot, StoC done only on the 1st part of the CtoS ciphertexts
+	weight_dir := "weight_ker5_h5/"
+	ker_name := "ker5"
 	norm := 1
 	logN := 16
+	num_blc1 := 5                   // 3 // 5 // 7
+	num_blc2 := 3                   // 1 // 3 // 5
+	num_blc3 := 3                   // 1 // 3 // 5
 	raw_in_wids := []int{32, 16, 8} // same as python
 	real_batch := []int{16, 32, 64} // same as python
-	ker_wid := 3
+	ker_wid := 5
 	padding := true
 	in_wids := make([]int, len(raw_in_wids))
 	kp_wids := make([]int, len(raw_in_wids))
@@ -683,12 +688,11 @@ func testResNet_in(iter int) {
 	ct_input := cont.encryptor.EncryptNew(pl_input)
 	fmt.Printf("Encryption done in %s \n", time.Since(start))
 
-	timings := make([]float64, 5)
+	timings := make([]float64, 6)
 	begin_start := time.Now()
 	new_start := time.Now()
 
 	// ResNet Block 1
-	num_blc1 := 7
 	// ct_layer := make([]*ckks.Ciphertext, num_blc1+1)
 	ct_layer := ct_input
 	prt_result := false
@@ -696,13 +700,13 @@ func testResNet_in(iter int) {
 		if i == num_blc1 {
 			prt_result = true
 		}
-		bn_a := readTxt("weight_h5/w"+strconv.Itoa(i-1)+"-a.csv", real_batch[0])
-		bn_b := readTxt("weight_h5/w"+strconv.Itoa(i-1)+"-b.csv", real_batch[0])
+		bn_a := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-a.csv", real_batch[0])
+		bn_b := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-b.csv", real_batch[0])
 		if i == 1 {
-			ker_in := readTxt("weight_h5/w0-conv.csv", 3*real_batch[0]*ker_size)
+			ker_in := readTxt(weight_dir+"w0-conv.csv", 3*real_batch[0]*ker_size)
 			ct_layer = evalConv_BNRelu(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], ker_wid, 3, real_batch[0], norm, 0, padding, false, prt_result)
 		} else {
-			ker_in := readTxt("weight_h5/w"+strconv.Itoa(i-1)+"-conv.csv", real_batch[0]*real_batch[0]*ker_size)
+			ker_in := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-conv.csv", real_batch[0]*real_batch[0]*ker_size)
 			ct_layer = evalConv_BNRelu(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 0, padding, false, prt_result)
 		}
 		fmt.Println("Block1, Layer ", i, "done!")
@@ -710,15 +714,15 @@ func testResNet_in(iter int) {
 	fmt.Println("done.")
 	timings[0] = time.Since(new_start).Seconds()
 	new_start = time.Now()
-	ker_in := readTxt("weight_h5/w"+strconv.Itoa(num_blc1)+"-conv.csv", real_batch[0]*real_batch[1]*ker_size)
+	ker_in := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1)+"-conv.csv", real_batch[0]*real_batch[1]*ker_size)
 	ker_in_0 := make([]float64, len(ker_in)/2)
 	ker_in_1 := make([]float64, len(ker_in)/2)
 	for i := range ker_in_0 {
 		ker_in_0[i] = ker_in[(i/(real_batch[1]/2))*real_batch[1]+i%(real_batch[1]/2)]
 		ker_in_1[i] = ker_in[(i/(real_batch[1]/2))*real_batch[1]+i%(real_batch[1]/2)+real_batch[1]/2]
 	}
-	bn_a := readTxt("weight_h5/w"+strconv.Itoa(num_blc1)+"-a.csv", real_batch[1])
-	bn_b := readTxt("weight_h5/w"+strconv.Itoa(num_blc1)+"-b.csv", real_batch[1])
+	bn_a := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1)+"-a.csv", real_batch[1])
+	bn_b := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1)+"-b.csv", real_batch[1])
 	bn_a0 := bn_a[:real_batch[1]/2]
 	bn_a1 := bn_a[real_batch[1]/2:]
 	bn_b0 := bn_b[:real_batch[1]/2]
@@ -732,7 +736,6 @@ func testResNet_in(iter int) {
 	new_start = time.Now()
 
 	// ResNet Block 2
-	num_blc2 := 5
 	// ct_layer2 := make([]*ckks.Ciphertext, num_blc2+1)
 	ct_layer2 := ct_result
 	prt_result = false
@@ -740,9 +743,9 @@ func testResNet_in(iter int) {
 		if i == num_blc2 {
 			prt_result = true
 		}
-		bn_a2 := readTxt("weight_h5/w"+strconv.Itoa(num_blc1+i)+"-a.csv", real_batch[1])
-		bn_b2 := readTxt("weight_h5/w"+strconv.Itoa(num_blc1+i)+"-b.csv", real_batch[1])
-		ker_in2 := readTxt("weight_h5/w"+strconv.Itoa(num_blc1+i)+"-conv.csv", real_batch[1]*real_batch[1]*ker_size)
+		bn_a2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+i)+"-a.csv", real_batch[1])
+		bn_b2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+i)+"-b.csv", real_batch[1])
+		ker_in2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+i)+"-conv.csv", real_batch[1]*real_batch[1]*ker_size)
 
 		ct_layer2 = evalConv_BNRelu(cont, ct_layer2, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, padding, false, prt_result)
 		fmt.Println("Block2, Layer ", i, "done!")
@@ -750,9 +753,9 @@ func testResNet_in(iter int) {
 	timings[2] = time.Since(new_start).Seconds()
 	new_start = time.Now()
 
-	ker_in23 := readTxt("weight_h5/w"+strconv.Itoa(num_blc1+num_blc2+1)+"-conv.csv", real_batch[1]*real_batch[2]*ker_size)
-	bn_a3 := readTxt("weight_h5/w"+strconv.Itoa(num_blc1+num_blc2+1)+"-a.csv", real_batch[2])
-	bn_b3 := readTxt("weight_h5/w"+strconv.Itoa(num_blc1+num_blc2+1)+"-b.csv", real_batch[2])
+	ker_in23 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+num_blc2+1)+"-conv.csv", real_batch[1]*real_batch[2]*ker_size)
+	bn_a3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+num_blc2+1)+"-a.csv", real_batch[2])
+	bn_b3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+num_blc2+1)+"-b.csv", real_batch[2])
 
 	ct_result = evalConv_BNRelu(cont, ct_layer2, ker_in23, bn_a3, bn_b3, alpha, in_wids[1], ker_wid, real_batch[1], real_batch[2], norm, 0, padding, true, prt_result)
 	fmt.Println("Block2 to 3 done!")
@@ -760,7 +763,6 @@ func testResNet_in(iter int) {
 	new_start = time.Now()
 
 	// ResNet Block 3
-	num_blc3 := 5
 	// ct_layer3 := make([]*ckks.Ciphertext, num_blc3+1)
 	ct_layer3 := ct_result
 	prt_result = false
@@ -768,20 +770,17 @@ func testResNet_in(iter int) {
 		if i == num_blc3 {
 			prt_result = true
 		}
-		ker_in3 := readTxt("weight_h5/w"+strconv.Itoa(num_blc1+num_blc2+i+1)+"-conv.csv", real_batch[2]*real_batch[2]*ker_size)
-		bn_a3 := readTxt("weight_h5/w"+strconv.Itoa(num_blc1+num_blc2+i+1)+"-a.csv", real_batch[2])
-		bn_b3 := readTxt("weight_h5/w"+strconv.Itoa(num_blc1+num_blc2+i+1)+"-b.csv", real_batch[2])
+		bn_a3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+num_blc2+i+1)+"-a.csv", real_batch[2])
+		bn_b3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+num_blc2+i+1)+"-b.csv", real_batch[2])
+		ker_in3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+num_blc2+i+1)+"-conv.csv", real_batch[2]*real_batch[2]*ker_size)
+
 		ct_layer3 = evalConv_BNRelu(cont, ct_layer3, ker_in3, bn_a3, bn_b3, alpha, in_wids[2], ker_wid, real_batch[2], real_batch[2], norm, 0, padding, false, prt_result)
 		fmt.Println("Block3, Layer ", i, "done!")
 	}
 	timings[4] = time.Since(new_start).Seconds()
 
-	// cont.decryptor.Decrypt(ct_layer3[num_blc3], pl_input)
-	// res_tmp := cont.encoder.DecodeCoeffs(pl_input)
-	// prt_mat(res_tmp, max_batch[2], 0)
-	// fmt.Print(res_tmp)
-
-	ker_inf := readTxt("weight_h5/final-fckernel.csv", real_batch[2]*10)
+	new_start = time.Now()
+	ker_inf := readTxt(weight_dir+"final-fckernel.csv", real_batch[2]*10)
 	ker_inf_ := make([]float64, 9*9*real_batch[2]*10)
 	for i := range ker_inf {
 		for b := 0; b < 9*9; b++ {
@@ -794,21 +793,26 @@ func testResNet_in(iter int) {
 	for i := range bn_af {
 		bn_af[i] = 1.0 / (8 * 8) // for reduce mean on 8*8 elements
 	}
-	bn_bf := readTxt("weight_h5/final-fcbias.csv", 10)
-
-	ct_result = evalConv_BN(cont, ct_layer3, ker_inf_, bn_af, bn_bf, in_wids[2], 9, real_batch[2], norm, 10, true, false)
+	bn_bf := readTxt(weight_dir+"final-fcbias.csv", 10)
+	ct_result = evalConv_BN(cont, ct_layer3, ker_inf_, bn_af, bn_bf, in_wids[2], 9, real_batch[2], 10, norm, true, false)
+	timings[5] = time.Since(new_start).Seconds()
+	fmt.Println()
+	fmt.Println("===============  DECRYPTION  ===============")
+	fmt.Println()
+	new_start = time.Now()
 	cont.decryptor.Decrypt(ct_result, pl_input)
 	res_tmp := cont.encoder.DecodeCoeffs(pl_input)
+	fmt.Printf("Decryption Done in %s \n", time.Since(new_start))
 	res_out := prt_mat_one(res_tmp, max_batch[2], 4, 4)
-
-	fmt.Println("result: ", res_out[:10])
-	writeTxt("class_result/class_result_"+strconv.Itoa(iter)+".csv", res_out)
+	fmt.Println("\n result: ", res_out[:10])
+	writeTxt("class_result_"+ker_name+"/class_result_"+ker_name+"_"+strconv.Itoa(iter)+".csv", res_out)
 
 	fmt.Println("Blc1: ", timings[0], " sec")
 	fmt.Println("Blc1->2: ", timings[1], " sec")
 	fmt.Println("Blc2: ", timings[2], " sec")
 	fmt.Println("Blc2->3: ", timings[3], " sec")
 	fmt.Println("Blc3: ", timings[4], " sec")
+	fmt.Println("Final (reduce_mean & FC): ", timings[5], " sec")
 	fmt.Printf("Total done in %s \n", time.Since(begin_start))
 }
 
@@ -882,14 +886,14 @@ func testResNet() {
 	// For ResNet, we use padding: i.e., in_wid**2 element is contained in (2*in_wid)**2 sized block
 	// So ReLU, keep or rot, StoC done only on the 1st part of the CtoS ciphertexts
 	norm := 1
-	logN := 14
+	logN := 12
 	raw_in_wids := []int{32, 16, 8} // same as python
-	real_batch := []int{4, 8, 16}   // same as python
+	real_batch := []int{1, 2, 4}    // same as python
 	py_bn_a := []float64{0.2, 0.2, 0.1}
-	num_blc1 := 3
-	num_blc2 := 1
-	num_blc3 := 1
-	ker_wid := 7
+	num_blc1 := 2
+	num_blc2 := 2
+	num_blc3 := 2
+	ker_wid := 3
 	padding := true
 	in_wids := make([]int, len(raw_in_wids))
 	kp_wids := make([]int, len(raw_in_wids))
@@ -1022,7 +1026,6 @@ func testResNet() {
 	}
 	timings[2] = time.Since(new_start).Seconds()
 	new_start = time.Now()
-
 	ct_result = evalConv_BNRelu(cont, ct_layer2[num_blc2], ker_in23, bn_a3, bn_b3, alpha, in_wids[1], ker_wid, real_batch[1], real_batch[2], norm, 0, padding, true, prt_result)
 	fmt.Println("Block2 to 3 done!")
 	timings[3] = time.Since(new_start).Seconds()

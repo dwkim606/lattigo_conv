@@ -171,7 +171,6 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 			for i := 1; i < 16; i++ {
 				rotations = append(rotations, i*64*8)
 			}
-			rotations = removeDuplicateInt(rotations)
 		}
 	case "BL_Imagenet":
 		for _, elt := range cont.in_wids {
@@ -197,7 +196,6 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 			for k := range cont.r_idx[elt][0] {
 				rotations = append(rotations, k)
 			}
-			rotations = removeDuplicateInt(rotations)
 		}
 	case "Conv": // we assume manual padding using kp_wid
 		if boot {
@@ -267,6 +265,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	default:
 		panic("Wrong kinds!")
 	}
+	rotations = removeDuplicateInt(rotations)
 
 	// Scheme context and keys for evaluation (no Boot)
 	kgen := ckks.NewKeyGenerator(cont.params)
@@ -312,8 +311,8 @@ func main() {
 	// testImageNet_BL()
 
 	iter, _ := strconv.Atoi(os.Args[1])
-	testResNet_in_BL(iter)
-	// testResNet_in(0)
+	// testResNet_in_BL(iter)
+	testResNet_in(iter)
 
 	// testConv_BNRelu_BL("TransConv", true)
 	// testConv_noBoot_BL("TransConv", true)

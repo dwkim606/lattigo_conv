@@ -209,9 +209,9 @@ func testConv_BNRelu_BL(in_kind string, printResult bool) {
 
 // alomst the same as ResNet, but use smaller batches for testing
 func testResNet_BL() {
-	num_blc1 := 3
-	num_blc2 := 1
-	num_blc3 := 1
+	num_blc1 := 3 // 3 // 5 // 7
+	num_blc2 := 1 // 1 // 3 // 5
+	num_blc3 := 1 // 1 // 3 // 5
 	logN := 14
 	in_wids := []int{32, 16, 8}   // = raw_in_wids = same as python
 	real_batch := []int{4, 8, 16} // same as python
@@ -451,9 +451,9 @@ func testResNet_BL() {
 func testResNet_in_BL(iter int) {
 	weight_dir := "weight_ker7_h5/"
 	ker_name := "ker7"
-	num_blc1 := 3
-	num_blc2 := 1
-	num_blc3 := 1
+	num_blc1 := 3 // 3 // 5 // 7
+	num_blc2 := 1 // 1 // 3 // 5
+	num_blc3 := 1 // 1 // 3 // 5
 	logN := 16
 	in_wids := []int{32, 16, 8}     // = raw_in_wids = same as python
 	real_batch := []int{16, 32, 64} // same as python
@@ -650,9 +650,9 @@ func testResNet_in_BL(iter int) {
 	fmt.Println()
 	fmt.Println("===============  DECRYPTION  ===============")
 	fmt.Println()
-	start = time.Now()
+	new_start = time.Now()
 	vals_tmp := cont.encoder.Decode(cont.decryptor.DecryptNew(ct_result), cont.logN-1)
-	fmt.Printf("Decryption Done in %s \n", time.Since(start))
+	fmt.Printf("Decryption Done in %s \n", time.Since(new_start))
 	final_result := prt_mat_one_BL(vals_tmp, max_batch[2])
 	fmt.Println("result: ", final_result)
 	writeTxt("class_result_BL_"+ker_name+"/class_result_BL_"+ker_name+"_"+strconv.Itoa(iter)+".csv", final_result)

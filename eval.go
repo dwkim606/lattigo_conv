@@ -360,12 +360,13 @@ func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []
 // real_ib, real_ob: real number of batches (less or equal than max_batch)
 func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, ker_wid, real_ib, real_ob, norm, pack_pos int, padding, stride, printResult bool) (ct_res *ckks.Ciphertext) {
 	trans := false
-	kp_wid := in_wid - ((ker_wid - 1) / 2)
+	kp_wid := in_wid / 2 // - ((ker_wid - 1) / 2)
 	ct_conv := evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, printResult, trans)
 	ct_conv.Scale = ct_conv.Scale * math.Pow(2, pow)
 	cfs_preB := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
 	fmt.Println("Bootstrapping... Ours (until CtoS):")
 	start = time.Now()
+	// fmt.Println("ct_conv scale: ", math.Log2(ct_conv.Scale))
 	ct_boots := make([]*ckks.Ciphertext, 2)
 	ct_boots[0], ct_boots[1], _ = cont.btp.BootstrappConv_CtoS(ct_conv, float64(pow))
 	fmt.Printf("Done in %s \n", time.Since(start))
