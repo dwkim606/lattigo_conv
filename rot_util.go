@@ -410,6 +410,63 @@ func comprs_full(input []float64, in_wid, kp_wid, pos, ul int) []float64 {
 	return output
 }
 
+// Assume N/2 input vector
+// reverse of extend_full (after strided conv -> normal)
+// in_wid = input wid including padding
+// kp_wid = keep wid
+// 0 <= pos < 4 determines to which part the output is positioned at the final output
+// ul : up (0) or low (1) part
+func comprs_full_fast(input []float64, in_wid, kp_wid, pos, ul int) []float64 {
+	mid_out := make([]float64, len(input))
+	output := make([]float64, len(input))
+	batch := 2 * len(input) / (in_wid * in_wid)
+	if kp_wid < in_wid/2 {
+		panic("keep width too small. less than in_wid/2")
+	}
+	pos = int(reverseBits(uint32(pos), 2))
+	min_wid := in_wid / 4
+	if in_wid%4 != 0 {
+		panic("input wid not divisible by 4")
+	}
+	if in_wid%2 != 0 {
+		panic("input wid not divisible by 2")
+	}
+	log_in_wid := 0
+	for ; (1 << log_in_wid) < in_wid; log_in_wid++ {
+	}
+
+	for j := 0; j < 2*min_wid; j++ { // kinds of mov depends on j
+		tmp := make([]float64, len(input))
+		for b := 0; b < batch; b++ {
+			for i := 0; i < min_wid; i++ {
+				if (ul == 0) && (reverseBits(uint32(in_wid/2+j), log_in_wid) < uint32(kp_wid)) {
+					idx := 2*min_wid*in_wid*b + 2*min_wid*j + i + in_wid*min_wid + min_wid
+					tmp[idx] = input[idx]
+				}
+				if (ul == 1) && (reverseBits(uint32(in_wid/2+j), log_in_wid) < uint32(kp_wid)) && (reverseBits(uint32(min_wid+i), log_in_wid-1) < uint32(kp_wid-in_wid/2)) {
+					idx := 2*min_wid*in_wid*b + 2*min_wid*j + i + in_wid*min_wid + min_wid
+					tmp[idx] = input[idx]
+				}
+			}
+		}
+		rot := -j*min_wid + 2*min_wid*min_wid - min_wid
+		mid_out = addSlice(mid_out, rRot(tmp, rot))
+	}
+	for b := 0; b < batch; b++ {
+		tmp := make([]float64, len(input))
+		for j := 0; j < 2*min_wid; j++ {
+			for i := 0; i < min_wid; i++ {
+				idx := 2*min_wid*in_wid*b + 3*in_wid/2*min_wid + j*min_wid + i
+				tmp[idx] = mid_out[idx]
+			}
+		}
+		rot := -3*b*min_wid*in_wid/2 + pos*min_wid*in_wid/2*batch - 3*min_wid*in_wid/2
+		output = addSlice(output, rRot(tmp, rot))
+	}
+
+	return output
+}
+
 // generate vectors for comprs_full (N/2 input)
 // returns the idx and rotations for each idx For comprs_full_hf
 // vec_size = slots, in_wid = real in_wid including padding,
@@ -478,4 +535,60 @@ func gen_comprs_full(vec_size, in_wid, kp_wid, pos, ul int) (r_idx map[int][]int
 	}
 
 	return r_idx
+}
+
+// generate vectors for comprs_full_fast (N/2 input)
+// returns the idx and rotations for each idx For comprs_full_hf
+// vec_size = slots, in_wid = real in_wid including padding,
+// CAUTION: rotation = -rotation (of comprs_full_hf)
+func gen_comprs_fast(vec_size, in_wid, kp_wid, pos, ul int) (m_idx, r_idx map[int][]int) {
+	m_idx = make(map[int][]int)
+	r_idx = make(map[int][]int)
+	batch := 2 * vec_size / (in_wid * in_wid)
+
+	if kp_wid < in_wid/2 {
+		panic("keep width too small. less than in_wid/2")
+	}
+	pos = int(reverseBits(uint32(pos), 2))
+	min_wid := in_wid / 4
+	if in_wid%4 != 0 {
+		panic("input wid not divisible by 4")
+	}
+	if in_wid%2 != 0 {
+		panic("input wid not divisible by 2")
+	}
+	log_in_wid := 0
+	for ; (1 << log_in_wid) < in_wid; log_in_wid++ {
+	}
+
+	for j := 0; j < 2*min_wid; j++ { // kinds of mov depends on j
+		tmp := make([]int, vec_size)
+		for b := 0; b < batch; b++ {
+			for i := 0; i < min_wid; i++ {
+				if (ul == 0) && (reverseBits(uint32(in_wid/2+j), log_in_wid) < uint32(kp_wid)) {
+					idx := 2*min_wid*in_wid*b + 2*min_wid*j + i + in_wid*min_wid + min_wid
+					tmp[idx] = 1
+				}
+				if (ul == 1) && (reverseBits(uint32(in_wid/2+j), log_in_wid) < uint32(kp_wid)) && (reverseBits(uint32(min_wid+i), log_in_wid-1) < uint32(kp_wid-in_wid/2)) {
+					idx := 2*min_wid*in_wid*b + 2*min_wid*j + i + in_wid*min_wid + min_wid
+					tmp[idx] = 1
+				}
+			}
+		}
+		rot := j*min_wid - 2*min_wid*min_wid + min_wid
+		m_idx[rot] = tmp
+	}
+	for b := 0; b < batch; b++ {
+		tmp := make([]int, vec_size)
+		for j := 0; j < 2*min_wid; j++ {
+			for i := 0; i < min_wid; i++ {
+				idx := 2*min_wid*in_wid*b + 3*in_wid/2*min_wid + j*min_wid + i
+				tmp[idx] = 1
+			}
+		}
+		rot := 3*b*min_wid*in_wid/2 - pos*min_wid*in_wid/2*batch + 3*min_wid*in_wid/2
+		r_idx[rot] = tmp
+	}
+
+	return m_idx, r_idx
 }

@@ -31,7 +31,9 @@ type context struct {
 	// pads           map[int]int
 	ext_idx        map[int][][]int         // ext_idx for keep_vec (saved for each possible input width) map: in_wid, [up/low]
 	r_idx          map[int][]map[int][]int // r_idx for compr_vec (or ext_vec) map: in_wid [pos] map: rot
+	r_idx_l        map[int][]map[int][]int // low, r_idx for compr_vec (or ext_vec) map: in_wid [pos] map: rot
 	m_idx          map[int][]map[int][]int // m_idx , map: in_wid [pos] map: rot
+	m_idx_l        map[int][]map[int][]int // low, m_idx , map: in_wid [pos] map: rot
 	pl_idx         []*ckks.Plaintext
 	params         ckks.Parameters
 	encoder        ckks.Encoder
@@ -67,7 +69,9 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	var rotations []int
 	cont.ext_idx = make(map[int][][]int)
 	cont.r_idx = make(map[int][]map[int][]int)
+	cont.r_idx_l = make(map[int][]map[int][]int)
 	cont.m_idx = make(map[int][]map[int][]int)
+	cont.m_idx_l = make(map[int][]map[int][]int)
 	var iter int
 	half := true // only for DCGAN
 
@@ -212,9 +216,22 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 			iter = 2 // we assume full padding, i.e., up and low is both nonzero
 			for i, elt := range cont.in_wids {
 				cont.r_idx[elt] = make([]map[int][]int, 4)
-				for ul := 0; ul < iter; ul++ {
-					cont.r_idx[elt][ul] = gen_comprs_full(cont.N/2, elt, cont.kp_wids[i], 0, ul)
-					for k := range cont.r_idx[elt][ul] {
+				cont.r_idx_l[elt] = make([]map[int][]int, 4)
+				cont.m_idx[elt] = make([]map[int][]int, 4)
+				cont.m_idx_l[elt] = make([]map[int][]int, 4)
+				for pos := 0; pos < 4; pos++ {
+					cont.m_idx[elt][pos], cont.r_idx[elt][pos] = gen_comprs_fast(cont.N/2, elt, cont.kp_wids[i], pos, 0)
+					cont.m_idx_l[elt][pos], cont.r_idx_l[elt][pos] = gen_comprs_fast(cont.N/2, elt, cont.kp_wids[i], pos, 1)
+					for k := range cont.r_idx[elt][pos] {
+						rotations = append(rotations, k)
+					}
+					for k := range cont.r_idx_l[elt][pos] {
+						rotations = append(rotations, k)
+					}
+					for k := range cont.m_idx[elt][pos] {
+						rotations = append(rotations, k)
+					}
+					for k := range cont.m_idx_l[elt][pos] {
 						rotations = append(rotations, k)
 					}
 				}
@@ -235,18 +252,26 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 		}
 	case "Resnet": // Generate ext_idx for extracting valid values from conv with "same" padding
 		iter = 1 // since we use half padding, i.e., lower part is all zero
+		end := 4
 		for _, elt := range cont.in_wids {
 			cont.ext_idx[elt] = make([][]int, iter)
 			for ul := 0; ul < iter; ul++ {
 				cont.ext_idx[elt][ul] = gen_keep_vec(cont.N/2, elt, elt/2, ul)
 			}
 			cont.r_idx[elt] = make([]map[int][]int, 4)
-			for pos := 0; pos < 4; pos++ {
-				cont.r_idx[elt][pos] = gen_comprs_full(cont.N/2, elt, elt/2, pos, 0)
+			cont.m_idx[elt] = make([]map[int][]int, 4)
+
+			for pos := 0; pos < end; pos += 2 {
+				// cont.r_idx[elt][pos] = gen_comprs_full(cont.N/2, elt, elt/2, pos, 0)
+				cont.m_idx[elt][pos], cont.r_idx[elt][pos] = gen_comprs_fast(cont.N/2, elt, elt/2, pos, 0)
 				for k := range cont.r_idx[elt][pos] {
 					rotations = append(rotations, k)
 				}
+				for k := range cont.m_idx[elt][pos] {
+					rotations = append(rotations, k)
+				}
 			}
+			end = 1
 		}
 	case "DCGAN": // Generate rotations for EXT_FULL
 		for _, elt := range cont.in_wids {
@@ -500,6 +525,29 @@ func prt_mat(vec []float64, batch, show int) {
 		if (show == 0) || (((j <= show) || (j > row-show)) && ((k <= show) || (k > (row - show)))) {
 			fmt.Printf("(%d, %d): ", j, k)
 			prt_vec(vec[i : i+batch])
+		}
+		k++
+		if k*k > mat_size {
+			k = 1
+			j++
+		}
+	}
+}
+
+// vec = arrgvec with batch batches, each batch is sqr-sized
+// print (i,j)-th position in [batches], only shows (show, show) entries show = 0 : print all
+func prt_mat_norm(vec []float64, batch, norm, show int) {
+	mat_size := len(vec) / batch
+	row := int(math.Sqrt(float64(mat_size)))
+	tmp := make([]float64, batch/norm)
+	j, k := 1, 1
+	for i := 0; i < len(vec); i += batch {
+		if (show == 0) || (((j <= show) || (j > row-show)) && ((k <= show) || (k > (row - show)))) {
+			fmt.Printf("(%d, %d): ", j, k)
+			for idx := range tmp {
+				tmp[idx] = vec[i+norm*idx]
+			}
+			prt_vec(tmp)
 		}
 		k++
 		if k*k > mat_size {

@@ -404,6 +404,48 @@ func ext_ctxt(eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext,
 	return result
 }
 
+// extend ctxt using given rotations so that it outputs a ctxt to be convolved with filter
+func ext_double_ctxt(eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext, m_idx, r_idx map[int][]int, params ckks.Parameters) (result *ckks.Ciphertext) {
+	st := true
+	var mid_result *ckks.Ciphertext
+	for rot, elt := range m_idx {
+		tmp := make([]complex128, params.Slots())
+		for i := range elt {
+			tmp[i] = complex(float64(elt[i]), 0)
+		}
+		plain_tmp := ckks.NewPlaintext(params, input.Level(), 1<<15)
+		encoder.EncodeNTT(plain_tmp, tmp, params.LogSlots())
+		if st {
+			mid_result = eval.RotateNew(eval.MulNew(input, plain_tmp), rot)
+			st = false
+		} else {
+			ctxt_tmp := eval.RotateNew(eval.MulNew(input, plain_tmp), rot)
+			eval.Add(mid_result, ctxt_tmp, mid_result)
+		}
+	}
+
+	st = true
+	for rot, elt := range r_idx {
+		tmp := make([]complex128, params.Slots())
+		for i := range elt {
+			tmp[i] = complex(float64(elt[i]), 0)
+		}
+		plain_tmp := ckks.NewPlaintext(params, input.Level(), 1<<15)
+		encoder.EncodeNTT(plain_tmp, tmp, params.LogSlots())
+		if st {
+			result = eval.RotateNew(eval.MulNew(mid_result, plain_tmp), rot)
+			st = false
+		} else {
+			ctxt_tmp := eval.RotateNew(eval.MulNew(mid_result, plain_tmp), rot)
+			eval.Add(result, ctxt_tmp, result)
+		}
+	}
+
+	eval.Rescale(result, params.Scale(), result)
+
+	return result
+}
+
 // keep ctxt using given idx so that it outputs a ctxt to be convolved with filter
 func keep_ctxt(params ckks.Parameters, eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext, idx []int) (result *ckks.Ciphertext) {
 	tmp := make([]complex128, params.Slots())

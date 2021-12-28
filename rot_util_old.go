@@ -427,3 +427,60 @@ func extend_full_int(input []int, in_wid, kp_wid, pos, ul int) []int {
 
 	return output
 }
+
+func comprs_full_fast_int(input []int, in_wid, kp_wid, pos, ul int) []int {
+	output_mid := make([]int, len(input))
+	output := make([]int, len(input))
+	batch := 2 * len(input) / (in_wid * in_wid)
+	if kp_wid < in_wid/2 {
+		panic("keep width too small. less than in_wid/2")
+	}
+	pos = int(reverseBits(uint32(pos), 2))
+	min_wid := in_wid / 4
+	if in_wid%4 != 0 {
+		panic("input wid not divisible by 4")
+	}
+	if in_wid%2 != 0 {
+		panic("input wid not divisible by 2")
+	}
+	log_in_wid := 0
+	for ; (1 << log_in_wid) < in_wid; log_in_wid++ {
+	}
+
+	for j := 0; j < 2*min_wid; j++ { // kinds of mov depends on j
+		tmp := make([]int, len(input))
+		for b := 0; b < batch; b++ {
+			for i := 0; i < min_wid; i++ {
+				if (ul == 0) && (reverseBits(uint32(in_wid/2+j), log_in_wid) < uint32(kp_wid)) {
+					idx := 2*min_wid*in_wid*b + 2*min_wid*j + i + in_wid*min_wid + min_wid
+					tmp[idx] = input[idx]
+				}
+				if (ul == 1) && (reverseBits(uint32(in_wid/2+j), log_in_wid) < uint32(kp_wid)) && (reverseBits(uint32(min_wid+i), log_in_wid-1) < uint32(kp_wid-in_wid/2)) {
+					idx := 2*min_wid*in_wid*b + 2*min_wid*j + i + in_wid*min_wid + min_wid
+					tmp[idx] = input[idx]
+				}
+			}
+		}
+		rot := -j*min_wid + 2*min_wid*min_wid - min_wid
+		output_mid = addSlice_int(output_mid, rRot_int(tmp, rot))
+	}
+	for b := 0; b < batch; b++ {
+		tmp := make([]int, len(input))
+		for j := 0; j < 2*min_wid; j++ {
+			for i := 0; i < min_wid; i++ {
+				// if (ul == 0) && (reverseBits(uint32(in_wid/2+j), log_in_wid) < uint32(kp_wid)) {
+				idx := 2*min_wid*in_wid*b + 3*in_wid/2*min_wid + j*min_wid + i
+				tmp[idx] = output_mid[idx]
+				// }
+				// 	if (ul == 1) && (reverseBits(uint32(in_wid/2+j), log_in_wid) < uint32(kp_wid)) && (reverseBits(uint32(min_wid+i), log_in_wid-1) < uint32(kp_wid-in_wid/2)) {
+				// 		idx := 2*min_wid*in_wid*b + j*min_wid + i
+				// 		tmp[idx] = input[idx]
+				// 	}
+			}
+		}
+		rot := -3*b*min_wid*in_wid/2 + pos*min_wid*in_wid/2*batch - 3*min_wid*in_wid/2
+		output = addSlice_int(output, rRot_int(tmp, rot))
+	}
+
+	return output
+}

@@ -18,7 +18,15 @@ func set_Variables(batch, raw_in_wid, in_wid, ker_wid int, kind string) (kp_wid,
 	max_kp_wid := in_wid - ((ker_wid - 1) / 2) // max possible size of raw_in_wid
 
 	switch kind {
-	case "Conv", "StrConv":
+	case "Conv":
+		trans = false
+		kp_wid = raw_in_wid
+		out_batch = batch
+		if kp_wid > max_kp_wid {
+			fmt.Println("max raw_in_wid: ", max_kp_wid)
+			panic("too large raw_in_wid.")
+		}
+	case "StrConv":
 		trans = false
 		kp_wid = raw_in_wid
 		out_batch = batch
@@ -432,9 +440,8 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 // stride = true: apply [1,2,2,1] stride; false: [1,1,1,1]
 // pack_pos: position to pack (0,1,2,3): only for strided case
 // real_ib, real_ob: real number of batches (less or equal than max_batch)
-func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, kp_wid, ker_wid, real_ib, real_ob, norm, pack_pos int, kind string, printResult bool) (ct_res *ckks.Ciphertext) {
-	// kp_wid := in_wid - ((ker_wid - 1) / 2)
-	iter := 2 // for full packing (contrary to half packing)
+func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, kp_wid, ker_wid, real_ib, real_ob, norm, pack_pos, iter int, kind string, printResult bool) (ct_res *ckks.Ciphertext) {
+	// iter := 2 // for full packing (contrary to half packing)
 	var trans, stride bool
 	switch kind {
 	case "Conv":
@@ -479,12 +486,19 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	start = time.Now()
 	ct_keep := make([]*ckks.Ciphertext, iter) // for extend (rotation) of ctxt_in
 	for ul := 0; ul < iter; ul++ {
-		if trans || stride {
+		if trans {
 			ct_keep[ul] = ext_ctxt(cont.evaluator, cont.encoder, ct_boots[ul], cont.r_idx[in_wid][ul], cont.params)
+		} else if stride {
+			if ul == 0 {
+				ct_keep[ul] = ext_double_ctxt(cont.evaluator, cont.encoder, ct_boots[ul], cont.m_idx[in_wid][pack_pos], cont.r_idx[in_wid][pack_pos], cont.params)
+			} else {
+				ct_keep[ul] = ext_double_ctxt(cont.evaluator, cont.encoder, ct_boots[ul], cont.m_idx_l[in_wid][pack_pos], cont.r_idx_l[in_wid][pack_pos], cont.params)
+			}
 		} else {
 			ct_keep[ul] = keep_ctxt(cont.params, cont.evaluator, cont.encoder, ct_boots[ul], cont.ext_idx[in_wid][ul])
 		}
 	}
+
 	if iter == 1 {
 		ct_boots[1] = nil
 		ct_res = cont.btp.BootstrappConv_StoC(ct_keep[0], ct_boots[1])
@@ -497,6 +511,11 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	fmt.Printf("Boot out: ")
 	// Only for checking the correctness (for StoC)
 	printDebugCfs(cont.params, ct_res, cfs_postB, cont.decryptor, cont.encoder)
+	if printResult {
+		max_batch := cont.N / (in_wid * in_wid)
+		res_tmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_res))
+		prt_mat_norm(res_tmp, max_batch, norm, 3)
+	}
 
 	return ct_res
 }
@@ -541,8 +560,8 @@ func debugStoC(cont *context, slot1, slot2 []complex128, in_wid, kp_wid int, kin
 		tmp1 = keep_vec(slot1_fl, in_wid, kp_wid, 0)
 		tmp2 = keep_vec(slot2_fl, in_wid, kp_wid, 1)
 	case "StrConv":
-		tmp1 = comprs_full(slot1_fl, in_wid, kp_wid, 0, 0)
-		tmp2 = comprs_full(slot2_fl, in_wid, kp_wid, 0, 1)
+		tmp1 = comprs_full_fast(slot1_fl, in_wid, kp_wid, 0, 0)
+		tmp2 = comprs_full_fast(slot2_fl, in_wid, kp_wid, 0, 1)
 	case "TransConv":
 		tmp1 = extend_full(slot1_fl, in_wid, kp_wid, 0, 0)
 		tmp2 = extend_full(slot2_fl, in_wid, kp_wid, 0, 1)
