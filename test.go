@@ -642,9 +642,9 @@ func testResNet_in(st, end int) {
 	weight_dir := "weight_ker7_h5/"
 	ker_name := "ker7"
 	logN := 16
-	num_blc1 := 7                   // 3 // 5 // 7
-	num_blc2 := 5                   // 1 // 3 // 5
-	num_blc3 := 5                   // 1 // 3 // 5
+	num_blc1 := 3                   // 3 // 5 // 7
+	num_blc2 := 1                   // 1 // 3 // 5
+	num_blc3 := 1                   // 1 // 3 // 5
 	raw_in_wids := []int{32, 16, 8} // same as python
 	real_batch := []int{16, 32, 64} // same as python
 	ker_wid := 7

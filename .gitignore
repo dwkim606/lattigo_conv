@@ -5,3 +5,9 @@ class_result
 class_result_BL
 Resnet_test_result_enc
 Resnet_test_result_enc_BL
+Resnet_enc_result_ker3_
+Resnet_enc_result_ker5_
+Resnet_enc_result_ker3_BL
+Resnet_enc_result_ker5_BL
+Resnet_enc_result_ker7_BL
+Resnet_plain_data

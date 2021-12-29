@@ -223,11 +223,15 @@ def trans_conv_bnReLU_BL_bench():
     # conv = tf.nn.relu(conv)
     print("result: \n", conv, "\n")
 
-def plain_resnet(input_image):
-    in_dir = 'weight_ker5_h5/'
+def plain_resnet(input_image, ker_name):
+    in_dir = 'weight_'+ker_name+'h5/'
     in_wid = [32, 16, 8]
     batch = [16, 32, 64]
-    ker_wid = 5
+    
+    ker_list = {'ker3_': 3, 'ker5_': 5, 'ker7_': 7}
+    blc_list = {'ker3_': [7,6,6], 'ker5_': [5,4,4], 'ker7_': [3,2,2]}
+
+    ker_wid = ker_list[ker_name]
     ker_size = ker_wid**2
     
     # load weights
@@ -238,7 +242,7 @@ def plain_resnet(input_image):
     # raw_input = [0.1*i/3000.0 for i in range(32*32*3)]
     # conv = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, in_wid[0], in_wid[0], 3])
     conv = input_image
-    blcs = [5,4,4] #ker7 [3,2,2] #ker5 [5,4,4] #ker3 [7,6,6]
+    blcs = blc_list[ker_name] #ker7 [3,2,2] #ker5 [5,4,4] #ker3 [7,6,6]
 
     # print("Input: ", conv)
 
@@ -279,8 +283,7 @@ def plain_resnet(input_image):
     conv = conv + bias_final
 
     conv = tf.squeeze(conv, axis=[1,2])
-    print(conv)
-    conv = tf.argmax(conv, 1)
+    # conv = tf.argmax(conv, 1)
     return conv
 
 ## load and save 
@@ -293,12 +296,16 @@ def load_save_data(num_samples):
     np.savetxt('test_images_'+str(num_samples)+'.csv', np.reshape(tf_images_sm, [-1]), fmt='%.18e', delimiter=',')
 
 # compare enc result (after post process: reduce_mean) with plain result
-def post_process(iter_num):
+def post_process(iter_num, ker_name, base_line):
     ## First load plain result
+    # ker_name = 'ker7_'
+    # base_line = False
     num_samples = 1000
-    pred = np.reshape(np.loadtxt('Resnet_plain_data/plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
-    result_dir = 'Resnet_test_result_enc_BL/'
-    in_dir = 'weight_h5/'
+    pred = np.reshape(np.loadtxt('Resnet_plain_data/plain_prediction_'+ker_name+str(num_samples)+'.csv'), [num_samples, 10])    
+    result_dir = 'Resnet_enc_result_'+ker_name
+    if base_line:
+        result_dir = result_dir + "BL"
+    in_dir = 'weight_'+ker_name+'h5/'
     ten_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fckernel.csv'), tf.float32), [1, 1, 64, 10])
     bias_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fcbias.csv'), tf.float32), [10])
 
@@ -306,9 +313,12 @@ def post_process(iter_num):
     total = 0
     no_iters = []
     wrong_result = {}
+    os_path = result_dir+'/class_result_'+ker_name
+    if base_line:
+        os_path = os_path+'BL_'
     for iter in range(iter_num):
-        if os.path.exists(result_dir+'class_result_BL_'+str(iter)+'.csv'):
-            read = np.loadtxt(result_dir+'class_result_BL_'+str(iter)+'.csv')
+        if os.path.exists(os_path+str(iter)+'.csv'):
+            read = np.loadtxt(os_path+str(iter)+'.csv')
             total+=1
         else:
             no_iters.append(iter)
@@ -377,7 +387,32 @@ def separate_data(num_outs):
     for i in range(num_outs):
         np.savetxt('test_data/test_image_'+str(i)+'.csv',np.reshape(tf_images[i,:,:,:], [-1]), fmt='%.18e', delimiter=',')
 
+def gen_plain_predictions():
+    ker_name = 'ker7_'
+    num_samples = 100 # or 1000
+    tf_labels = tf.constant(np.loadtxt('Resnet_plain_data/test_labels_'+str(num_samples)+'.csv'), tf.int64)
+    tf_images = tf.reshape(tf.constant(np.loadtxt('Resnet_plain_data/test_images_'+str(num_samples)+'.csv'), tf.float32), [num_samples, 32, 32, 3])
+
+    # np.savetxt('test_data/test_labels.csv',tf_labels, fmt='%d', delimiter=',')
+    # for i in range(num_samples):
+    #     np.savetxt('test_data/test_image_'+str(i)+'.csv',np.reshape(tf_images[i,:,:,:], [-1]), fmt='%.18e', delimiter=',')
+
+    predictions = plain_resnet(tf_images, ker_name)
+    np.savetxt('Resnet_plain_data/plain_prediction_'+ker_name+str(num_samples)+'.csv',np.reshape(predictions, [-1]), fmt='%.18e', delimiter=',')
+    print("num samples: ", len(tf_labels), "precision: ", tf.reduce_mean(tf.cast(tf.equal(tf.argmax(predictions, 1), tf_labels), 'float32')))
+
+
+  
 #### Main Start #### 
+
+# # rename
+# folder = "Resnet_enc_result_ker7_BL/"
+# total_count = 0
+# for count in range(100):
+#     src = folder+"class_result_BL_ker7_"+str(count)+".csv"
+#     dst = folder+"class_result_ker7_BL_"+str(count)+".csv"
+#     os.rename(src, dst)
+# exit(1)
 
 # load_save_data(100)
 
@@ -386,7 +421,7 @@ def separate_data(num_outs):
 # conv_bnReLU_BL_bench(False)
 # plain_resnet_bench()
 
-# post_process(100)
+post_process(100, 'ker5_', False)
 # exit(1)
 # num_samples = 1000
 # pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
@@ -405,17 +440,4 @@ def separate_data(num_outs):
 # print("enc: ", conv[:10], "argmax: ", np.argmax(conv[:10]))
 # print("plain: ", pred[5], "argmax: ", np.argmax(pred[5]))
 
-num_samples = 100 # or 1000
-tf_labels = tf.constant(np.loadtxt('Resnet_plain_data/test_labels_'+str(num_samples)+'.csv'), tf.int64)
-tf_images = tf.reshape(tf.constant(np.loadtxt('Resnet_plain_data/test_images_'+str(num_samples)+'.csv'), tf.float32), [num_samples, 32, 32, 3])
-
-# np.savetxt('test_data/test_labels.csv',tf_labels, fmt='%d', delimiter=',')
-# for i in range(num_samples):
-#     np.savetxt('test_data/test_image_'+str(i)+'.csv',np.reshape(tf_images[i,:,:,:], [-1]), fmt='%.18e', delimiter=',')
-    
-tf_image = tf.reshape(tf_images[1, :, :, :], [1,32,32,3])
-# print(tf_image)
-predictions = plain_resnet(tf_image)
-np.savetxt('plain_prediction_'+str(num_samples)+'.csv',np.reshape(predictions, [-1]), fmt='%.18e', delimiter=',')
-print("num samples: ", len(tf_labels), "precision: ", tf.reduce_mean(tf.cast(tf.equal(predictions, tf_labels), 'float32')))
-
+# gen_plain_predictions()
