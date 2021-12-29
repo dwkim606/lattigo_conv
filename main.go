@@ -45,6 +45,7 @@ type context struct {
 }
 
 func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind string) *context {
+	cont_start := time.Now()
 	cont := context{N: (1 << logN), logN: logN, ECD_LV: 1}
 	cont.in_wids = make([]int, len(in_wids))
 	copy(cont.in_wids, in_wids)
@@ -309,7 +310,6 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 
 	if boot {
 		fmt.Println("Generating bootstrapping keys...")
-		start = time.Now()
 		rotations = btpParams.RotationsForBootstrapping(cont.params.LogSlots())
 		rotkeys = kgen.GenRotationKeysForRotations(rotations, true, sk)
 		btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
@@ -323,7 +323,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 				panic(err)
 			}
 		}
-		fmt.Printf("Done in %s \n", time.Since(start))
+		fmt.Printf("Done in %s \n", time.Since(cont_start))
 	}
 
 	return &cont
@@ -335,9 +335,13 @@ func main() {
 
 	// testImageNet_BL()
 
-	iter, _ := strconv.Atoi(os.Args[1])
+	// testReduceMean_norm()
+	// testResNet_ker23()
+
+	st, _ := strconv.Atoi(os.Args[1])
+	end, _ := strconv.Atoi(os.Args[2])
 	// testResNet_in_BL(iter)
-	testResNet_in(iter)
+	testResNet_in(st, end)
 
 	// testConv_BNRelu_BL("TransConv", true)
 	// testConv_noBoot_BL("TransConv", true)
@@ -536,13 +540,16 @@ func prt_mat(vec []float64, batch, show int) {
 
 // vec = arrgvec with batch batches, each batch is sqr-sized
 // print (i,j)-th position in [batches], only shows (show, show) entries show = 0 : print all
-func prt_mat_norm(vec []float64, batch, norm, show int) {
+func prt_mat_norm(vec []float64, batch, norm, show int, half bool) {
 	mat_size := len(vec) / batch
 	row := int(math.Sqrt(float64(mat_size)))
+	if half {
+		row = row / 2
+	}
 	tmp := make([]float64, batch/norm)
 	j, k := 1, 1
 	for i := 0; i < len(vec); i += batch {
-		if (show == 0) || (((j <= show) || (j > row-show)) && ((k <= show) || (k > (row - show)))) {
+		if (show == 0) || (((j <= show) || ((j > row-show) && (j <= row))) && ((k <= show) || ((k > row-show) && (k <= row)))) {
 			fmt.Printf("(%d, %d): ", j, k)
 			for idx := range tmp {
 				tmp[idx] = vec[i+norm*idx]
@@ -565,6 +572,28 @@ func prt_mat_one(vec []float64, batch, sj, sk int) (out []float64) {
 		if (j == sj) && (k == sk) {
 			fmt.Print(vec[i : i+batch])
 			out = vec[i : i+batch]
+		}
+		k++
+		if k*k > mat_size {
+			k = 1
+			j++
+		}
+	}
+	return out
+}
+
+// only (sj,sk) element in all batches
+func prt_mat_one_norm(vec []float64, batch, norm, sj, sk int) (out []float64) {
+	mat_size := len(vec) / batch
+	tmp := make([]float64, batch/norm)
+	j, k := 1, 1
+	for i := 0; i < len(vec); i += batch {
+		if (j == sj) && (k == sk) {
+			for idx := range tmp {
+				tmp[idx] = vec[i+norm*idx]
+			}
+			prt_vec(tmp)
+			out = tmp
 		}
 		k++
 		if k*k > mat_size {

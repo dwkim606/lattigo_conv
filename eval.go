@@ -361,6 +361,68 @@ func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []
 	return ct_res
 }
 
+// the same as evalConv_BN but separate conv_then_pack and use different norm
+// only for log N = 16
+func evalConv_BN_sep(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob, norm int, printResult, trans bool) (ct_res *ckks.Ciphertext) {
+	if cont.logN != 16 {
+		panic("logN must be 16 for Conv_BN_sep!")
+	}
+	sep_norm := 4
+	max_batch := cont.N / (in_wid * in_wid)
+
+	fmt.Println()
+	fmt.Println("===============  (KER) PREPARATION  ===============")
+	fmt.Println()
+	start = time.Now()
+	pl_ker := prep_Ker(cont.params, cont.encoder, ker_in, bn_a, in_wid, ker_wid, real_ib, real_ob, norm, cont.ECD_LV, 0, trans)
+	b_coeffs := make([]float64, cont.N)
+	for i := range bn_b {
+		for j := 0; j < in_wid*in_wid; j++ {
+			b_coeffs[sep_norm*norm*i+j*max_batch] = bn_b[i]
+		}
+	}
+	scale_exp := ct_input.Scale * cont.params.Scale() * float64(max_batch/(sep_norm*norm))
+	pl_bn_b := ckks.NewPlaintext(cont.params, cont.ECD_LV, scale_exp) // contain plaintext values
+	cont.encoder.EncodeCoeffs(b_coeffs, pl_bn_b)
+	cont.encoder.ToNTT(pl_bn_b)
+	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
+
+	fmt.Println()
+	fmt.Println("===============  EVALUATION  ===============")
+	fmt.Println()
+
+	start := time.Now()
+	ctxt_out := make([]*ckks.Ciphertext, max_batch)
+	for i := 0; i < max_batch; i++ {
+		if (i%norm == 0) && (i/norm < 16) {
+			ctxt_out[sep_norm*i] = cont.pack_evaluator.MulNew(ct_input, pl_ker[i]) // 4 is to use 16 batches among 64 batches among 256 batches (real_ob = 10 < 16)
+		}
+	}
+
+	ct_res = pack_ctxts(cont.pack_evaluator, ctxt_out, max_batch, max_batch/(sep_norm*norm), cont.pl_idx, cont.params) // 4 is to use 16 batches among 64 batches among 256 batches (real_ob = 10 < 16)
+	fmt.Println("Result Scale: ", math.Log2(ct_res.Scale))
+	fmt.Println("Result LV: ", ct_res.Level())
+	fmt.Printf("Done in %s \n", time.Since(start))
+
+	if (scale_exp != ct_res.Scale) || (cont.ECD_LV != ct_res.Level()) {
+		fmt.Println("exp scale: ", scale_exp)
+		fmt.Println("ctxt scale: ", ct_res.Scale)
+		fmt.Println("ctxt lv: ", ct_res.Level())
+		panic("LV or scale after conv then pack, inconsistent")
+	}
+	cont.evaluator.Add(ct_res, pl_bn_b, ct_res) // for Batch Normalization (BN)
+	fmt.Printf("Conv (with BN) Done in %s \n", time.Since(start))
+
+	if printResult {
+		fmt.Println("after FC")
+		max_batch := cont.N / (in_wid * in_wid)
+		res_tmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_res))
+		prt_mat_norm(res_tmp, max_batch, sep_norm*norm, 0, true)
+	}
+
+	return ct_res
+}
+
 // Eval Conv, BN, relu with Boot
 // in_wid must be Po2, BN is fold with Kernel
 // stride = true: apply [1,2,2,1] stride; false: [1,1,1,1]
@@ -514,7 +576,7 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	if printResult {
 		max_batch := cont.N / (in_wid * in_wid)
 		res_tmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_res))
-		prt_mat_norm(res_tmp, max_batch, norm, 3)
+		prt_mat_norm(res_tmp, max_batch, norm, 3, true)
 	}
 
 	return ct_res

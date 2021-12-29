@@ -9,6 +9,7 @@ import cmath
 import random
 import os
 import tensorflow as tf
+from tensorflow.keras.layers import Cropping2D
 
 def prt_list(input, start, width, showAll):
     if showAll:
@@ -97,7 +98,6 @@ def plain_resnet_bench():
     ker3 = [(0.25 * i)/(batch3 * batch3 * ker_size) for i in range(batch3 * batch3 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
 
     ten_x = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, input_width, input_width, 3])
-    # print(ten_x)
     ten_k0 = tf.reshape(tf.constant(np.array(ker0), tf.float32), [ker_width, ker_width, 3, batch])
     ten_k = tf.reshape(tf.constant(np.array(ker), tf.float32), [ker_width, ker_width, batch, batch])
     ten_k12 = tf.reshape(tf.constant(np.array(ker12), tf.float32), [ker_width, ker_width, batch, batch2])
@@ -108,7 +108,9 @@ def plain_resnet_bench():
 
     # conv = tf.nn.conv2d_transpose(ten_x, ten_k1, output_shape=(1, input_width[1], input_width[1], batch[1]), strides=[1, 2, 2, 1])
 
-
+    # conv = tf.reshape(tf.constant(np.array(mid_input), tf.float32), [1, 16, 16, batch2])
+    # print("Input: ", conv)
+    
     conv = ten_x
     print("Input: ", conv)
     for i in range(num_bl1):
@@ -222,10 +224,10 @@ def trans_conv_bnReLU_BL_bench():
     print("result: \n", conv, "\n")
 
 def plain_resnet(input_image):
-    in_dir = 'weight_h5/'
+    in_dir = 'weight_ker5_h5/'
     in_wid = [32, 16, 8]
     batch = [16, 32, 64]
-    ker_wid = 3
+    ker_wid = 5
     ker_size = ker_wid**2
     
     # load weights
@@ -236,11 +238,12 @@ def plain_resnet(input_image):
     # raw_input = [0.1*i/3000.0 for i in range(32*32*3)]
     # conv = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, in_wid[0], in_wid[0], 3])
     conv = input_image
-    blcs = [7,6,6] #ker7 [3,2,2] #ker5 [5,4,4] #ker3 [7,6,6]
+    blcs = [5,4,4] #ker7 [3,2,2] #ker5 [5,4,4] #ker3 [7,6,6]
 
     # print("Input: ", conv)
 
     num = 0
+    print(input_image)
     for blc in range(3):
         for i in range(blcs[blc]):
             if i == 0:
@@ -261,8 +264,10 @@ def plain_resnet(input_image):
             conv = tf.nn.relu(conv)
             if i == 0:
                 print(blc," to ", blc+1," block. ")
+                # print(conv)
             else:
                 print(blc+1,"-th block, ", i,"-th layer")
+                # print(conv)
             num += 1
             # print(i+1,"layer done\n")
         # print("after", blc_iter+1, "-th block\n", conv, "\n")
@@ -274,6 +279,7 @@ def plain_resnet(input_image):
     conv = conv + bias_final
 
     conv = tf.squeeze(conv, axis=[1,2])
+    print(conv)
     conv = tf.argmax(conv, 1)
     return conv
 
@@ -345,16 +351,17 @@ def post_process(iter_num):
     # print("enc == plain?", tf.argmax(tf.squeeze(conv, axis=[1,2]),1) == tf.argmax(pred[iter],1))
 
 def test_RMFC():
-    vec_size = 8*8*64
-    raw_input = [(i%27)*0.1 for i in range(vec_size)]
-    raw_ker = [(i%27)*0.1 for i in range(64*10)] #[1.0*i/640 for i in range(64*10)]
-    bias = [1*i for i in range(10)]
+    batch = 64
+    vec_size = 8*8*batch
+    raw_input = [(i%53)/53.0 for i in range(vec_size)]
+    raw_ker = [(i%13)/13.0 for i in range(batch*10)] #[1.0*i/640 for i in range(64*10)]
+    bias = [10.0*i for i in range(10)]
     
-    conv = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, 8, 8, 64])
+    conv = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, 8, 8, batch])
     print(conv)
     conv = tf.reduce_mean(conv, [1,2], keepdims = True)
     print("RM:", conv)
-    ten_final = tf.reshape(tf.constant(np.array(raw_ker), tf.float32), [1,1,64,10])
+    ten_final = tf.reshape(tf.constant(np.array(raw_ker), tf.float32), [1,1,batch,10])
     print(ten_final)
 
     conv = tf.nn.conv2d(conv, ten_final, strides = [1,1,1,1], padding = "SAME") + tf.reshape(tf.constant(np.array(bias), tf.float32), [1, 1, 1, 10])
@@ -377,8 +384,8 @@ def separate_data(num_outs):
 # separate_data(300)
 # trans_conv_bnReLU_BL_bench()
 # conv_bnReLU_BL_bench(False)
-plain_resnet_bench()
-exit(1)
+# plain_resnet_bench()
+
 # post_process(100)
 # exit(1)
 # num_samples = 1000
@@ -386,6 +393,7 @@ exit(1)
 
 # plain_imagenet_bench()
 # test_RMFC()
+# exit(1)
 
 # trans = False
 # strides = True
@@ -397,7 +405,7 @@ exit(1)
 # print("enc: ", conv[:10], "argmax: ", np.argmax(conv[:10]))
 # print("plain: ", pred[5], "argmax: ", np.argmax(pred[5]))
 
-num_samples = 1000 # or 1000
+num_samples = 100 # or 1000
 tf_labels = tf.constant(np.loadtxt('Resnet_plain_data/test_labels_'+str(num_samples)+'.csv'), tf.int64)
 tf_images = tf.reshape(tf.constant(np.loadtxt('Resnet_plain_data/test_images_'+str(num_samples)+'.csv'), tf.float32), [num_samples, 32, 32, 3])
 
@@ -405,9 +413,9 @@ tf_images = tf.reshape(tf.constant(np.loadtxt('Resnet_plain_data/test_images_'+s
 # for i in range(num_samples):
 #     np.savetxt('test_data/test_image_'+str(i)+'.csv',np.reshape(tf_images[i,:,:,:], [-1]), fmt='%.18e', delimiter=',')
     
-# tf_image = tf.reshape(tf_images[0, :, :, :], [1,32,32,3])
+tf_image = tf.reshape(tf_images[1, :, :, :], [1,32,32,3])
 # print(tf_image)
-predictions = plain_resnet(tf_images)
+predictions = plain_resnet(tf_image)
 np.savetxt('plain_prediction_'+str(num_samples)+'.csv',np.reshape(predictions, [-1]), fmt='%.18e', delimiter=',')
 print("num samples: ", len(tf_labels), "precision: ", tf.reduce_mean(tf.cast(tf.equal(predictions, tf_labels), 'float32')))
 
