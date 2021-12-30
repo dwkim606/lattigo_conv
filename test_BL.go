@@ -735,8 +735,8 @@ func testReduceMean_BL() {
 }
 
 func testImageNet_BL() {
-	num_blc1 := 2
-	num_blc2 := 2
+	num_blc1 := 4
+	num_blc2 := 4
 	logN := 16
 	in_wids := []int{16, 32}      // = raw_in_wids = same as python
 	real_batch := []int{256, 128} // same as python
