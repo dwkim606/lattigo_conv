@@ -274,6 +274,48 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 			}
 			end = 1
 		}
+	case "Imagenet": // Generate ext_idx for extracting valid values from conv with "same" padding
+		iter = 2 // since we use half padding, i.e., lower part is all zero
+		for i, elt := range cont.in_wids {
+			cont.ext_idx[elt] = make([][]int, iter)
+			for ul := 0; ul < iter; ul++ {
+				cont.ext_idx[elt][ul] = gen_keep_vec(cont.N/2, elt, cont.kp_wids[i], ul)
+			}
+			cont.r_idx[elt] = make([]map[int][]int, 4)
+			cont.r_idx_l[elt] = make([]map[int][]int, 4)
+			cont.m_idx[elt] = make([]map[int][]int, 4)
+			cont.m_idx_l[elt] = make([]map[int][]int, 4)
+
+			if i == 0 {
+				for pos := 0; pos < 4; pos += 1 {
+					cont.r_idx[elt][pos] = gen_comprs_full(cont.N/2, elt, cont.kp_wids[i], pos, 0)
+					cont.r_idx_l[elt][pos] = gen_comprs_full(cont.N/2, elt, cont.kp_wids[i], pos, 1)
+					for k := range cont.r_idx[elt][pos] {
+						rotations = append(rotations, k)
+					}
+					for k := range cont.r_idx_l[elt][pos] {
+						rotations = append(rotations, k)
+					}
+				}
+			} else if i == 1 {
+				for pos := 0; pos < 4; pos += 2 {
+					cont.m_idx[elt][pos], cont.r_idx[elt][pos] = gen_comprs_fast(cont.N/2, elt, cont.kp_wids[i], pos, 0)
+					cont.m_idx_l[elt][pos], cont.r_idx_l[elt][pos] = gen_comprs_fast(cont.N/2, elt, cont.kp_wids[i], pos, 1)
+					for k := range cont.r_idx[elt][pos] {
+						rotations = append(rotations, k)
+					}
+					for k := range cont.m_idx[elt][pos] {
+						rotations = append(rotations, k)
+					}
+					for k := range cont.r_idx_l[elt][pos] {
+						rotations = append(rotations, k)
+					}
+					for k := range cont.m_idx_l[elt][pos] {
+						rotations = append(rotations, k)
+					}
+				}
+			}
+		}
 	case "DCGAN": // Generate rotations for EXT_FULL
 		for _, elt := range cont.in_wids {
 			cont.r_idx[elt] = make([]map[int][]int, 4)
@@ -334,14 +376,16 @@ func main() {
 	// testConv_noBoot(7, 8, 8, true)
 
 	// testImageNet_BL()
+	// testImagenet()
 
 	// testReduceMean_norm()
 	// testResNet_ker23()
 
 	st, _ := strconv.Atoi(os.Args[1])
 	end, _ := strconv.Atoi(os.Args[2])
+	testImagenet_in(st, end)
 	// testResNet_in_BL(iter)
-	testResNet_in(st, end)
+	// testResNet_in(st, end)
 
 	// testConv_BNRelu_BL("TransConv", true)
 	// testConv_noBoot_BL("TransConv", true)

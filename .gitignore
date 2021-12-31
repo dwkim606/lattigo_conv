@@ -11,3 +11,6 @@ Resnet_enc_result_ker3_BL
 Resnet_enc_result_ker5_BL
 Resnet_enc_result_ker7_BL
 Resnet_plain_data
+Imagenet
+weight_imgnet_ker3_h5
+weight_imgnet_ker3_h5_copy
