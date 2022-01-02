@@ -470,7 +470,7 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 	} else {
 		kind = "Conv"
 	}
-	cfs_postB := debugStoC(cont, relu1, relu2, in_wid, kp_wid, kind)
+	cfs_postB := debugStoC(cont, relu1, relu2, in_wid, kp_wid, pack_pos, kind, false)
 
 	// needs to be modified for pack_pos consideration!!
 	start = time.Now()
@@ -543,7 +543,7 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	relu1, relu2 := debugReLU(cont, slot1, slot2, alpha)
 	relu1 = printDebug(cont.params, ct_boots[0], relu1, cont.decryptor, cont.encoder)
 	relu2 = printDebug(cont.params, ct_boots[1], relu2, cont.decryptor, cont.encoder)
-	cfs_postB := debugStoC(cont, relu1, relu2, in_wid, kp_wid, kind)
+	cfs_postB := debugStoC(cont, relu1, relu2, in_wid, kp_wid, pack_pos, kind, fast_pack)
 
 	start = time.Now()
 	ct_keep := make([]*ckks.Ciphertext, iter) // for extend (rotation) of ctxt_in
@@ -584,7 +584,7 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	if printResult {
 		max_batch := cont.N / (in_wid * in_wid)
 		res_tmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_res))
-		prt_mat_norm(res_tmp, max_batch, norm, 3, false)
+		prt_mat_norm(res_tmp, max_batch, norm, 4, false)
 	}
 
 	return ct_res
@@ -616,7 +616,7 @@ func debugReLU(cont *context, slot1, slot2 []complex128, alpha float64) (relu1, 
 	return
 }
 
-func debugStoC(cont *context, slot1, slot2 []complex128, in_wid, kp_wid int, kind string) (cfs_postB []float64) {
+func debugStoC(cont *context, slot1, slot2 []complex128, in_wid, kp_wid, pos int, kind string, fast_pack bool) (cfs_postB []float64) {
 	slot1_fl := make([]float64, len(slot1))
 	slot2_fl := make([]float64, len(slot1))
 	for i := range slot1 {
@@ -630,8 +630,13 @@ func debugStoC(cont *context, slot1, slot2 []complex128, in_wid, kp_wid int, kin
 		tmp1 = keep_vec(slot1_fl, in_wid, kp_wid, 0)
 		tmp2 = keep_vec(slot2_fl, in_wid, kp_wid, 1)
 	case "StrConv":
-		tmp1 = comprs_full_fast(slot1_fl, in_wid, kp_wid, 0, 0)
-		tmp2 = comprs_full_fast(slot2_fl, in_wid, kp_wid, 0, 1)
+		if fast_pack {
+			tmp1 = comprs_full_fast(slot1_fl, in_wid, kp_wid, pos, 0)
+			tmp2 = comprs_full_fast(slot2_fl, in_wid, kp_wid, pos, 1)
+		} else {
+			tmp1 = comprs_full(slot1_fl, in_wid, kp_wid, pos, 0)
+			tmp2 = comprs_full(slot2_fl, in_wid, kp_wid, pos, 1)
+		}
 	case "TransConv":
 		tmp1 = extend_full(slot1_fl, in_wid, kp_wid, 0, 0)
 		tmp2 = extend_full(slot2_fl, in_wid, kp_wid, 0, 1)

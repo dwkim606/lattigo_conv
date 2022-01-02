@@ -484,3 +484,93 @@ func comprs_full_fast_int(input []int, in_wid, kp_wid, pos, ul int) []int {
 
 	return output
 }
+
+func comprs_full_int(input []int, in_wid, kp_wid, pos, ul int) []int {
+	output := make([]int, len(input))
+	batch := 2 * len(input) / (in_wid * in_wid)
+	if kp_wid < in_wid/2 {
+		panic("keep width too small. less than in_wid/2")
+	}
+	pos = int(reverseBits(uint32(pos), 2))
+	padding := false
+	min_wid := in_wid / 4
+	if in_wid%4 != 0 {
+		panic("input wid not divisible by 4")
+	}
+	if in_wid%2 != 0 {
+		panic("input wid not divisible by 2")
+	}
+	log_in_wid := 0
+	for ; (1 << log_in_wid) < in_wid; log_in_wid++ {
+	}
+
+	if padding {
+		for j := 0; j < min_wid; j++ { // kinds of mov depends on j
+			tmp := make([]int, len(input))
+			for b := 0; b < batch; b++ {
+				for i := 0; i < min_wid; i++ {
+					idx := 2*min_wid*in_wid*b + in_wid*j + i + min_wid*in_wid + min_wid
+					tmp[idx] = input[idx]
+				}
+			}
+			rot := -2*j*min_wid + 2*pos*min_wid*min_wid - min_wid*in_wid - min_wid
+			output = addSlice_int(output, rRot_int(tmp, rot))
+		}
+		// // when we want to extract even positioned inputs
+		// for j := 0; j < min_wid; j++ { // kinds of mov depends on j
+		// 	tmp := make([]int, len(input))
+		// 	for b := 0; b < batch; b++ {
+		// 		for i := 0; i < min_wid; i++ {
+		// 			idx := 2*min_wid*in_wid*b + in_wid*j + i
+		// 			tmp[idx] = input[idx]
+		// 		}
+		// 	}
+		// 	rot := -2*j*min_wid + 2*pos*min_wid*min_wid
+		// 	output = addSlice(output, rRot(tmp, rot))
+		// }
+	} else {
+		if ul == 0 {
+			for j := 0; j < 2*min_wid; j++ { // kinds of mov depends on j
+				tmp := make([]int, len(input))
+				for b := 0; b < batch; b++ {
+					for i := 0; i < min_wid; i++ {
+						if reverseBits(uint32(in_wid/2+j), log_in_wid) < uint32(kp_wid) {
+							idx := 2*min_wid*in_wid*b + 2*min_wid*j + i + in_wid*min_wid + min_wid
+							tmp[idx] = input[idx]
+						}
+					}
+				}
+				rot := -j*min_wid + 2*pos*min_wid*min_wid - min_wid - in_wid*min_wid
+				output = addSlice_int(output, rRot_int(tmp, rot))
+			}
+		} else {
+			for j := 0; j < 2*min_wid; j++ { // kinds of mov depends on j
+				tmp := make([]int, len(input))
+				for b := 0; b < batch; b++ {
+					for i := 0; i < min_wid; i++ {
+						if (reverseBits(uint32(in_wid/2+j), log_in_wid) < uint32(kp_wid)) && (reverseBits(uint32(3*min_wid+i), log_in_wid-1) < uint32(kp_wid-in_wid/2)) {
+							idx := 2*min_wid*in_wid*b + 2*min_wid*j + i + in_wid*min_wid + min_wid
+							tmp[idx] = input[idx]
+						}
+					}
+				}
+				rot := -j*min_wid + 2*pos*min_wid*min_wid - min_wid - in_wid*min_wid
+				output = addSlice_int(output, rRot_int(tmp, rot))
+			}
+		}
+		// // when we want to extract even positioned inputs
+		// for j := 0; j < 2*min_wid; j++ { // kinds of mov depends on j
+		// 	tmp := make([]int, len(input))
+		// 	for b := 0; b < batch; b++ {
+		// 		for i := 0; i < min_wid; i++ {
+		// 			idx := 2*min_wid*in_wid*b + 2*min_wid*j + i
+		// 			tmp[idx] = input[idx]
+		// 		}
+		// 	}
+		// 	rot := -j*min_wid + 2*pos*min_wid*min_wid
+		// 	output = addSlice(output, rRot(tmp, rot))
+		// }
+	}
+
+	return output
+}
