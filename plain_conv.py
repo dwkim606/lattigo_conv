@@ -659,7 +659,7 @@ def post_process_Imgnet(iter_num, ker_name, base_line):
     num_samples = 100
     true_pred = np.reshape(np.loadtxt('Imagenet/'+ker_name+'_true_label/'+ker_name+'_true_label0.csv'), [num_samples, 1000])    
     pred = np.reshape(np.loadtxt('Imagenet/'+ker_name+'_final_out/'+ker_name+'_final_out0.csv'), [num_samples, 1000])    
-    result_dir = 'Imagenet/imgnet_class_result_'+ker_name+'_'
+    result_dir = 'Imagenet/imgnet_class_result_'+ker_name+'_final_fast'
     if base_line:
         result_dir = result_dir + "BL"
     in_dir = 'weight_imgnet_'+ker_name+'_h5/'
@@ -758,6 +758,7 @@ def imgnet_gen_ct_in_one(iter_st):
   
 #### Main Start #### 
 
+# post_process_Imgnet(23, 'ker3', False)
 
 # conv_bnReLU_BL_bench(False, True, True)
 

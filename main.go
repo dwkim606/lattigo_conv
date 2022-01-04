@@ -465,15 +465,15 @@ func main() {
 
 	// testImagenet_final_fast()
 
-	// st, _ := strconv.Atoi(os.Args[1])
-	// end, _ := strconv.Atoi(os.Args[2])
+	st, _ := strconv.Atoi(os.Args[1])
+	end, _ := strconv.Atoi(os.Args[2])
 	// testImagenet_final_fast_in(st, end)
-
+	testImageNet_BL_final_in(st, end)
 	// testImagenet_in(st, end)
 	// testResNet_in_BL(iter)
 	// testResNet_in(st, end)
 
-	testImageNet_BL_final()
+	// testImageNet_BL_final()
 
 	// testConv_BNRelu_BL("StrConv", true)
 	// testConv_noBoot_BL("Conv", true)
