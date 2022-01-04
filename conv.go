@@ -79,6 +79,7 @@ func reshape_input_BL(input []float64, in_wid int) (out []complex128) {
 	out = make([]complex128, len(input))
 	batch := len(input) / (in_wid * in_wid)
 	l := 0
+
 	for i := 0; i < in_wid; i++ {
 		for j := 0; j < in_wid; j++ {
 			for k := 0; k < batch; k++ {
@@ -626,7 +627,7 @@ func preConv_BL(evaluator ckks.Evaluator, ct_in *ckks.Ciphertext, in_wid, ker_wi
 }
 
 // eval Convolution for the part of output: need to sum this up with rotations
-func postConv_BL(param ckks.Parameters, encoder ckks.Encoder, evaluator ckks.Evaluator, ct_in_rots []*ckks.Ciphertext, in_wid, ker_wid, rot int, max_ker_rs [][][][]float64) (ct_out *ckks.Ciphertext) {
+func postConv_BL(param ckks.Parameters, encoder ckks.Encoder, evaluator ckks.Evaluator, ct_in_rots []*ckks.Ciphertext, in_wid, ker_wid, rot, pad int, max_ker_rs [][][][]float64) (ct_out *ckks.Ciphertext) {
 
 	max_batch := param.Slots() / (in_wid * in_wid)
 	postKer := make([]complex128, param.Slots())
@@ -636,10 +637,10 @@ func postConv_BL(param ckks.Parameters, encoder ckks.Encoder, evaluator ckks.Eva
 	for i := 0; i < ker_wid; i++ {
 		for j := 0; j < ker_wid; j++ {
 			for k := 0; k < max_batch; k++ {
-				for ki := 0; ki < in_wid; ki++ { // position of input
-					for kj := 0; kj < in_wid; kj++ {
+				for ki := 0; ki < (in_wid - pad); ki++ { // position of input
+					for kj := 0; kj < (in_wid - pad); kj++ {
 						postKer[k*in_wid*in_wid+ki*in_wid+kj] = complex(max_ker_rs[i][j][k][(k-rot+max_batch)%max_batch], 0)
-						if (((ki + i - (ker_wid / 2)) < 0) || ((ki + i - (ker_wid / 2)) >= in_wid)) || (((kj + j - (ker_wid / 2)) < 0) || ((kj + j - (ker_wid / 2)) >= in_wid)) {
+						if (((ki + i - (ker_wid / 2)) < 0) || ((ki + i - (ker_wid / 2)) >= (in_wid - pad))) || (((kj + j - (ker_wid / 2)) < 0) || ((kj + j - (ker_wid / 2)) >= (in_wid - pad))) {
 							postKer[k*in_wid*in_wid+ki*in_wid+kj] = complex(0, 0)
 						}
 					}

@@ -70,7 +70,7 @@ func evalRot_BL(cont *context, ct_input *ckks.Ciphertext, in_wid, pos int, trans
 // Eval Conv only, always assume max batch
 // in_wid must be Po2 (also include padding), includes kernel preparation
 // norm == 1 : normal case, norm == 4 : in & out batch is (1,0,0,0,2,0,0,0,3,0,0,0,4,0,0,0)
-func evalConv_BN_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob, pos, norm int, trans, printResult bool) (ct_res *ckks.Ciphertext) {
+func evalConv_BN_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob, pos, norm, pad int, trans, printResult bool) (ct_res *ckks.Ciphertext) {
 	in_size := in_wid * in_wid
 	out_size := in_size
 	max_batch := cont.N / (2 * in_size)
@@ -109,7 +109,7 @@ func evalConv_BN_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b
 		rot_iters = max_batch
 	}
 	for i := 0; i < rot_iters; i++ {
-		ct_tmp := postConv_BL(cont.params, cont.encoder, cont.evaluator, ct_inputs_rots, in_wid, ker_wid, norm*i, max_ker_rs)
+		ct_tmp := postConv_BL(cont.params, cont.encoder, cont.evaluator, ct_inputs_rots, in_wid, ker_wid, norm*i, pad, max_ker_rs)
 		if i == 0 {
 			ct_res = ct_tmp
 		} else {
@@ -129,7 +129,7 @@ func evalConv_BN_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b
 // Eval Conv only, always assume max batch
 // in_wid must be Po2 (also include padding),
 // include kernel preparation
-func evalConv_BNRelu_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, ker_wid, real_ib, real_ob, norm int, strides, trans, printResult bool) (ct_res *ckks.Ciphertext) {
+func evalConv_BNRelu_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, ker_wid, real_ib, real_ob, norm, pad int, strides, trans, printResult bool) (ct_res *ckks.Ciphertext) {
 	var ct_input_rot, ct_conv *ckks.Ciphertext
 	rot_time := time.Duration(0)
 	eval_time := time.Duration(0)
@@ -140,9 +140,9 @@ func evalConv_BNRelu_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, 
 			rot_time += time.Since(start)
 			start = time.Now()
 			if pos == 0 {
-				ct_conv = evalConv_BN_BL(cont, ct_input_rot, ker_in, bn_a, bn_b, 2*in_wid, ker_wid, real_ib, real_ob, pos, norm, trans, printResult)
+				ct_conv = evalConv_BN_BL(cont, ct_input_rot, ker_in, bn_a, bn_b, 2*in_wid, ker_wid, real_ib, real_ob, pos, norm, pad, trans, printResult)
 			} else {
-				ct_tmp := evalConv_BN_BL(cont, ct_input_rot, ker_in, bn_a, bn_b, 2*in_wid, ker_wid, real_ib, real_ob, pos, norm, trans, printResult)
+				ct_tmp := evalConv_BN_BL(cont, ct_input_rot, ker_in, bn_a, bn_b, 2*in_wid, ker_wid, real_ib, real_ob, pos, norm, pad, trans, printResult)
 				cont.evaluator.Add(ct_conv, ct_tmp, ct_conv)
 			}
 			eval_time += time.Since(start)
@@ -150,7 +150,7 @@ func evalConv_BNRelu_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, 
 		fmt.Printf("Rotation (for transConv) Done in %s \n", rot_time)
 		fmt.Printf("EvalConv total (for transConv) Done in %s \n", eval_time)
 	} else {
-		ct_conv = evalConv_BN_BL(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, 0, norm, trans, printResult)
+		ct_conv = evalConv_BN_BL(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, 0, norm, pad, trans, printResult)
 		if strides {
 			start = time.Now()
 			ct_conv = evalRot_BL(cont, ct_conv, in_wid, 0, trans)
@@ -263,6 +263,42 @@ func evalRMFC_BL(cont *context, ct_input *ckks.Ciphertext, ker_fc, bias []float6
 	}
 	pl_bias := cont.encoder.EncodeNTTAtLvlNew(ct_res.Level(), tmp, cont.logN-1)
 	cont.evaluator.Add(ct_res, pl_bias, ct_res)
+
+	return
+}
+
+// reduce mean and final FC layer
+// assume that ct_input has full batch (1,2,3,4,...)
+// ker_fc is of size in_batch*out and 1-dim from [in_batch,out] shape
+func evalRMFC_BL_img(cont *context, ct_input *ckks.Ciphertext, ker_fc []float64, in_batch, out_num int, printResult bool) (ct_res *ckks.Ciphertext) {
+	rs_ker := make([][]float64, in_batch)
+	for i := 0; i < in_batch; i++ {
+		rs_ker[i] = make([]float64, out_num)
+		for j := 0; j < out_num; j++ {
+			rs_ker[i][j] = ker_fc[j+i*out_num] / 49.0 // we will add 64 elts instead of averaging them
+		}
+	}
+
+	// sum 64 elements instead of averaging them (but only 49 elts are non-zero)
+	ct_avg := ct_input
+	for i := 1; i < 64; i *= 2 {
+		ct_avg = cont.evaluator.AddNew(ct_avg, cont.evaluator.RotateNew(ct_avg, i))
+	}
+
+	for i := 0; i < in_batch; i++ {
+		tmp := make([]complex128, cont.N/2)
+		for j := 0; j < out_num; j++ {
+			tmp[(i+j)%in_batch*64] = complex(rs_ker[(i+j)%in_batch][j], 0)
+		}
+		pl_ker := cont.encoder.EncodeNTTAtLvlNew(ct_avg.Level(), tmp, cont.logN-1)
+
+		if i == 0 {
+			ct_res = cont.evaluator.MulNew(ct_avg, pl_ker)
+		} else {
+			ct_tmp := cont.evaluator.MulNew(ct_avg, pl_ker)
+			cont.evaluator.Add(ct_res, cont.evaluator.RotateNew(ct_tmp, i*64), ct_res)
+		}
+	}
 
 	return
 }

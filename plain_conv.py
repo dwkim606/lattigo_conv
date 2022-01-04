@@ -129,6 +129,11 @@ def plain_imagenet_after_mid(mid_input, ker_name, mid_input_prec):
         # print(tf.reduce_max(ten_a*conv+ten_b, [0,1,2,3]))
         # print(tf.reduce_mean(ten_a*conv+ten_b, [0,1,2,3]))
         conv = tf.nn.relu(ten_a * conv + ten_b)
+    
+    count = 0
+    while os.path.exists('Imagenet/ker3_ct_in_2/ker3_ct_in'+str(count)+'.csv'):
+        count += 1
+    np.savetxt('Imagenet/ker3_ct_in_2/ker3_ct_in'+str(count)+'.csv', tf.reshape(conv, [-1]).numpy())
 
     for i in range(blcs[1]):
         if i == 0:
@@ -223,11 +228,11 @@ def plain_imagenet_bench():
 # only perform final block
 def plain_imagenet_final_bench():
     input_width = 14
-    num_blc = 1
+    num_blc = 3
     batch = 16
     vec_size = batch*input_width**2
     ker_width = 3
-    bn_a = [1.0, 0.2]
+    bn_a = [0.2, 0.2]
 
     batch2 = batch*2
     ker_size = ker_width**2
@@ -354,8 +359,8 @@ def plain_resnet_bench():
     print("after 3rd block\n", conv, "\n")
 
 def conv_bnReLU_BL_bench(trans, strides, relu):
-    batch = 8
-    input_width = 6
+    batch = 4
+    input_width = 14
     vec_size = batch*input_width**2
     ker_width = 3
     bn_a = 1.0
@@ -645,6 +650,60 @@ def post_process(iter_num, ker_name, base_line):
     # pred = plain_resnet(tf_images)
     # print("enc == plain?", tf.argmax(tf.squeeze(conv, axis=[1,2]),1) == tf.argmax(pred[iter],1))
 
+
+# compare enc result (after post process: reduce_mean) with plain result
+def post_process_Imgnet(iter_num, ker_name, base_line):
+    ## First load plain result
+    # ker_name = 'ker3'
+    # base_line = False
+    num_samples = 100
+    true_pred = np.reshape(np.loadtxt('Imagenet/'+ker_name+'_true_label/'+ker_name+'_true_label0.csv'), [num_samples, 1000])    
+    pred = np.reshape(np.loadtxt('Imagenet/'+ker_name+'_final_out/'+ker_name+'_final_out0.csv'), [num_samples, 1000])    
+    result_dir = 'Imagenet/imgnet_class_result_'+ker_name+'_'
+    if base_line:
+        result_dir = result_dir + "BL"
+    in_dir = 'weight_imgnet_'+ker_name+'_h5/'
+
+    acc = 0
+    total = 0
+    no_iters = []
+    wrong_result = {}
+    os_path = result_dir+'/imgnet_enc_class_result_'+ker_name+'_'
+    if base_line:
+        os_path = os_path+'BL_'
+    for iter in range(iter_num):
+        if os.path.exists(os_path+str(iter)+'.csv'):
+            read = np.loadtxt(os_path+str(iter)+'.csv')
+            total+=1
+        else:
+            no_iters.append(iter)
+            continue
+
+        print("enc: ", read[:10], "argmax: ", np.argmax(read))
+        print("plain: ", pred[iter,:][:10], "argmax: ", np.argmax(pred[iter,:]))
+        if (np.argmax(read) == np.argmax(pred[iter,:])):
+            acc += 1
+        else:
+            wrong_result[str(iter)] = []
+            wrong_result[str(iter)].insert(0, read)
+            wrong_result[str(iter)].insert(1, pred[iter,:])
+            wrong_result[str(iter)].insert(2, true_pred[iter,:])
+
+    print("precision: ", acc, "/", total)
+    print("among ", iter_num, " samples.")
+    print("missing: ", no_iters)
+    print("\n wrong results: \n")
+    for i, result in wrong_result.items():
+        print(i, "-th iter.")
+        print("enc: ", result[0][:10], "argmax: ", np.argmax(result[0]))
+        print("plain: ", result[1][:10], "argmax: ", np.argmax(result[1]), "\n")
+        print("true: argmax: ", np.argmax(result[2]), " \n" )
+
+    # tf_images = tf.reshape(tf.constant(np.loadtxt('test_images_'+str(num_samples)+'.csv'), tf.float32), [num_samples, 32, 32, 3])
+    # pred = plain_resnet(tf_images)
+    # print("enc == plain?", tf.argmax(tf.squeeze(conv, axis=[1,2]),1) == tf.argmax(pred[iter],1))
+
+
 def test_RMFC():
     batch = 64
     vec_size = 8*8*batch
@@ -690,16 +749,19 @@ def gen_plain_predictions():
     print("num samples: ", len(tf_labels), "precision: ", tf.reduce_mean(tf.cast(tf.equal(tf.argmax(predictions, 1), tf_labels), 'float32')))
 
 def imgnet_gen_ct_in_one(iter_st):
-    ct_in = np.reshape(np.loadtxt('Imagenet/ker3_ct_in/ker3_ct_in'+str(iter_st)+'.csv'), [100, 28, 28, 128])
+    ct_in = np.reshape(np.loadtxt('Imagenet/ker3_ct_in_2/ker3_ct_in'+str(iter_st)+'.csv'), [100, 14, 14, 256])
     j = 0
     for i in range(100*iter_st, 100*(iter_st+1)):
-        np.savetxt("Imagenet/ker3_ct_in_one/input_"+str(i)+".csv", np.reshape(ct_in[j,:,:,:], [-1]))
+        np.savetxt("Imagenet/ker3_ct_in_one2/input_"+str(i)+".csv", np.reshape(ct_in[j,:,:,:], [-1]))
         j+=1
 
   
 #### Main Start #### 
 
-# for i in range(10):
+
+# conv_bnReLU_BL_bench(False, True, True)
+
+# for i in range(5):
 #     imgnet_gen_ct_in_one(i)
 
 
@@ -719,8 +781,11 @@ def imgnet_gen_ct_in_one(iter_st):
 # conv_bnReLU_BL_bench(False)
 # plain_resnet_bench()
 
-plain_imagenet_bench()
-exit(1)
+# post_process_Imgnet(100, 'ker3', False)
+# exit(1)
+
+# plain_imagenet_bench()
+
 
 # gen_plain_predictions()
 
@@ -752,10 +817,13 @@ exit(1)
 #     label = tf.concat([label, tmp_label], 0)
 # label = tf.argmax(tf.reshape(tf.constant(label, tf.float32), [1000, 1000]), 1)
 
-# pred = plain_imagenet_after_mid(mid_input, 'ker3_', True)
-# correct = tf.reduce_sum(tf.cast(tf.equal(pred, label), 'float32')).numpy()
-# print("accuracy: ", correct/1000.0)
+# ## Imagnet test, take mid_input = np.loadtxt('Imagenet/ker3_ct_in/ker3_ct_in'+str(i)+'.csv')
 
+# for i in range(10):
+#     mid_input = np.loadtxt('Imagenet/ker3_ct_in/ker3_ct_in'+str(i)+'.csv')
+#     tf_mid_input = tf.reshape(tf.constant(mid_input, tf.float32), [100, 28, 28, 128])  
+#     plain_imagenet_after_mid(tf_mid_input, 'ker3_', False)
+# exit(1)
 
 
 

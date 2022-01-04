@@ -53,7 +53,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	copy(cont.kp_wids, kp_wids)
 
 	btpParams := ckks.DefaultBootstrapParams[6]
-	if (kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet") || (kind == "BL_Imagenet") {
+	if (kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet") || (kind == "BL_Imagenet") || (kind == "BL_Imagenet_final") {
 		btpParams = ckks.DefaultBootstrapParams[7]
 	}
 	cont.params, err = btpParams.Params()
@@ -178,6 +178,31 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 			}
 		}
 	case "BL_Imagenet":
+		for _, elt := range cont.in_wids {
+			for k := -(ker_wid / 2); k <= ker_wid/2; k++ { // rotations for conv
+				for k2 := -(ker_wid / 2); k2 <= ker_wid/2; k2++ {
+					rotations = append(rotations, k*elt+k2)
+				}
+			}
+			out_batch := (cont.N / 2) / (elt * elt)
+			for k := 1; k < out_batch; k++ { // rotations for conv
+				rotations = append(rotations, k*elt*elt)
+			}
+			for pos := 0; pos < 4; pos++ { // for final rotations for after strides
+				rotations = append(rotations, -pos*elt*elt/4)
+			}
+			cont.m_idx[elt] = make([]map[int][]int, 1)
+			cont.r_idx[elt] = make([]map[int][]int, 1)
+			cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_comprs_BL(cont.N/2, elt)
+
+			for k := range cont.m_idx[elt][0] {
+				rotations = append(rotations, k)
+			}
+			for k := range cont.r_idx[elt][0] {
+				rotations = append(rotations, k)
+			}
+		}
+	case "BL_Imagenet_final":
 		for _, elt := range cont.in_wids {
 			for k := -(ker_wid / 2); k <= ker_wid/2; k++ { // rotations for conv
 				for k2 := -(ker_wid / 2); k2 <= ker_wid/2; k2++ {
@@ -347,6 +372,31 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 				}
 			}
 		}
+	case "Imagenet_final_fast": // Generate ext_idx for extracting valid values from conv with "same" padding
+		iter = 2 // since we use half padding, i.e., lower part is all zero
+		for i, elt := range cont.in_wids {
+			cont.ext_idx[elt] = make([][]int, iter)
+			for ul := 0; ul < iter; ul++ {
+				cont.ext_idx[elt][ul] = gen_keep_vec(cont.N/2, elt, cont.kp_wids[i], ul)
+			}
+			cont.r_idx[elt] = make([]map[int][]int, 4)
+			cont.r_idx_l[elt] = make([]map[int][]int, 4)
+			cont.m_idx[elt] = make([]map[int][]int, 4)
+			cont.m_idx_l[elt] = make([]map[int][]int, 4)
+
+			if i == 0 {
+				for pos := 0; pos < 2; pos += 1 {
+					cont.r_idx[elt][pos] = gen_comprs_full(cont.N/2, elt, cont.kp_wids[i], pos, 0)
+					cont.r_idx_l[elt][pos] = gen_comprs_full(cont.N/2, elt, cont.kp_wids[i], pos, 1)
+					for k := range cont.r_idx[elt][pos] {
+						rotations = append(rotations, k)
+					}
+					for k := range cont.r_idx_l[elt][pos] {
+						rotations = append(rotations, k)
+					}
+				}
+			}
+		}
 	case "DCGAN": // Generate rotations for EXT_FULL
 		for _, elt := range cont.in_wids {
 			cont.r_idx[elt] = make([]map[int][]int, 4)
@@ -377,7 +427,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	cont.encryptor = ckks.NewEncryptor(cont.params, sk)
 	cont.evaluator = ckks.NewEvaluator(cont.params, rlwe.EvaluationKey{Rlk: rlk, Rtks: rotkeys})
 
-	if !((kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet") || (kind == "BL_Imagenet")) {
+	if !((kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet") || (kind == "BL_Imagenet") || (kind == "BL_Imagenet_final")) {
 		cont.pl_idx, cont.pack_evaluator = gen_idxNlogs(cont.ECD_LV, kgen, sk, cont.encoder, cont.params)
 	}
 
@@ -387,7 +437,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 		rotkeys = kgen.GenRotationKeysForRotations(rotations, true, sk)
 		btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
 
-		if (kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet") || (kind == "BL_Imagenet") {
+		if (kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet") || (kind == "BL_Imagenet") || (kind == "BL_Imagenet_final") {
 			if cont.btp, err = ckks.NewBootstrapper(cont.params, btpParams, btpKey); err != nil {
 				panic(err)
 			}
@@ -413,14 +463,20 @@ func main() {
 	// testReduceMean_norm()
 	// testResNet_ker23()
 
-	st, _ := strconv.Atoi(os.Args[1])
-	end, _ := strconv.Atoi(os.Args[2])
-	testImagenet_in(st, end)
+	// testImagenet_final_fast()
+
+	// st, _ := strconv.Atoi(os.Args[1])
+	// end, _ := strconv.Atoi(os.Args[2])
+	// testImagenet_final_fast_in(st, end)
+
+	// testImagenet_in(st, end)
 	// testResNet_in_BL(iter)
 	// testResNet_in(st, end)
 
-	// testConv_BNRelu_BL("TransConv", true)
-	// testConv_noBoot_BL("TransConv", true)
+	testImageNet_BL_final()
+
+	// testConv_BNRelu_BL("StrConv", true)
+	// testConv_noBoot_BL("Conv", true)
 	// testResNet_BL()
 	// testReduceMean_BL()
 
@@ -680,13 +736,25 @@ func prt_mat_one_norm(vec []float64, batch, norm, sj, sk int) (out []float64) {
 	return out
 }
 
-// only 10, (1,1) element in all batches (1,0,0,0,0,0,0,0,2,0,0,0,0,0,...)
-func prt_mat_one_BL(vec []complex128, max_bat int) (out []float64) {
+// only out_num, (1,1) element in all batches (1,0,0,0,0,0,0,0,2,0,0,0,0,0,...)
+func prt_mat_one_BL(vec []complex128, max_bat, out_num int) (out []float64) {
 	mat_size := len(vec) / max_bat
-	out = make([]float64, 10)
+	out = make([]float64, out_num)
 
 	for i := range out {
 		out[i] = real(vec[i*mat_size*8])
+	}
+
+	return out
+}
+
+// only out_num, (1,1) element in all batches (1,0,0,0,0,0,0,0,2,0,0,0,0,0,...)
+func prt_mat_one_BL_img(vec []complex128, max_bat, out_num int) (out []float64) {
+	mat_size := len(vec) / max_bat
+	out = make([]float64, out_num)
+
+	for i := range out {
+		out[i] = real(vec[i*mat_size])
 	}
 
 	return out
