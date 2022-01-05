@@ -246,6 +246,32 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 				cont.m_idx[elt] = make([]map[int][]int, 4)
 				cont.m_idx_l[elt] = make([]map[int][]int, 4)
 				for pos := 0; pos < 4; pos++ {
+					cont.r_idx[elt][pos] = gen_comprs_full(cont.N/2, elt, cont.kp_wids[i], pos, 0)
+					cont.r_idx_l[elt][pos] = gen_comprs_full(cont.N/2, elt, cont.kp_wids[i], pos, 1)
+					for k := range cont.r_idx[elt][pos] {
+						rotations = append(rotations, k)
+					}
+					for k := range cont.r_idx_l[elt][pos] {
+						rotations = append(rotations, k)
+					}
+					for k := range cont.m_idx[elt][pos] {
+						rotations = append(rotations, k)
+					}
+					for k := range cont.m_idx_l[elt][pos] {
+						rotations = append(rotations, k)
+					}
+				}
+			}
+		}
+	case "StrConv_fast":
+		if boot {
+			iter = 2 // we assume full padding, i.e., up and low is both nonzero
+			for i, elt := range cont.in_wids {
+				cont.r_idx[elt] = make([]map[int][]int, 4)
+				cont.r_idx_l[elt] = make([]map[int][]int, 4)
+				cont.m_idx[elt] = make([]map[int][]int, 4)
+				cont.m_idx_l[elt] = make([]map[int][]int, 4)
+				for pos := 0; pos < 4; pos++ {
 					cont.m_idx[elt][pos], cont.r_idx[elt][pos] = gen_comprs_fast(cont.N/2, elt, cont.kp_wids[i], pos, 0)
 					cont.m_idx_l[elt][pos], cont.r_idx_l[elt][pos] = gen_comprs_fast(cont.N/2, elt, cont.kp_wids[i], pos, 1)
 					for k := range cont.r_idx[elt][pos] {
@@ -465,17 +491,17 @@ func main() {
 
 	// testImagenet_final_fast()
 
-	st, _ := strconv.Atoi(os.Args[1])
-	end, _ := strconv.Atoi(os.Args[2])
+	// st, _ := strconv.Atoi(os.Args[1])
+	// end, _ := strconv.Atoi(os.Args[2])
 	// testImagenet_final_fast_in(st, end)
-	testImageNet_BL_final_in(st, end)
+	// testImageNet_BL_final_in(st, end)
 	// testImagenet_in(st, end)
 	// testResNet_in_BL(iter)
 	// testResNet_in(st, end)
 
 	// testImageNet_BL_final()
 
-	// testConv_BNRelu_BL("StrConv", true)
+	// testConv_BNRelu_BL("Conv", true)
 	// testConv_noBoot_BL("Conv", true)
 	// testResNet_BL()
 	// testReduceMean_BL()
@@ -483,8 +509,12 @@ func main() {
 	// basic()
 
 	// testBRrot()
-	// testConv_noBoot("Conv", true)
-	// testConv_BNRelu("StrConv", true)
+	// testConv_noBoot("Conv", false)
+	// testConv_noBoot("Conv", false)
+	testConv_BNRelu("Conv", false)
+
+	// testConv_BNRelu("Conv", false)
+
 	// testReduceMean()
 	// testResNet()
 	// testDCGAN()

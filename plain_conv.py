@@ -23,14 +23,15 @@ def prt_list(input, start, width, showAll):
 
 def plain_imagenet(input_image, ker_name):
     in_dir = 'weight_imgnet_'+ker_name+'h5/'
-    in_wid = [112, 56, 28, 14, 7]
-    batch = [64, 64, 128, 256, 512]
     
+    batch = [64, 64, 128, 256, 512]
+    in_wid_list = {'ker3_': [112, 56, 28, 14, 7], 'ker_7': [112, 56, 28, 14, 6]}
     ker_list = {'ker3_': 3, 'ker5_': 5, 'ker7_': 7}
     blc_list = {'ker3_': [1,4,4,4,4], 'ker5_': [1,4,4,2,2], 'ker7_': [1,4,4,1,1]}
 
     ker_wid = ker_list[ker_name]
     blcs = blc_list[ker_name] #ker7 [3,2,2] #ker5 [5,4,4] #ker3 [7,6,6]
+    in_wid = in_wid_list[ker_name]
 
     print(input_image)
     
@@ -54,6 +55,8 @@ def plain_imagenet(input_image, ker_name):
 
                     ten_k = tf.reshape(tf.constant(np.loadtxt(in_dir+'w'+str(num)+'-conv.csv'), tf.float32), [ker_wid, ker_wid, batch[blc-1], batch[blc]])
                     conv = tf.nn.conv2d(conv, ten_k, strides = [1,2,2,1], padding = "SAME")
+                    if (blc == 4):
+                        conv = Cropping2D(cropping=((0,1), (0,1)))(conv)
                 else:
                     bn_a = [[np.loadtxt(in_dir+'w'+str(num)+'-a.csv') for i in range(in_wid[blc])] for j in range(in_wid[blc])]
                     bn_b = [[np.loadtxt(in_dir+'w'+str(num)+'-b.csv') for i in range(in_wid[blc])] for j in range(in_wid[blc])]
@@ -88,12 +91,14 @@ def plain_imagenet(input_image, ker_name):
 # if prec = false, take mid_input = ct_in
 def plain_imagenet_after_mid(mid_input, ker_name, mid_input_prec):
     in_dir = 'weight_imgnet_'+ker_name+'h5/'
-    in_wid = [28, 14, 7]
-    batch = [128, 256, 512]
     
+    batch = [128, 256, 512]
+
+    in_wid_list = {'ker3_': [28, 14, 7], 'ker5_': [28, 14, 6]}
     ker_list = {'ker3_': 3, 'ker5_': 5, 'ker7_': 7}
     blc_list = {'ker3_': [4,4], 'ker5_': [2,2], 'ker7_': [1,1]}
 
+    in_wid = in_wid_list[ker_name]
     ker_wid = ker_list[ker_name]
     blcs = blc_list[ker_name] #ker7 [3,2,2] #ker5 [5,4,4] #ker3 [7,6,6]
 
@@ -106,9 +111,9 @@ def plain_imagenet_after_mid(mid_input, ker_name, mid_input_prec):
         eval_start = tf.nn.relu(ten_a * mid_input + ten_b)
 
         count = 0
-        while os.path.exists('Imagenet/ker3_ct_in/ker3_ct_in'+str(count)+'.csv'):
+        while os.path.exists('Imagenet/'+ker_name+'ct_in/'+ker_name+'ct_in'+str(count)+'.csv'):
             count += 1
-        np.savetxt('Imagenet/ker3_ct_in/ker3_ct_in'+str(count)+'.csv', tf.reshape(eval_start, [-1]).numpy())
+        np.savetxt('Imagenet/'+ker_name+'ct_in/'+ker_name+'ct_in'+str(count)+'.csv', tf.reshape(eval_start, [-1]).numpy())
         conv = eval_start
     else:
         conv = mid_input
@@ -131,14 +136,15 @@ def plain_imagenet_after_mid(mid_input, ker_name, mid_input_prec):
         conv = tf.nn.relu(ten_a * conv + ten_b)
     
     count = 0
-    while os.path.exists('Imagenet/ker3_ct_in_2/ker3_ct_in'+str(count)+'.csv'):
+    while os.path.exists('Imagenet/'+ker_name+'ct_in_2/'+ker_name+'ct_in'+str(count)+'.csv'):
         count += 1
-    np.savetxt('Imagenet/ker3_ct_in_2/ker3_ct_in'+str(count)+'.csv', tf.reshape(conv, [-1]).numpy())
+    np.savetxt('Imagenet/'+ker_name+'ct_in_2/'+ker_name+'ct_in'+str(count)+'.csv', tf.reshape(conv, [-1]).numpy())
 
     for i in range(blcs[1]):
         if i == 0:
             ten_k = tf.reshape(tf.constant(np.loadtxt(in_dir+'w'+str(num)+'-conv.csv'), tf.float32), [ker_wid, ker_wid, batch[1], batch[2]])
             conv = tf.nn.conv2d(conv, ten_k, strides = [1,2,2,1], padding = "SAME")
+            conv = Cropping2D(cropping=((0,1), (0,1)))(conv)
         else:
             ten_k = tf.reshape(tf.constant(np.loadtxt(in_dir+'w'+str(num)+'-conv.csv'), tf.float32), [ker_wid, ker_wid, batch[2], batch[2]])
             conv = tf.nn.conv2d(conv, ten_k, strides = [1,1,1,1], padding = "SAME")
@@ -156,7 +162,7 @@ def plain_imagenet_after_mid(mid_input, ker_name, mid_input_prec):
     conv = tf.nn.conv2d(conv, ten_final, strides = [1,1,1,1], padding = "SAME")
 
     conv = tf.squeeze(conv, axis=[1,2])
-    # conv = tf.argmax(conv, 1)
+    conv = tf.argmax(conv, 1)
     return conv
 
 
@@ -749,10 +755,10 @@ def gen_plain_predictions():
     print("num samples: ", len(tf_labels), "precision: ", tf.reduce_mean(tf.cast(tf.equal(tf.argmax(predictions, 1), tf_labels), 'float32')))
 
 def imgnet_gen_ct_in_one(iter_st):
-    ct_in = np.reshape(np.loadtxt('Imagenet/ker3_ct_in_2/ker3_ct_in'+str(iter_st)+'.csv'), [100, 14, 14, 256])
+    ct_in = np.reshape(np.loadtxt('Imagenet/ker5_ct_in_2/ker5_ct_in'+str(iter_st)+'.csv'), [100, 14, 14, 256])
     j = 0
     for i in range(100*iter_st, 100*(iter_st+1)):
-        np.savetxt("Imagenet/ker3_ct_in_one2/input_"+str(i)+".csv", np.reshape(ct_in[j,:,:,:], [-1]))
+        np.savetxt("Imagenet/ker5_ct_in_one2/input_"+str(i)+".csv", np.reshape(ct_in[j,:,:,:], [-1]))
         j+=1
 
   
@@ -762,7 +768,7 @@ def imgnet_gen_ct_in_one(iter_st):
 
 # conv_bnReLU_BL_bench(False, True, True)
 
-# for i in range(5):
+# for i in range(10):
 #     imgnet_gen_ct_in_one(i)
 
 
@@ -790,16 +796,16 @@ def imgnet_gen_ct_in_one(iter_st):
 
 # gen_plain_predictions()
 
-# ## Imagnet test, take mid_input = np.loadtxt('Imagenet/ker3_ct_in/ker3_ct_in'+str(i)+'.csv')
+# # Imagnet test, take mid_input = np.loadtxt('Imagenet/ker3_ct_in/ker3_ct_in'+str(i)+'.csv')
 # total = 0
+# ker_name = 'ker5_'
 # for i in range(10):
-#     mid_input = np.loadtxt('Imagenet/ker3_ct_in/ker3_ct_in'+str(i)+'.csv')
-#     # mid_input = np.loadtxt('Imagenet/ker3_mid_out/ker3_mid_out'+str(i)+'.csv')
-#     mid_input = np.loadtxt('Imagenet/ker3_mid_out/ker3_mid_out'+str(i)+'.csv')
-    # tf_mid_input = tf.reshape(tf.constant(mid_input, tf.float32), [100, 28, 28, 128])  
-    # pred = plain_imagenet_after_mid(tf_mid_input, 'ker3_', False)
-    # np.savetxt('Imagenet/ker3_final_out/ker3_final_out'+str(i)+'.csv', tf.reshape(pred, [-1]).numpy())
-#     label = np.loadtxt('Imagenet/ker3_true_label/ker3_true_label'+str(i)+'.csv')
+#     # mid_input = np.loadtxt('Imagenet/ker3_ct_in/ker3_ct_in'+str(i)+'.csv')
+#     mid_input = np.loadtxt('Imagenet/'+ker_name+'mid_out/'+ker_name+'mid_out'+str(i)+'.csv')
+#     tf_mid_input = tf.reshape(tf.constant(mid_input, tf.float32), [100, 28, 28, 128])  
+#     pred = plain_imagenet_after_mid(tf_mid_input, ker_name, True)
+#     np.savetxt('Imagenet/'+ker_name+'final_out/'+ker_name+'final_out'+str(i)+'.csv', tf.reshape(pred, [-1]).numpy())
+#     label = np.loadtxt('Imagenet/'+ker_name+'true_label/'+ker_name+'true_label'+str(i)+'.csv')
 #     tf_label = tf.argmax(tf.reshape(tf.constant(label, tf.float32), [100, 1000]), 1)
 #     correct = tf.reduce_sum(tf.cast(tf.equal(pred, tf_label), 'float32')).numpy()
 #     total += correct
@@ -830,7 +836,7 @@ def imgnet_gen_ct_in_one(iter_st):
 
 # input_image = [random.uniform(0,1) for i in range(224*224*3)]
 # input_image = tf.reshape(tf.constant(np.array(input_image), tf.float32), [1, 224, 224, 3])
-# plain_imagenet(input_image, 'ker3_')
+# plain_imagenet(input_image, 'ker5_')
 
 # post_process(100, 'ker7_', False)
 # exit(1)
@@ -838,7 +844,7 @@ def imgnet_gen_ct_in_one(iter_st):
 # pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
 
 # plain_imagenet_bench()
-plain_imagenet_final_bench()
+# plain_imagenet_final_bench()
 # test_RMFC()
 # exit(1)
 

@@ -26,7 +26,7 @@ func set_Variables(batch, raw_in_wid, in_wid, ker_wid int, kind string) (kp_wid,
 			fmt.Println("max raw_in_wid: ", max_kp_wid)
 			panic("too large raw_in_wid.")
 		}
-	case "StrConv":
+	case "StrConv", "StrConv_fast":
 		trans = false
 		kp_wid = raw_in_wid
 		out_batch = batch
@@ -373,16 +373,21 @@ func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []
 	fmt.Println()
 	start = time.Now()
 	pl_ker := prep_Ker(cont.params, cont.encoder, ker_in, bn_a, in_wid, ker_wid, real_ib, real_ob, norm, cont.ECD_LV, 0, trans)
+	fmt.Printf("for prep_ker %s \n", time.Since(start))
 	b_coeffs := make([]float64, cont.N)
 	for i := range bn_b {
 		for j := 0; j < in_wid*in_wid; j++ {
 			b_coeffs[norm*i+j*max_batch] = bn_b[i]
 		}
 	}
+	part := time.Now()
 	scale_exp := ct_input.Scale * cont.params.Scale() * float64(max_batch/norm)
 	pl_bn_b := ckks.NewPlaintext(cont.params, cont.ECD_LV, scale_exp) // contain plaintext values
 	cont.encoder.EncodeCoeffs(b_coeffs, pl_bn_b)
+	fmt.Printf("for EncodeCoeffs %s \n", time.Since(part))
+	part = time.Now()
 	cont.encoder.ToNTT(pl_bn_b)
+	fmt.Printf("for NTTS %s \n", time.Since(part))
 	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
 
 	fmt.Println()
@@ -545,7 +550,7 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	case "Conv":
 		trans = false
 		stride = false
-	case "StrConv":
+	case "StrConv", "StrConv_fast":
 		trans = false
 		stride = true
 	case "TransConv":
@@ -574,6 +579,7 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 		cont.evaluator.MulByPow2(ct_boots[ul], pow, ct_boots[ul])
 	}
 	fmt.Printf("ReLU Done in %s \n", time.Since(start))
+	fmt.Println("after Relu: ", math.Log2(ct_boots[0].Scale), "lv: ", ct_boots[0].Level())
 
 	// Only for checking the correctness (for ReLU)
 	relu1, relu2 := debugReLU(cont, slot1, slot2, alpha)
@@ -611,6 +617,7 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	} else {
 		ct_res = cont.btp.BootstrappConv_StoC(ct_keep[0], ct_keep[1])
 	}
+
 	cont.evaluator.Rescale(ct_res, cont.params.Scale(), ct_res)
 
 	fmt.Printf("Boot (StoC) Done in %s \n", time.Since(start))
@@ -665,7 +672,7 @@ func debugStoC(cont *context, slot1, slot2 []complex128, in_wid, kp_wid, pos int
 	case "Conv":
 		tmp1 = keep_vec(slot1_fl, in_wid, kp_wid, 0)
 		tmp2 = keep_vec(slot2_fl, in_wid, kp_wid, 1)
-	case "StrConv":
+	case "StrConv", "StrConv_fast":
 		if fast_pack {
 			tmp1 = comprs_full_fast(slot1_fl, in_wid, kp_wid, pos, 0)
 			tmp2 = comprs_full_fast(slot2_fl, in_wid, kp_wid, pos, 1)

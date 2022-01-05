@@ -407,9 +407,9 @@ func testDCGAN() {
 // Assume that the input is 0 padded according to kernel size: only in_wid - (ker_wid-1)/2 elements in row and columns are nonzero
 // Also support non-full batching case
 func testConv_noBoot(kind string, printResult bool) (ct_result *ckks.Ciphertext) {
-	raw_in_batch := 4 // same as python
-	raw_in_wid := 4   // same as python
-	in_batch := 8     // needs to be divided by 4 (to pack the output of transConv)
+	raw_in_batch := 1024 // same as python
+	raw_in_wid := 7      // same as python
+	in_batch := 1024     // needs to be divided by 4 (to pack the output of transConv)
 	in_wid := 8
 	norm := in_batch / raw_in_batch
 	ker_wid := 3
@@ -554,9 +554,9 @@ func testConv_noBoot_old(kind string, printResult bool) (ct_result *ckks.Ciphert
 // in_wid must be Po2
 // For trans, assume that input: full bached ciphertext, outputs 1/4 batched 1ctxt due to expansion
 func testConv_BNRelu(kind string, printResult bool) {
-	raw_in_batch := 8 // same as python
-	raw_in_wid := 6   // same as python
-	in_batch := 16    // needs to be divided by 4 (to pack the output of transConv)
+	raw_in_batch := 1024 // same as python
+	raw_in_wid := 7      // same as python
+	in_batch := 1024     // needs to be divided by 4 (to pack the output of transConv)
 	in_wid := 8
 	norm := in_batch / raw_in_batch
 	ker_wid := 3
@@ -566,7 +566,7 @@ func testConv_BNRelu(kind string, printResult bool) {
 	// set basic variables for above input variables
 	kp_wid, out_batch, logN, trans := set_Variables(in_batch, raw_in_wid, in_wid, ker_wid, kind)
 	raw_out_batch := out_batch / norm
-	fmt.Println(raw_out_batch)
+	// fmt.Println(raw_out_batch)
 
 	raw_input := make([]float64, raw_in_wid*raw_in_wid*raw_in_batch)
 	ker_in := make([]float64, raw_in_batch*raw_out_batch*ker_wid*ker_wid)
@@ -579,7 +579,7 @@ func testConv_BNRelu(kind string, printResult bool) {
 		ker_in[i] = 1.0 * float64(i) / float64(len(ker_in))
 	}
 	for i := range bn_a {
-		bn_a[i] = 1.0
+		bn_a[i] = 0.1
 		bn_b[i] = 0.0
 	}
 
@@ -602,8 +602,12 @@ func testConv_BNRelu(kind string, printResult bool) {
 	fmt.Printf("Encryption done in %s \n", time.Since(start))
 
 	// Kernel Prep & Conv (+BN) Evaluation
-	ct_result := evalConv_BNRelu_new(cont, ctxt_input, ker_in, bn_a, bn_b, alpha, in_wid, kp_wid, ker_wid, raw_in_batch, raw_out_batch, norm, pack_pos, 2, kind, false, printResult)
-	// ct_result := evalConv_BNRelu(cont, ctxt_input, ker_in, bn_a, bn_b, alpha, in_wid, ker_wid, in_batch, out_batch, 0, true, stride, printResult)
+
+	fast_pack := false
+	if kind == "StrConv_fast" {
+		fast_pack = true
+	}
+	ct_result := evalConv_BNRelu_new(cont, ctxt_input, ker_in, bn_a, bn_b, alpha, in_wid, kp_wid, ker_wid, raw_in_batch, raw_out_batch, norm, pack_pos, 2, kind, fast_pack, false)
 
 	fmt.Println()
 	fmt.Println("===============  DECRYPTION  ===============")

@@ -389,7 +389,9 @@ func ext_ctxt(eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext,
 		for i := range elt {
 			tmp[i] = complex(float64(elt[i]), 0)
 		}
-		plain_tmp := encoder.EncodeNTTAtLvlNew(input.Level(), tmp, params.LogSlots())
+		// plain_tmp := encoder.EncodeNTTAtLvlNew(input.Level(), tmp, params.LogSlots())
+		plain_tmp := ckks.NewPlaintext(params, input.Level(), float64(params.Q()[input.Level()]))
+		encoder.EncodeNTT(plain_tmp, tmp, params.LogSlots())
 
 		if st {
 			result = eval.RotateNew(eval.MulNew(input, plain_tmp), rot)
@@ -408,13 +410,14 @@ func ext_ctxt(eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext,
 // extend ctxt using given rotations so that it outputs a ctxt to be convolved with filter
 func ext_double_ctxt(eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext, m_idx, r_idx map[int][]int, params ckks.Parameters) (result *ckks.Ciphertext) {
 	st := true
+	sqr_sc := math.Sqrt(float64(params.Q()[input.Level()]))
 	var mid_result *ckks.Ciphertext
 	for rot, elt := range m_idx {
 		tmp := make([]complex128, params.Slots())
 		for i := range elt {
 			tmp[i] = complex(float64(elt[i]), 0)
 		}
-		plain_tmp := ckks.NewPlaintext(params, input.Level(), 1<<15)
+		plain_tmp := ckks.NewPlaintext(params, input.Level(), sqr_sc)
 		encoder.EncodeNTT(plain_tmp, tmp, params.LogSlots())
 		if st {
 			mid_result = eval.RotateNew(eval.MulNew(input, plain_tmp), rot)
@@ -431,7 +434,7 @@ func ext_double_ctxt(eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciph
 		for i := range elt {
 			tmp[i] = complex(float64(elt[i]), 0)
 		}
-		plain_tmp := ckks.NewPlaintext(params, input.Level(), 1<<15)
+		plain_tmp := ckks.NewPlaintext(params, input.Level(), sqr_sc)
 		encoder.EncodeNTT(plain_tmp, tmp, params.LogSlots())
 		if st {
 			result = eval.RotateNew(eval.MulNew(mid_result, plain_tmp), rot)
@@ -453,7 +456,10 @@ func keep_ctxt(params ckks.Parameters, eval ckks.Evaluator, encoder ckks.Encoder
 	for i := range idx {
 		tmp[i] = complex(float64(idx[i]), 0)
 	}
-	plain_tmp := encoder.EncodeNTTAtLvlNew(input.Level(), tmp, params.LogSlots())
+	// plain_tmp := encoder.EncodeNTTAtLvlNew(input.Level(), tmp, params.LogSlots())
+	plain_tmp := ckks.NewPlaintext(params, input.Level(), float64(params.Q()[input.Level()]))
+	encoder.EncodeNTT(plain_tmp, tmp, params.LogSlots())
+
 	result = eval.MulNew(input, plain_tmp)
 
 	eval.Rescale(result, params.Scale(), result)
@@ -531,6 +537,8 @@ func evalReLU(params ckks.Parameters, evaluator ckks.Evaluator, ctxt_in *ckks.Ci
 	}
 
 	ctxt_out = evaluator.AddConstNew(ctxt_sign, aconst)
+	// fmt.Println("ctxt_out scale:", math.Log2(ctxt_out.Scale))
+	// fmt.Println("ctxt_out lv: ", ctxt_out.Level())
 
 	// Modify c3 scale so that the mult result after rescale has desired scale
 	// constPlain := ckks.NewPlaintext(params, ciphertext3.Level(), float64(params.Q()[ciphertext1.Level()])/(ciphertext3.Scale))

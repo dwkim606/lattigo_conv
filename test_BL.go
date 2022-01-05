@@ -1461,21 +1461,24 @@ func testImageNet_BL_final_in(st, end int) {
 }
 
 func basic() {
-	logN := 5
+	logN := 16
 	N := (1 << logN)
 
 	// Schemes parameters are created from scratch
 	params, err := ckks.NewParametersFromLiteral(ckks.ParametersLiteral{
 		LogN:     logN,
-		LogQ:     []int{log_out_scale + log_c_scale, log_in_scale},
+		LogQ:     []int{log_out_scale + log_c_scale, 49},
 		LogP:     []int{60},
 		Sigma:    rlwe.DefaultSigma,
 		LogSlots: logN - 1,
-		Scale:    float64(1 << log_in_scale),
+		Scale:    float64(1 << 51),
 	})
 	if err != nil {
 		panic(err)
 	}
+
+	fmt.Printf("hex: %s \n", strconv.FormatUint(params.Q()[1], 16))
+
 	start = time.Now()
 
 	kgen := ckks.NewKeyGenerator(params)
@@ -1508,8 +1511,9 @@ func basic() {
 	evaluator.Mul(ctxt, ptxt, ctxt)
 
 	res := encoder.Decode(decryptor.DecryptNew(ctxt), logN-1)
-	for i := range res {
-		fmt.Println(real(res[i]))
-	}
+	_ = res
+	// for i := range res {
+	// 	fmt.Println(real(res[i]))
+	// }
 
 }
