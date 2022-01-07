@@ -74,7 +74,7 @@ func testDCGAN() {
 
 		fmt.Println("Bootstrapping... Ours (until CtoS):")
 		start = time.Now()
-		ctxt1, ctxt2, _ := cont.btp.BootstrappConv_CtoS(ctxt_in, float64(pow))
+		ctxt1, ctxt2, _ := cont.btp.BootstrappConv_CtoS(ctxt_in)
 		fmt.Printf("Done in %s \n", time.Since(start))
 		fmt.Println("after Boot: LV = ", ctxt1.Level(), " Scale = ", math.Log2(ctxt1.Scale))
 
@@ -203,7 +203,7 @@ func testDCGAN() {
 
 		fmt.Println("Bootstrapping... Ours (until CtoS):")
 		start = time.Now()
-		ctxt1, _, _ = cont.btp.BootstrappConv_CtoS(ctxt_in, float64(pow))
+		ctxt1, _, _ = cont.btp.BootstrappConv_CtoS(ctxt_in)
 		fmt.Printf("Done in %s \n", time.Since(start))
 
 		// Only for checking the correctness
@@ -313,7 +313,7 @@ func testDCGAN() {
 
 		fmt.Println("Bootstrapping... Ours (until CtoS):")
 		start = time.Now()
-		ctxt1, _, _ = cont.btp.BootstrappConv_CtoS(ctxt_in, float64(pow))
+		ctxt1, _, _ = cont.btp.BootstrappConv_CtoS(ctxt_in)
 		fmt.Printf("Done in %s \n", time.Since(start))
 
 		// Only for checking the correctness
@@ -407,10 +407,10 @@ func testDCGAN() {
 // Assume that the input is 0 padded according to kernel size: only in_wid - (ker_wid-1)/2 elements in row and columns are nonzero
 // Also support non-full batching case
 func testConv_noBoot(kind string, printResult bool) (ct_result *ckks.Ciphertext) {
-	raw_in_batch := 1024 // same as python
-	raw_in_wid := 7      // same as python
-	in_batch := 1024     // needs to be divided by 4 (to pack the output of transConv)
-	in_wid := 8
+	raw_in_batch := 8 // same as python
+	raw_in_wid := 15  // same as python
+	in_batch := 8     // needs to be divided by 4 (to pack the output of transConv)
+	in_wid := 16
 	norm := in_batch / raw_in_batch
 	ker_wid := 3
 
@@ -452,12 +452,13 @@ func testConv_noBoot(kind string, printResult bool) (ct_result *ckks.Ciphertext)
 	fmt.Printf("Encryption done in %s \n", time.Since(start))
 
 	// Kernel Prep & Conv (+BN) Evaluation
-	ct_result = evalConv_BN(cont, ctxt_input, ker_in, bn_a, bn_b, in_wid, ker_wid, raw_in_batch, raw_out_batch, norm, printResult, trans)
+	ct_result = evalConv_BN(cont, ctxt_input, ker_in, bn_a, bn_b, in_wid, ker_wid, raw_in_batch, raw_out_batch, norm, float64(1<<30), printResult, trans)
 
 	fmt.Println()
 	fmt.Println("===============  DECRYPTION  ===============")
 	fmt.Println()
 	start = time.Now()
+	// cont.new_decryptor.Decrypt(ct_result, plain_tmp)
 	cont.decryptor.Decrypt(ct_result, plain_tmp)
 	cfs_tmp := cont.encoder.DecodeCoeffs(plain_tmp)
 	fmt.Printf("Decryption Done in %s \n", time.Since(start))
@@ -524,7 +525,7 @@ func testConv_noBoot_old(kind string, printResult bool) (ct_result *ckks.Ciphert
 	fmt.Printf("Encryption done in %s \n", time.Since(start))
 
 	// Kernel Prep & Conv (+BN) Evaluation
-	ct_result = evalConv_BN(cont, ctxt_input, ker_in, bn_a, bn_b, in_wid, ker_wid, in_batch, out_batch, norm, printResult, trans)
+	ct_result = evalConv_BN(cont, ctxt_input, ker_in, bn_a, bn_b, in_wid, ker_wid, in_batch, out_batch, norm, float64(1<<30), printResult, trans)
 
 	fmt.Println()
 	fmt.Println("===============  DECRYPTION  ===============")
@@ -554,10 +555,10 @@ func testConv_noBoot_old(kind string, printResult bool) (ct_result *ckks.Ciphert
 // in_wid must be Po2
 // For trans, assume that input: full bached ciphertext, outputs 1/4 batched 1ctxt due to expansion
 func testConv_BNRelu(kind string, printResult bool) {
-	raw_in_batch := 1024 // same as python
-	raw_in_wid := 7      // same as python
-	in_batch := 1024     // needs to be divided by 4 (to pack the output of transConv)
-	in_wid := 8
+	raw_in_batch := 256 // same as python
+	raw_in_wid := 15    // same as python
+	in_batch := 256     // needs to be divided by 4 (to pack the output of transConv)
+	in_wid := 16
 	norm := in_batch / raw_in_batch
 	ker_wid := 3
 	alpha := 0.0 // for ReLU: 0.0 , leakyReLU : 0.3
@@ -573,13 +574,13 @@ func testConv_BNRelu(kind string, printResult bool) {
 	bn_a := make([]float64, raw_out_batch)
 	bn_b := make([]float64, raw_out_batch)
 	for i := range raw_input {
-		raw_input[i] = 1.0 * float64(i) / float64(len(raw_input))
+		raw_input[i] = 0.1 * float64(i) / float64(len(raw_input))
 	}
 	for i := range ker_in {
-		ker_in[i] = 1.0 * float64(i) / float64(len(ker_in))
+		ker_in[i] = 0.5 * float64(i) / float64(len(ker_in))
 	}
 	for i := range bn_a {
-		bn_a[i] = 0.1
+		bn_a[i] = 1.0
 		bn_b[i] = 0.0
 	}
 
@@ -607,7 +608,7 @@ func testConv_BNRelu(kind string, printResult bool) {
 	if kind == "StrConv_fast" {
 		fast_pack = true
 	}
-	ct_result := evalConv_BNRelu_new(cont, ctxt_input, ker_in, bn_a, bn_b, alpha, in_wid, kp_wid, ker_wid, raw_in_batch, raw_out_batch, norm, pack_pos, 2, kind, fast_pack, false)
+	ct_result := evalConv_BNRelu_new(cont, ctxt_input, ker_in, bn_a, bn_b, alpha, in_wid, kp_wid, ker_wid, raw_in_batch, raw_out_batch, norm, pack_pos, 2, kind, fast_pack, printResult)
 
 	fmt.Println()
 	fmt.Println("===============  DECRYPTION  ===============")
@@ -833,7 +834,7 @@ func testResNet_in(st, end int) {
 		}
 		bn_bf := readTxt(weight_dir+"final-fcbias.csv", 10)
 		norm = 4
-		ct_result = evalConv_BN_sep(cont, ct_layer, ker_inf_, bn_af, bn_bf, in_wids[2], 9, real_batch[2], 10, norm, true, false)
+		ct_result = evalConv_BN_sep(cont, ct_layer, ker_inf_, bn_af, bn_bf, in_wids[2], 9, real_batch[2], 10, norm, float64(1<<30), true, false)
 		timings[5] = time.Since(new_start).Seconds()
 		fmt.Println()
 		fmt.Println("===============  DECRYPTION  ===============")
@@ -1019,7 +1020,7 @@ func testResNet_in_old(iter int) {
 		bn_af[i] = 1.0 / (8 * 8) // for reduce mean on 8*8 elements
 	}
 	bn_bf := readTxt(weight_dir+"final-fcbias.csv", 10)
-	ct_result = evalConv_BN(cont, ct_layer3, ker_inf_, bn_af, bn_bf, in_wids[2], 9, real_batch[2], 10, norm, true, false)
+	ct_result = evalConv_BN(cont, ct_layer3, ker_inf_, bn_af, bn_bf, in_wids[2], 9, real_batch[2], 10, norm, float64(cont.params.Q()[0])/256.0, true, false)
 	timings[5] = time.Since(new_start).Seconds()
 	fmt.Println()
 	fmt.Println("===============  DECRYPTION  ===============")
@@ -1101,7 +1102,7 @@ func testReduceMean() {
 		bn_bf[i] = 10.0 * float64(i)
 	}
 
-	ct_result := evalConv_BN(cont, ct_input, ker_inf_, bn_af, bn_bf, in_wids[2], 9, real_batch[2], 10, norm, true, false)
+	ct_result := evalConv_BN(cont, ct_input, ker_inf_, bn_af, bn_bf, in_wids[2], 9, real_batch[2], 10, norm, float64(cont.params.Q()[0])/256.0, true, false)
 	cont.decryptor.Decrypt(ct_result, pl_input)
 	res_tmp := cont.encoder.DecodeCoeffs(pl_input)
 	prt_mat_one(res_tmp, max_batch[2], 4, 4)
@@ -1176,7 +1177,7 @@ func testReduceMean_norm() {
 		bn_bf[i] = 10.0 * float64(i)
 	}
 
-	ct_result := evalConv_BN_sep(cont, ct_input, ker_inf_, bn_af, bn_bf, in_wids[2], 9, real_batch[2], 10, norm, true, false)
+	ct_result := evalConv_BN_sep(cont, ct_input, ker_inf_, bn_af, bn_bf, in_wids[2], 9, real_batch[2], 10, norm, float64(1<<30), true, false)
 	cont.decryptor.Decrypt(ct_result, pl_input)
 	res_tmp := cont.encoder.DecodeCoeffs(pl_input)
 	// prt_mat_norm(res_tmp, max_batch[2], norm, 4)
@@ -1865,7 +1866,7 @@ func testResNet_old() {
 		bn_bf[i] = 1.0 * float64(i)
 	}
 
-	ct_result = evalConv_BN(cont, ct_input, ker_inf_, bn_af, bn_bf, in_wids[2], 9, real_batch[2], norm, 10, true, false)
+	ct_result = evalConv_BN(cont, ct_input, ker_inf_, bn_af, bn_bf, in_wids[2], 9, real_batch[2], 10, norm, float64(1<<30), true, false)
 	cont.decryptor.Decrypt(ct_result, pl_input)
 	res_tmp := cont.encoder.DecodeCoeffs(pl_input)
 	prt_mat_one(res_tmp, max_batch[2], 4, 4)
@@ -2191,7 +2192,7 @@ func testImagenet_final_fast() {
 	new_start = time.Now()
 
 	// RMFC
-	ct_result = evalConv_BN(cont, ct_layer, ker_inf_, bn_af, bn_bf, in_wids[1], 7, real_batch[1], 60, 1, true, false)
+	ct_result = evalConv_BN(cont, ct_layer, ker_inf_, bn_af, bn_bf, in_wids[1], 7, real_batch[1], 60, 1, float64(1<<30), true, false)
 
 	timings[2] = time.Since(new_start).Seconds()
 	new_start = time.Now()
@@ -2354,7 +2355,7 @@ func testImagenet_final() {
 	new_start = time.Now()
 
 	// RMFC
-	ct_result = evalConv_BN(cont, ct_layer, ker_inf_, bn_af, bn_bf, in_wids[1], 7, real_batch[1]*2, 60, 1, true, false)
+	ct_result = evalConv_BN(cont, ct_layer, ker_inf_, bn_af, bn_bf, in_wids[1], 7, real_batch[1]*2, 60, 1, float64(1<<30), true, false)
 
 	timings[2] = time.Since(new_start).Seconds()
 	new_start = time.Now()
@@ -2606,7 +2607,7 @@ func testImagenet() {
 	new_start = time.Now()
 
 	// RMFC
-	ct_result = evalConv_BN(cont, ct_layer, ker_inf_, bn_af, bn_bf, in_wids[2], 7, real_batch[2]*2, 60, 1, true, false)
+	ct_result = evalConv_BN(cont, ct_layer, ker_inf_, bn_af, bn_bf, in_wids[2], 7, real_batch[2]*2, 60, 1, float64(1<<30), true, false)
 
 	timings[4] = time.Since(new_start).Seconds()
 	new_start = time.Now()
@@ -2754,7 +2755,7 @@ func testImagenet_final_fast_in(st, end int) {
 				}
 			}
 		}
-		ct_result = evalConv_BN(cont, ct_layer, ker_inf_, bn_af, bn_bf, in_wids[1], 7, real_batch[1], 1000, 1, true, false)
+		ct_result = evalConv_BN(cont, ct_layer, ker_inf_, bn_af, bn_bf, in_wids[1], 7, real_batch[1], 1000, 1, float64(1<<30), true, false)
 
 		timings[2] = time.Since(new_start).Seconds()
 		new_start = time.Now()
@@ -2984,7 +2985,7 @@ func testImagenet_in(st, end int) {
 			}
 		}
 
-		ct_result = evalConv_BN(cont, ct_layer, ker_inf_, bn_af, bn_bf, in_wids[2], 7, real_batch[2]*2, 1000, 1, true, false)
+		ct_result = evalConv_BN(cont, ct_layer, ker_inf_, bn_af, bn_bf, in_wids[2], 7, real_batch[2]*2, 1000, 1, float64(1<<30), true, false)
 
 		timings[4] = time.Since(new_start).Seconds()
 		new_start = time.Now()

@@ -275,7 +275,7 @@ func encode_ker(ker_in [][]float64, pos, i, in_wid, in_batch, ker_wid int, trans
 
 // Generate the logN # of plaintexts idx[i] = X^(2^i) and GaloisKeys for each
 // Required for Packing
-func gen_idxNlogs(E_lv int, keygen rlwe.KeyGenerator, sk *rlwe.SecretKey, encoder ckks.Encoder, params ckks.Parameters) (idx []*ckks.Plaintext, pack_eval ckks.Evaluator) {
+func gen_idxNlogs(ECD_LV int, keygen rlwe.KeyGenerator, sk *rlwe.SecretKey, encoder ckks.Encoder, params ckks.Parameters) (idx []*ckks.Plaintext, pack_eval ckks.Evaluator) {
 	logN := params.LogN()
 	N := params.N()
 	gals := []uint64{}
@@ -284,7 +284,7 @@ func gen_idxNlogs(E_lv int, keygen rlwe.KeyGenerator, sk *rlwe.SecretKey, encode
 
 	for i := 0; i < logN; i++ {
 		coeffs[1<<i] = 1.0
-		idx[i] = ckks.NewPlaintext(params, E_lv, 1.0)
+		idx[i] = ckks.NewPlaintext(params, ECD_LV, 1.0)
 		encoder.EncodeCoeffs(coeffs, idx[i])
 		encoder.ToNTT(idx[i])
 		coeffs[1<<i] = 0.0
@@ -736,24 +736,26 @@ func conv_then_pack_trans(params ckks.Parameters, pack_evaluator ckks.Evaluator,
 
 // Eval Conv, then Pack
 // The ciphertexts must be packed into full (without vacant position)
-func conv_then_pack(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_in *ckks.Ciphertext, pl_ker []*ckks.Plaintext, plain_idx []*ckks.Plaintext, max_ob, norm, ECD_LV int, scale_exp float64) *ckks.Ciphertext {
+func conv_then_pack(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_in *ckks.Ciphertext, pl_ker []*ckks.Plaintext, plain_idx []*ckks.Plaintext, max_ob, norm, ECD_LV int, out_scale float64) *ckks.Ciphertext {
 	start := time.Now()
 	ctxt_out := make([]*ckks.Ciphertext, max_ob)
 	for i := 0; i < max_ob; i++ {
 		if i%norm == 0 {
 			ctxt_out[i] = pack_evaluator.MulNew(ctxt_in, pl_ker[i])
+			pack_evaluator.SetScale(ctxt_out[i], out_scale/(float64(max_ob/norm)))
 		}
+		// pack_evaluator.Rescale(ctxt_out[i], float64(1<<10), ctxt_out[i])
 	}
+	mt := time.Since(start)
+	fmt.Println("mult time: ", mt)
 	ctxt_result := pack_ctxts(pack_evaluator, ctxt_out, max_ob, max_ob/norm, plain_idx, params)
+	fmt.Println("Pack time: ", time.Since(start)-mt)
 
 	fmt.Println("Result Scale: ", math.Log2(ctxt_result.Scale))
 	fmt.Println("Result LV: ", ctxt_result.Level())
 	fmt.Printf("Done in %s \n", time.Since(start))
 
-	if (scale_exp != ctxt_result.Scale) || (ECD_LV != ctxt_result.Level()) {
-		fmt.Println("exp scale: ", scale_exp)
-		fmt.Println("ctxt scale: ", ctxt_result.Scale)
-		fmt.Println("ctxt lv: ", ctxt_result.Level())
+	if (out_scale != ctxt_result.Scale) || (0 != ctxt_result.Level()) {
 		panic("LV or scale after conv then pack, inconsistent")
 	}
 

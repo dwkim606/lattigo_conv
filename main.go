@@ -25,7 +25,7 @@ const pow = 5 // making sure that ReLu can cover values in [-2^pow, 2^pow].
 type context struct {
 	logN    int
 	N       int
-	ECD_LV  int
+	ECD_LV  int   // LV of input ctxt and kernels (= 1)
 	in_wids []int // input widths including padding
 	kp_wids []int // keep widths among input widths
 	// pads           map[int]int
@@ -42,6 +42,7 @@ type context struct {
 	evaluator      ckks.Evaluator
 	pack_evaluator ckks.Evaluator
 	btp            *ckks.Bootstrapper
+	// new_decryptor  ckks.Decryptor
 }
 
 func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind string) *context {
@@ -454,7 +455,23 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	cont.evaluator = ckks.NewEvaluator(cont.params, rlwe.EvaluationKey{Rlk: rlk, Rtks: rotkeys})
 
 	if !((kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet") || (kind == "BL_Imagenet") || (kind == "BL_Imagenet_final")) {
-		cont.pl_idx, cont.pack_evaluator = gen_idxNlogs(cont.ECD_LV, kgen, sk, cont.encoder, cont.params)
+		// we use smaller keys for rotations for pack_ctxts
+		new_params, err := ckks.NewParametersFromLiteral(ckks.ParametersLiteral{
+			LogN: logN,
+			Q:    cont.params.Q(),
+			P:    []uint64{0x1fffffffffe00001}, // Pi 61
+			// Pi 61
+			Sigma:    rlwe.DefaultSigma,
+			LogSlots: logN - 1,
+			Scale:    float64(1 << 30),
+		})
+		if err != nil {
+			panic(err)
+		}
+		new_kgen := ckks.NewKeyGenerator(new_params)
+		new_encoder := ckks.NewEncoder(new_params)
+
+		cont.pl_idx, cont.pack_evaluator = gen_idxNlogs(0, new_kgen, sk, new_encoder, new_params)
 	}
 
 	if boot {
@@ -491,9 +508,9 @@ func main() {
 
 	// testImagenet_final_fast()
 
-	// st, _ := strconv.Atoi(os.Args[1])
-	// end, _ := strconv.Atoi(os.Args[2])
-	// testImagenet_final_fast_in(st, end)
+	st, _ := strconv.Atoi(os.Args[1])
+	end, _ := strconv.Atoi(os.Args[2])
+	testImagenet_final_fast_in(st, end)
 	// testImageNet_BL_final_in(st, end)
 	// testImagenet_in(st, end)
 	// testResNet_in_BL(iter)
@@ -510,8 +527,8 @@ func main() {
 
 	// testBRrot()
 	// testConv_noBoot("Conv", false)
-	// testConv_noBoot("Conv", false)
-	testConv_BNRelu("Conv", false)
+	// testConv_noBoot("Conv", true)
+	// testConv_BNRelu("Conv", false)
 
 	// testConv_BNRelu("Conv", false)
 

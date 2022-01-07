@@ -365,7 +365,7 @@ func evalRMFC_BL_old(cont *context, ct_input *ckks.Ciphertext, ker_fc, bias []fl
 // in_wid must be Po2 (also include padding),
 // include kernel preparation
 // norm = 2 : in&out batches are (1,0,2,0,3,0,...)
-func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob, norm int, printResult, trans bool) (ct_res *ckks.Ciphertext) {
+func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob, norm int, out_scale float64, printResult, trans bool) (ct_res *ckks.Ciphertext) {
 	max_batch := cont.N / (in_wid * in_wid)
 
 	fmt.Println()
@@ -381,8 +381,9 @@ func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []
 		}
 	}
 	part := time.Now()
-	scale_exp := ct_input.Scale * cont.params.Scale() * float64(max_batch/norm)
-	pl_bn_b := ckks.NewPlaintext(cont.params, cont.ECD_LV, scale_exp) // contain plaintext values
+	// scale_exp := ct_input.Scale * cont.params.Scale() * float64(max_batch/norm)
+	pl_bn_b := ckks.NewPlaintext(cont.params, 0, out_scale)
+	// pl_bn_b := ckks.NewPlaintext(cont.params, cont.ECD_LV, scale_exp) // contain plaintext values
 	cont.encoder.EncodeCoeffs(b_coeffs, pl_bn_b)
 	fmt.Printf("for EncodeCoeffs %s \n", time.Since(part))
 	part = time.Now()
@@ -395,8 +396,15 @@ func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []
 	fmt.Println()
 
 	start = time.Now()
-	ct_res = conv_then_pack(cont.params, cont.pack_evaluator, ct_input, pl_ker, cont.pl_idx, max_batch, norm, cont.ECD_LV, scale_exp)
+	ct_res = conv_then_pack(cont.params, cont.pack_evaluator, ct_input, pl_ker, cont.pl_idx, max_batch, norm, cont.ECD_LV, out_scale)
+	if (pl_bn_b.Scale != ct_res.Scale) || (ct_res.Level() != 0) {
+		fmt.Println("plain scale: ", pl_bn_b.Scale)
+		fmt.Println("ctxt scale: ", ct_res.Scale)
+		fmt.Println("ctxt lv: ", ct_res.Level())
+		panic("LV or scale after conv then pack, inconsistent")
+	}
 	cont.evaluator.Add(ct_res, pl_bn_b, ct_res) // for Batch Normalization (BN)
+
 	fmt.Printf("Conv (with BN) Done in %s \n", time.Since(start))
 
 	return ct_res
@@ -404,7 +412,7 @@ func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []
 
 // the same as evalConv_BN but separate conv_then_pack and use different norm
 // only for log N = 16
-func evalConv_BN_sep(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob, norm int, printResult, trans bool) (ct_res *ckks.Ciphertext) {
+func evalConv_BN_sep(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob, norm int, out_scale float64, printResult, trans bool) (ct_res *ckks.Ciphertext) {
 	if cont.logN != 16 {
 		panic("logN must be 16 for Conv_BN_sep!")
 	}
@@ -422,8 +430,8 @@ func evalConv_BN_sep(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 			b_coeffs[sep_norm*norm*i+j*max_batch] = bn_b[i]
 		}
 	}
-	scale_exp := ct_input.Scale * cont.params.Scale() * float64(max_batch/(sep_norm*norm))
-	pl_bn_b := ckks.NewPlaintext(cont.params, cont.ECD_LV, scale_exp) // contain plaintext values
+	// scale_exp := ct_input.Scale * cont.params.Scale() * float64(max_batch/(sep_norm*norm))
+	pl_bn_b := ckks.NewPlaintext(cont.params, 0, out_scale) // contain plaintext values
 	cont.encoder.EncodeCoeffs(b_coeffs, pl_bn_b)
 	cont.encoder.ToNTT(pl_bn_b)
 	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
@@ -437,6 +445,7 @@ func evalConv_BN_sep(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 	for i := 0; i < max_batch; i++ {
 		if (i%norm == 0) && (i/norm < 16) {
 			ctxt_out[sep_norm*i] = cont.pack_evaluator.MulNew(ct_input, pl_ker[i]) // 4 is to use 16 batches among 64 batches among 256 batches (real_ob = 10 < 16)
+			cont.pack_evaluator.SetScale(ctxt_out[i], out_scale/float64(max_batch/(sep_norm*norm)))
 		}
 	}
 
@@ -445,8 +454,8 @@ func evalConv_BN_sep(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 	fmt.Println("Result LV: ", ct_res.Level())
 	fmt.Printf("Done in %s \n", time.Since(start))
 
-	if (scale_exp != ct_res.Scale) || (cont.ECD_LV != ct_res.Level()) {
-		fmt.Println("exp scale: ", scale_exp)
+	if (pl_bn_b.Scale != ct_res.Scale) || (ct_res.Level() != 0) {
+		fmt.Println("plain scale: ", pl_bn_b.Scale)
 		fmt.Println("ctxt scale: ", ct_res.Scale)
 		fmt.Println("ctxt lv: ", ct_res.Level())
 		panic("LV or scale after conv then pack, inconsistent")
@@ -472,14 +481,14 @@ func evalConv_BN_sep(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, ker_wid, real_ib, real_ob, norm, pack_pos int, padding, stride, printResult bool) (ct_res *ckks.Ciphertext) {
 	trans := false
 	kp_wid := in_wid / 2 // - ((ker_wid - 1) / 2)
-	ct_conv := evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, printResult, trans)
+	ct_conv := evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), printResult, trans)
 	ct_conv.Scale = ct_conv.Scale * math.Pow(2, pow)
 	cfs_preB := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
 	fmt.Println("Bootstrapping... Ours (until CtoS):")
 	start = time.Now()
 	// fmt.Println("ct_conv scale: ", math.Log2(ct_conv.Scale))
 	ct_boots := make([]*ckks.Ciphertext, 2)
-	ct_boots[0], ct_boots[1], _ = cont.btp.BootstrappConv_CtoS(ct_conv, float64(pow))
+	ct_boots[0], ct_boots[1], _ = cont.btp.BootstrappConv_CtoS(ct_conv)
 	fmt.Printf("Done in %s \n", time.Since(start))
 	fmt.Println("after Boot (CtoS): LV = ", ct_boots[0].Level(), " Scale = ", math.Log2(ct_boots[0].Scale))
 
@@ -558,13 +567,15 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 		stride = false
 	}
 
-	ct_conv := evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, printResult, trans)
+	ct_conv := evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), printResult, trans)
+	fmt.Println("conv scale: ", math.Log2(ct_conv.Scale))
 	ct_conv.Scale = ct_conv.Scale * math.Pow(2, pow)
+	fmt.Println("conv scale: ", math.Log2(ct_conv.Scale))
 	cfs_preB := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
 	fmt.Println("Bootstrapping... Ours (until CtoS):")
 	start = time.Now()
 	ct_boots := make([]*ckks.Ciphertext, 2)
-	ct_boots[0], ct_boots[1], _ = cont.btp.BootstrappConv_CtoS(ct_conv, float64(pow))
+	ct_boots[0], ct_boots[1], _ = cont.btp.BootstrappConv_CtoS(ct_conv)
 	fmt.Printf("Done in %s \n", time.Since(start))
 	fmt.Println("after Boot (CtoS): LV = ", ct_boots[0].Level(), " Scale = ", math.Log2(ct_boots[0].Scale))
 

@@ -362,11 +362,11 @@ def plain_resnet_bench():
         conv = tf.nn.relu(conv)
         print(conv)
         print(i+1,"layer done\n")
-    print("after 3rd block\n", conv, "\n")
+    print("after 3rd block\n", conv, "\n")      
 
 def conv_bnReLU_BL_bench(trans, strides, relu):
-    batch = 4
-    input_width = 14
+    batch = 8
+    input_width = 15
     vec_size = batch*input_width**2
     ker_width = 3
     bn_a = 1.0
@@ -381,7 +381,7 @@ def conv_bnReLU_BL_bench(trans, strides, relu):
 
     ## Correctness Check: Compare with TF NN CONV2D
     raw_input = [1.0*i/vec_size for i in range(vec_size)]  # #[1.0*i for i in range(vec_size)] 
-    ker = [1.0*i/ker_len for i in range(ker_len)] #  #[1.0 for i in range(batch * out_batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker = [0.5*i/ker_len for i in range(ker_len)] #  #[1.0 for i in range(batch * out_batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
 
     print("input width:", input_width)
     print("batch:", batch)
@@ -766,7 +766,7 @@ def imgnet_gen_ct_in_one(iter_st):
 
 # post_process_Imgnet(23, 'ker3', False)
 
-# conv_bnReLU_BL_bench(False, True, True)
+conv_bnReLU_BL_bench(False, False, True)
 
 # for i in range(10):
 #     imgnet_gen_ct_in_one(i)
