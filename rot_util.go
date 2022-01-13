@@ -140,19 +140,20 @@ func gen_expand_BL(vec_size, in_wid int) (m_idx, r_idx map[int][]int) {
 	return m_idx, r_idx
 }
 
-func gen_comprs_BL(vec_size, in_wid int) (m_idx, r_idx map[int][]int) {
+func gen_comprs_BL(vec_size, in_wid, pad int) (m_idx, r_idx map[int][]int) {
 	m_idx = make(map[int][]int)
 	r_idx = make(map[int][]int)
 	batch := vec_size / (in_wid * in_wid)
 
 	min_wid := in_wid / 2
+	real_min_wid := min_wid - pad
 	if in_wid%2 != 0 {
 		panic("in wid not divisible by 2")
 	}
 
-	for j := 1; j <= min_wid; j++ { // kinds of mov depends on j
+	for j := 1; j <= real_min_wid; j++ { // kinds of mov depends on j
 		tmp := make([]int, vec_size)
-		for i := 1; i <= min_wid; i++ {
+		for i := 1; i <= real_min_wid; i++ {
 			for b := 0; b < batch; b++ {
 				idx := (2*i-1)*in_wid + 2*j - 1 + b*in_wid*in_wid
 				tmp[idx] = 1
@@ -162,15 +163,15 @@ func gen_comprs_BL(vec_size, in_wid int) (m_idx, r_idx map[int][]int) {
 		m_idx[rot] = tmp
 	}
 
-	for i := 1; i <= min_wid; i++ { // kinds of mov depends on i
+	for i := 1; i <= real_min_wid; i++ { // kinds of mov depends on i
 		tmp := make([]int, vec_size)
-		for j := 1; j <= min_wid; j++ {
+		for j := 1; j <= real_min_wid; j++ {
 			for b := 0; b < batch; b++ {
 				idx := (2*i-1)*in_wid + j - 1 + b*in_wid*in_wid
 				tmp[idx] = 1
 			}
 		}
-		rot := 3*min_wid*i - min_wid
+		rot := in_wid*i + min_wid*(i-1)
 		r_idx[rot] = tmp
 	}
 

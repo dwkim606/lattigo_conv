@@ -345,7 +345,7 @@ func bsgs_ctxt(eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext
 		for i := range elt {
 			tmp[i] = complex(float64(elt[i]), 0)
 		}
-		plain_tmp := ckks.NewPlaintext(params, input.Level(), 32768.0) // set scale of rot idx to be 2^(scale/2)
+		plain_tmp := ckks.NewPlaintext(params, input.Level(), 1048576.0) // set scale of rot idx to be 2^(scale/2)
 		encoder.EncodeNTT(plain_tmp, tmp, params.LogSlots())
 
 		if st {
@@ -363,7 +363,7 @@ func bsgs_ctxt(eval ckks.Evaluator, encoder ckks.Encoder, input *ckks.Ciphertext
 		for i := range elt {
 			tmp[i] = complex(float64(elt[i]), 0)
 		}
-		plain_tmp := ckks.NewPlaintext(params, input.Level(), 32768.0) // set scale of rot idx to be 2^(scale/2)
+		plain_tmp := ckks.NewPlaintext(params, input.Level(), 1048576.0) // set scale of rot idx to be 2^(scale/2)
 		encoder.EncodeNTT(plain_tmp, tmp, params.LogSlots())
 
 		if st {
@@ -751,9 +751,9 @@ func conv_then_pack(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_
 	ctxt_result := pack_ctxts(pack_evaluator, ctxt_out, max_ob, max_ob/norm, plain_idx, params)
 	fmt.Println("Pack time: ", time.Since(start)-mt)
 
-	fmt.Println("Result Scale: ", math.Log2(ctxt_result.Scale))
-	fmt.Println("Result LV: ", ctxt_result.Level())
-	fmt.Printf("Done in %s \n", time.Since(start))
+	// fmt.Println("Result Scale: ", math.Log2(ctxt_result.Scale))
+	// fmt.Println("Result LV: ", ctxt_result.Level())
+	// fmt.Printf("Done in %s \n", time.Since(start))
 
 	if (out_scale != ctxt_result.Scale) || (0 != ctxt_result.Level()) {
 		panic("LV or scale after conv then pack, inconsistent")

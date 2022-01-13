@@ -138,8 +138,8 @@ func testConv_noBoot_BL(in_kind string, printResult bool) {
 // Normal Conv without output modification (e.g., trimming or expanding)
 // Input does not need padding
 func testConv_BNRelu_BL(in_kind string, printResult bool) {
-	in_batch := 4
-	raw_in_wid := 14
+	in_batch := 128
+	raw_in_wid := 15
 	in_wid := 16
 	pad := in_wid - raw_in_wid
 	ker_wid := 3
@@ -209,6 +209,12 @@ func testConv_BNRelu_BL(in_kind string, printResult bool) {
 	fmt.Printf("Encryption done in %s \n", time.Since(start))
 
 	ct_result := evalConv_BNRelu_BL(cont, ct_input, ker_in, bn_a, bn_b, alpha, in_wid, ker_wid, in_batch, out_batch, 1, pad, strides, trans, printResult)
+
+	fmt.Println("test 2:")
+	ct_result = evalConv_BNRelu_BL(cont, ct_result, ker_in, bn_a, bn_b, alpha, in_wid, ker_wid, in_batch, out_batch, 1, pad, strides, trans, printResult)
+
+	fmt.Println("test 3:")
+	ct_result = evalConv_BNRelu_BL(cont, ct_result, ker_in, bn_a, bn_b, alpha, in_wid, ker_wid, in_batch, out_batch, 1, pad, strides, trans, printResult)
 
 	fmt.Println()
 	fmt.Println("===============  DECRYPTION  ===============")
@@ -1036,14 +1042,13 @@ func testImageNet_BL() {
 
 func testImageNet_BL_final() {
 	pad0 := 2
-	pad1 := 1
-	num_blc := 3
+	pad1 := 2
+	num_blc := 1
 	logN := 12
-	raw_in_wids := []int{14, 7} // = raw_in_wids = same as python
+	raw_in_wids := []int{14, 6} // = raw_in_wids = same as python
 	in_wids := []int{16, 8}
 	real_batch := []int{16, 32} // same as python
-	py_bn_a := []float64{0.2}
-	ker_wid := 3
+	ker_wid := 5
 	final_out := 60
 	prt_result := true
 	kp_wids := make([]int, len(in_wids)) // NOT used in BL
@@ -1059,7 +1064,7 @@ func testImageNet_BL_final() {
 	alpha := 0.0 // 0.3 => leakyrelu
 	input := make([]float64, raw_in_wids[0]*raw_in_wids[0]*real_batch[0])
 	for i := range input {
-		input[i] = 1.0 - 1.0*float64(i)/float64(len(input))
+		input[i] = 0.1 * float64(i%13) //1.0 - 1.0*float64(i)/float64(len(input))
 	}
 	pad_input1 := make([]float64, in_wids[0]*in_wids[0]*real_batch[0]/2)
 	pad_input2 := make([]float64, in_wids[0]*in_wids[0]*real_batch[0]/2)
@@ -1074,7 +1079,25 @@ func testImageNet_BL_final() {
 
 	ker_in12 := make([]float64, real_batch[0]*real_batch[1]*ker_size)
 	for i := range ker_in12 {
-		ker_in12[i] = 0.1 * float64(i) / float64(len(ker_in12))
+		ker_in12[i] = 0.3 * float64(i%7)
+	}
+	bn_a12 := make([]float64, real_batch[1])
+	bn_b12 := make([]float64, real_batch[1])
+	for i := range bn_a12 {
+		bn_a12[i] = 0.01 * float64(i%13)
+		bn_b12[i] = 0.1 * float64(i)
+	}
+
+	bn_a12_sep := make([][]float64, 4)
+	bn_b12_sep := make([][]float64, 4)
+	zeros := make([]float64, real_batch[1]/4)
+	for out := 0; out < 4; out++ {
+		bn_a12_sep[out] = make([]float64, real_batch[1]/4)
+		bn_b12_sep[out] = make([]float64, real_batch[1]/4)
+		for i := 0; i < real_batch[1]/4; i++ {
+			bn_a12_sep[out][i] = bn_a12[4*i+out]
+			bn_b12_sep[out][i] = bn_b12[4*i+out]
+		}
 	}
 
 	ker_in12_sep := make([][][]float64, 4) // number of output ctxts
@@ -1095,31 +1118,14 @@ func testImageNet_BL_final() {
 
 	ker_in2 := make([]float64, real_batch[1]*real_batch[1]*ker_size)
 	for i := range ker_in2 {
-		ker_in2[i] = 0.1 * float64(i) / float64(len(ker_in2))
-	}
-
-	bn_a12 := make([]float64, real_batch[1])
-	bn_b12 := make([]float64, real_batch[1])
-	for i := range bn_a12 {
-		bn_a12[i] = py_bn_a[0] // * float64(i) / float64(batch)
-		bn_b12[i] = 0.0        //0.1 * float64(i)
-	}
-	bn_a12_sep := make([][]float64, 4)
-	bn_b12_sep := make([][]float64, 4)
-	for out := 0; out < 4; out++ {
-		bn_a12_sep[out] = make([]float64, real_batch[1]/4)
-		bn_b12_sep[out] = make([]float64, real_batch[1]/4)
-		for i := 0; i < real_batch[1]/4; i++ {
-			bn_a12_sep[out][i] = bn_a12[4*i+out]
-			bn_b12_sep[out][i] = bn_b12[4*i+out]
-		}
+		ker_in2[i] = 0.01 * float64(i) / float64(len(ker_in2))
 	}
 
 	bn_a2 := make([]float64, real_batch[1])
 	bn_b2 := make([]float64, real_batch[1])
 	for i := range bn_a2 {
-		bn_a2[i] = py_bn_a[0] // * float64(i) / float64(batch)
-		bn_b2[i] = 0.0        //0.1 * float64(i)
+		bn_a2[i] = 0.1 * float64(i%13)
+		bn_b2[i] = 0.1 * float64(i)
 	}
 
 	fmt.Println("vec size: ", cont.N)
@@ -1153,7 +1159,7 @@ func testImageNet_BL_final() {
 	ct_res := make([]*ckks.Ciphertext, 4)
 	for pos := 0; pos < 4; pos++ {
 		ct_res[pos] = cont.evaluator.AddNew(evalConv_BNRelu_BL(cont, ct_input1, ker_in12_sep[pos][0], bn_a12_sep[pos], bn_b12_sep[pos], alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad0, false, false, false),
-			evalConv_BNRelu_BL(cont, ct_input2, ker_in12_sep[pos][1], bn_a12_sep[pos], bn_b12_sep[pos], alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad0, false, false, false))
+			evalConv_BNRelu_BL(cont, ct_input2, ker_in12_sep[pos][1], bn_a12_sep[pos], zeros, alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad0, false, false, false))
 		ct_res[pos] = evalRot_BL(cont, ct_res[pos], in_wids[0], pos, false)
 	}
 	ct_result := cont.evaluator.AddNew(cont.evaluator.AddNew(ct_res[0], ct_res[1]), cont.evaluator.AddNew(ct_res[2], ct_res[3]))
@@ -1228,8 +1234,8 @@ func testImageNet_BL_final() {
 			ker_inf2[i*final_out/2+j] = ker_inf[i*final_out+j+final_out/2]
 		}
 	}
-	ct_result1 := evalRMFC_BL_img(cont, ct_in, ker_inf1, real_batch[1], final_out/2, true)
-	ct_result2 := evalRMFC_BL_img(cont, ct_in, ker_inf2, real_batch[1], final_out/2, true)
+	ct_result1 := evalRMFC_BL_img(cont, ct_in, ker_inf1, real_batch[1], final_out/2, raw_in_wids[1], true)
+	ct_result2 := evalRMFC_BL_img(cont, ct_in, ker_inf2, real_batch[1], final_out/2, raw_in_wids[1], true)
 	fmt.Printf("RMFC done in %s \n", time.Since(start))
 	timings[2] = time.Since(new_start).Seconds()
 
@@ -1254,19 +1260,32 @@ func testImageNet_BL_final() {
 
 func testImageNet_BL_final_in(st, end int) {
 	pad0 := 2
-	pad1 := 1
-	ker_name := "ker3"
-	weight_dir := "weight_imgnet_ker3_h5/"
+	ker_name := "ker5" // change rot_ultil, min_wid -> min_wid - 2
+	ker_wid := 5
+	weight_dir := "weight_imgnet_" + ker_name + "_h5/"
 	logN := 16
-	num_blc := 3
-	raw_in_wids := []int{14, 7} // same as python
+	raw_in_wids := []int{14, 7} // same as python	// not for input but, {12, 6} and/or just pad1 := 2 for ker 5
 	in_wids := []int{16, 8}
 	real_batch := []int{256, 512} // same as python
-	ker_wid := 3
 	kp_wids := []int{16, 8}
 	final_out := 1000
 	prt_result := true
 	cont := newContext(logN, ker_wid, in_wids, kp_wids, true, "BL_Imagenet_final")
+	var pad1 int
+	var num_blc int
+	var st_weight_num int
+	if ker_name == "ker3" {
+		num_blc = 3
+		st_weight_num = 13
+		pad1 = 1
+	} else if ker_name == "ker5" {
+		num_blc = 1
+		st_weight_num = 11
+		raw_in_wids[1] = 6 // context change for rotation to get 12 instead of 14
+		pad1 = 2
+	} else {
+		panic("strange ker name!")
+	}
 
 	ker_size := ker_wid * ker_wid
 	max_batch := make([]int, len(real_batch)) // the max batch
@@ -1277,8 +1296,9 @@ func testImageNet_BL_final_in(st, end int) {
 	alpha := 0.0 // 0.3 => leakyrelu
 
 	for name_iter := st; name_iter < end; name_iter++ {
+
 		fmt.Println("Start ", name_iter, "-th iter..")
-		raw_input := readTxt("./Imagenet/ker3_ct_in_one2/input_"+strconv.Itoa(name_iter)+".csv", raw_in_wids[0]*raw_in_wids[0]*real_batch[0])
+		raw_input := readTxt("./Imagenet/"+ker_name+"_ct_in_one2/input_"+strconv.Itoa(name_iter)+".csv", raw_in_wids[0]*raw_in_wids[0]*real_batch[0])
 		pad_input1 := make([]float64, in_wids[0]*in_wids[0]*real_batch[0]/2)
 		pad_input2 := make([]float64, in_wids[0]*in_wids[0]*real_batch[0]/2)
 		for i := 0; i < raw_in_wids[0]; i++ {
@@ -1290,7 +1310,7 @@ func testImageNet_BL_final_in(st, end int) {
 			}
 		}
 
-		weight_num := 13 // starting from w9-conv.csv
+		weight_num := st_weight_num
 		ker_in12 := readTxt(weight_dir+"w"+strconv.Itoa(weight_num)+"-conv.csv", real_batch[0]*real_batch[1]*ker_size)
 		weight_num++
 		bn_a12 := readTxt(weight_dir+"w"+strconv.Itoa(weight_num)+"-a.csv", real_batch[1])
@@ -1314,6 +1334,7 @@ func testImageNet_BL_final_in(st, end int) {
 
 		bn_a12_sep := make([][]float64, 4)
 		bn_b12_sep := make([][]float64, 4)
+		zeros := make([]float64, real_batch[1]/4)
 		for out := 0; out < 4; out++ {
 			bn_a12_sep[out] = make([]float64, real_batch[1]/4)
 			bn_b12_sep[out] = make([]float64, real_batch[1]/4)
@@ -1353,7 +1374,7 @@ func testImageNet_BL_final_in(st, end int) {
 		ct_res := make([]*ckks.Ciphertext, 4)
 		for pos := 0; pos < 4; pos++ {
 			ct_res[pos] = cont.evaluator.AddNew(evalConv_BNRelu_BL(cont, ct_input1, ker_in12_sep[pos][0], bn_a12_sep[pos], bn_b12_sep[pos], alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad0, false, false, false),
-				evalConv_BNRelu_BL(cont, ct_input2, ker_in12_sep[pos][1], bn_a12_sep[pos], bn_b12_sep[pos], alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad0, false, false, false))
+				evalConv_BNRelu_BL(cont, ct_input2, ker_in12_sep[pos][1], bn_a12_sep[pos], zeros, alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad0, false, false, false))
 			ct_res[pos] = evalRot_BL(cont, ct_res[pos], in_wids[0], pos, false)
 		}
 		ct_result := cont.evaluator.AddNew(cont.evaluator.AddNew(ct_res[0], ct_res[1]), cont.evaluator.AddNew(ct_res[2], ct_res[3]))
@@ -1422,10 +1443,6 @@ func testImageNet_BL_final_in(st, end int) {
 
 		// RMFC
 		ker_inf := readTxt(weight_dir+"fc.csv", real_batch[1]*final_out)
-		bn_af := make([]float64, real_batch[1]*2)
-		for i := range bn_af {
-			bn_af[i] = 1.0 / (7 * 7) // for reduce mean on 8*8 elements
-		}
 		ker_inf1 := make([]float64, real_batch[1]*final_out/2)
 		ker_inf2 := make([]float64, real_batch[1]*final_out/2)
 		for i := 0; i < real_batch[1]; i++ {
@@ -1434,8 +1451,8 @@ func testImageNet_BL_final_in(st, end int) {
 				ker_inf2[i*final_out/2+j] = ker_inf[i*final_out+j+final_out/2]
 			}
 		}
-		ct_result1 := evalRMFC_BL_img(cont, ct_in, ker_inf1, real_batch[1], final_out/2, true)
-		ct_result2 := evalRMFC_BL_img(cont, ct_in, ker_inf2, real_batch[1], final_out/2, true)
+		ct_result1 := evalRMFC_BL_img(cont, ct_in, ker_inf1, real_batch[1], final_out/2, raw_in_wids[1], true)
+		ct_result2 := evalRMFC_BL_img(cont, ct_in, ker_inf2, real_batch[1], final_out/2, raw_in_wids[1], true)
 		fmt.Printf("RMFC done in %s \n", time.Since(start))
 		timings[2] = time.Since(new_start).Seconds()
 

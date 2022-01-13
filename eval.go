@@ -86,8 +86,10 @@ func evalConv_BN_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b
 	}
 	bn_b_slots := make([]complex128, cont.N/2)
 	for i, elt := range bn_b {
-		for j := 0; j < out_size; j++ {
-			bn_b_slots[j+norm*out_size*i] = complex(elt, 0)
+		for j := 0; j < in_wid-pad; j++ {
+			for k := 0; k < in_wid-pad; k++ {
+				bn_b_slots[j+k*in_wid+norm*out_size*i] = complex(elt, 0)
+			}
 		}
 	}
 
@@ -270,12 +272,12 @@ func evalRMFC_BL(cont *context, ct_input *ckks.Ciphertext, ker_fc, bias []float6
 // reduce mean and final FC layer
 // assume that ct_input has full batch (1,2,3,4,...)
 // ker_fc is of size in_batch*out and 1-dim from [in_batch,out] shape
-func evalRMFC_BL_img(cont *context, ct_input *ckks.Ciphertext, ker_fc []float64, in_batch, out_num int, printResult bool) (ct_res *ckks.Ciphertext) {
+func evalRMFC_BL_img(cont *context, ct_input *ckks.Ciphertext, ker_fc []float64, in_batch, out_num, raw_in_wid int, printResult bool) (ct_res *ckks.Ciphertext) {
 	rs_ker := make([][]float64, in_batch)
 	for i := 0; i < in_batch; i++ {
 		rs_ker[i] = make([]float64, out_num)
 		for j := 0; j < out_num; j++ {
-			rs_ker[i][j] = ker_fc[j+i*out_num] / 49.0 // we will add 64 elts instead of averaging them
+			rs_ker[i][j] = ker_fc[j+i*out_num] / float64(raw_in_wid*raw_in_wid) // we will add 64 elts instead of averaging them
 		}
 	}
 
@@ -380,15 +382,11 @@ func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []
 			b_coeffs[norm*i+j*max_batch] = bn_b[i]
 		}
 	}
-	part := time.Now()
 	// scale_exp := ct_input.Scale * cont.params.Scale() * float64(max_batch/norm)
 	pl_bn_b := ckks.NewPlaintext(cont.params, 0, out_scale)
 	// pl_bn_b := ckks.NewPlaintext(cont.params, cont.ECD_LV, scale_exp) // contain plaintext values
 	cont.encoder.EncodeCoeffs(b_coeffs, pl_bn_b)
-	fmt.Printf("for EncodeCoeffs %s \n", time.Since(part))
-	part = time.Now()
 	cont.encoder.ToNTT(pl_bn_b)
-	fmt.Printf("for NTTS %s \n", time.Since(part))
 	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
 
 	fmt.Println()
@@ -445,7 +443,7 @@ func evalConv_BN_sep(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 	for i := 0; i < max_batch; i++ {
 		if (i%norm == 0) && (i/norm < 16) {
 			ctxt_out[sep_norm*i] = cont.pack_evaluator.MulNew(ct_input, pl_ker[i]) // 4 is to use 16 batches among 64 batches among 256 batches (real_ob = 10 < 16)
-			cont.pack_evaluator.SetScale(ctxt_out[i], out_scale/float64(max_batch/(sep_norm*norm)))
+			cont.pack_evaluator.SetScale(ctxt_out[sep_norm*i], out_scale/float64(max_batch/(sep_norm*norm)))
 		}
 	}
 
@@ -568,9 +566,7 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	}
 
 	ct_conv := evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), printResult, trans)
-	fmt.Println("conv scale: ", math.Log2(ct_conv.Scale))
 	ct_conv.Scale = ct_conv.Scale * math.Pow(2, pow)
-	fmt.Println("conv scale: ", math.Log2(ct_conv.Scale))
 	cfs_preB := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
 	fmt.Println("Bootstrapping... Ours (until CtoS):")
 	start = time.Now()

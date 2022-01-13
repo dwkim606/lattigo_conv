@@ -20,7 +20,7 @@ const log_c_scale = 30
 const log_in_scale = 30
 const log_out_scale = 30
 
-const pow = 5 // making sure that ReLu can cover values in [-2^pow, 2^pow].
+const pow = 6 // making sure that ReLu can cover values in [-2^pow, 2^pow].
 
 type context struct {
 	logN    int
@@ -106,7 +106,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 			}
 			cont.m_idx[elt] = make([]map[int][]int, 1)
 			cont.r_idx[elt] = make([]map[int][]int, 1)
-			cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_comprs_BL(cont.N/2, elt)
+			cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_comprs_BL(cont.N/2, elt, 0)
 
 			for k := range cont.m_idx[elt][0] {
 				rotations = append(rotations, k)
@@ -160,7 +160,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 			}
 			cont.m_idx[elt] = make([]map[int][]int, 1)
 			cont.r_idx[elt] = make([]map[int][]int, 1)
-			cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_comprs_BL(cont.N/2, elt)
+			cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_comprs_BL(cont.N/2, elt, 0)
 
 			for k := range cont.m_idx[elt][0] {
 				rotations = append(rotations, k)
@@ -194,7 +194,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 			}
 			cont.m_idx[elt] = make([]map[int][]int, 1)
 			cont.r_idx[elt] = make([]map[int][]int, 1)
-			cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_comprs_BL(cont.N/2, elt)
+			cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_comprs_BL(cont.N/2, elt, 0)
 
 			for k := range cont.m_idx[elt][0] {
 				rotations = append(rotations, k)
@@ -219,8 +219,11 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 			}
 			cont.m_idx[elt] = make([]map[int][]int, 1)
 			cont.r_idx[elt] = make([]map[int][]int, 1)
-			cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_comprs_BL(cont.N/2, elt)
-
+			if ker_wid == 3 {
+				cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_comprs_BL(cont.N/2, elt, 0) // no pad
+			} else {
+				cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_comprs_BL(cont.N/2, elt, 2) // pad
+			}
 			for k := range cont.m_idx[elt][0] {
 				rotations = append(rotations, k)
 			}
@@ -496,7 +499,6 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 }
 
 func main() {
-
 	// testConv_noBoot(7, 8, 8, true)
 
 	// testImageNet_BL()
@@ -505,20 +507,24 @@ func main() {
 
 	// testReduceMean_norm()
 	// testResNet_ker23()
+	// testImagenet_final()
+	// testImageNet_BL_final()
 
+	// fmt.Println("Now, fast version (norm = 1)")
 	// testImagenet_final_fast()
 
 	st, _ := strconv.Atoi(os.Args[1])
 	end, _ := strconv.Atoi(os.Args[2])
-	testImagenet_final_fast_in(st, end)
-	// testImageNet_BL_final_in(st, end)
+	// testImagenet_final_in(st, end)
+	// testImagenet_final_fast_in(st, end)
+	testImageNet_BL_final_in(st, end)
 	// testImagenet_in(st, end)
 	// testResNet_in_BL(iter)
 	// testResNet_in(st, end)
 
 	// testImageNet_BL_final()
 
-	// testConv_BNRelu_BL("Conv", true)
+	// testConv_BNRelu_BL("Conv", false)
 	// testConv_noBoot_BL("Conv", true)
 	// testResNet_BL()
 	// testReduceMean_BL()

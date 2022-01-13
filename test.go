@@ -644,15 +644,15 @@ func testConv_BNRelu(kind string, printResult bool) {
 func testResNet_in(st, end int) {
 	// For ResNet, we use padding: i.e., in_wid**2 element is contained in (2*in_wid)**2 sized block
 	// So ReLU, keep or rot, StoC done only on the 1st part of the CtoS ciphertexts
-	weight_dir := "weight_ker7_h5/"
-	ker_name := "ker7"
+	weight_dir := "weight_ker3_h5/"
+	ker_name := "ker3"
 	logN := 16
-	num_blc1 := 3                   // 3 // 5 // 7
-	num_blc2 := 1                   // 1 // 3 // 5
-	num_blc3 := 1                   // 1 // 3 // 5
+	num_blc1 := 7                   // 3 // 5 // 7
+	num_blc2 := 5                   // 1 // 3 // 5
+	num_blc3 := 5                   // 1 // 3 // 5
 	raw_in_wids := []int{32, 16, 8} // same as python
 	real_batch := []int{16, 32, 64} // same as python
-	ker_wid := 7
+	ker_wid := 3
 	padding := true
 	fast_pack := true
 	in_wids := make([]int, len(raw_in_wids))
@@ -2049,11 +2049,11 @@ func testImagenet_final_fast() {
 	// Do not use fast_pack
 	// We use full packing: i.e., in_wid**2 element is contained in po2_in_wid**2 sized block <-> half padding of Resnet
 	// So ReLU, keep or rot, StoC done on both the 1st & 2nd part of the CtoS ciphertexts
-	logN := 12
-	num_blc := 1
+	logN := 14
+	num_blc := 3
 	norm := 1
-	raw_in_wids := []int{14, 7} // same as python
-	real_batch := []int{16, 32} // same as python
+	raw_in_wids := []int{14, 7}  // same as python
+	real_batch := []int{64, 128} // same as python
 	fin_out_batch := 60
 	py_bn_a := []float64{1.0, 0.2}
 	ker_wid := 3
@@ -2210,11 +2210,11 @@ func testImagenet_final_fast() {
 func testImagenet_final() {
 	// We use full packing: i.e., in_wid**2 element is contained in po2_in_wid**2 sized block <-> half padding of Resnet
 	// So ReLU, keep or rot, StoC done on both the 1st & 2nd part of the CtoS ciphertexts
-	logN := 12
-	num_blc := 1
+	logN := 14
+	num_blc := 3
 	norm := 1
-	raw_in_wids := []int{14, 7} // same as python
-	real_batch := []int{16, 32} // same as python
+	raw_in_wids := []int{14, 7}  // same as python
+	real_batch := []int{64, 128} // same as python
 	fin_out_batch := 60
 	py_bn_a := []float64{1.0, 0.2}
 	ker_wid := 3
@@ -2628,19 +2628,33 @@ func testImagenet() {
 func testImagenet_final_fast_in(st, end int) {
 	// We use full packing: i.e., in_wid**2 element is contained in po2_in_wid**2 sized block <-> half padding of Resnet
 	// So ReLU, keep or rot, StoC done on both the 1st & 2nd part of the CtoS ciphertexts
-	ker_name := "ker3"
-	weight_dir := "weight_imgnet_ker3_h5/"
+	ker_name := "ker5" // "ker5"
+	ker_wid := 5
+	weight_dir := "weight_imgnet_" + ker_name + "_h5/"
 	logN := 16
-	num_blc := 3
 	raw_in_wids := []int{14, 7}   // same as python
 	real_batch := []int{256, 512} // same as python
-	ker_wid := 3
 	iter := 2
 	in_wids := make([]int, len(raw_in_wids))
 	kp_wids := make([]int, len(raw_in_wids))
-	for i, elt := range raw_in_wids {
-		in_wids[i] = 16 / int(1<<i)
-		kp_wids[i] = elt
+	var num_blc int
+	var st_weight_num int
+	if ker_name == "ker3" {
+		for i, elt := range raw_in_wids {
+			in_wids[i] = 16 / int(1<<i)
+			kp_wids[i] = elt
+		}
+		num_blc = 3
+		st_weight_num = 13
+	} else if ker_name == "ker5" {
+		in_wids[0] = 16
+		in_wids[1] = 8
+		kp_wids[0] = 12
+		kp_wids[1] = 6
+		num_blc = 1
+		st_weight_num = 11
+	} else {
+		panic("strange ker name!")
 	}
 	cont := newContext(logN, ker_wid, in_wids, kp_wids, true, "Imagenet_final_fast")
 
@@ -2652,10 +2666,11 @@ func testImagenet_final_fast_in(st, end int) {
 	alpha := 0.0 // 0.3 => leakyrelu
 
 	for name_iter := st; name_iter < end; name_iter++ {
+		weight_num := st_weight_num
 		norm := 1
 		fmt.Println("Start ", name_iter, "-th iter..")
 
-		raw_input := readTxt("./Imagenet/ker3_ct_in_one2/input_"+strconv.Itoa(name_iter)+".csv", raw_in_wids[0]*raw_in_wids[0]*real_batch[0])
+		raw_input := readTxt("./Imagenet/"+ker_name+"_ct_in_one2/input_"+strconv.Itoa(name_iter)+".csv", raw_in_wids[0]*raw_in_wids[0]*real_batch[0])
 		input := make([]float64, in_wids[0]*in_wids[0]*real_batch[0])
 		for i := 0; i < raw_in_wids[0]; i++ {
 			for j := 0; j < raw_in_wids[0]; j++ {
@@ -2667,7 +2682,6 @@ func testImagenet_final_fast_in(st, end int) {
 		fmt.Println("Input: ")
 		prt_mat(input, max_batch[0], 3)
 
-		weight_num := 13 // starting from w9-conv.csv
 		ker_in12 := readTxt(weight_dir+"w"+strconv.Itoa(weight_num)+"-conv.csv", real_batch[0]*real_batch[1]*ker_size)
 		weight_num++
 		bn_a12 := readTxt(weight_dir+"w"+strconv.Itoa(weight_num)+"-a.csv", real_batch[1])
@@ -2740,8 +2754,14 @@ func testImagenet_final_fast_in(st, end int) {
 		fin_out_batch := 1000
 		ker_inf := readTxt(weight_dir+"fc.csv", real_batch[1]*fin_out_batch)
 		bn_af := make([]float64, real_batch[1]*2)
-		for i := range bn_af {
-			bn_af[i] = 1.0 / (7 * 7) // for reduce mean on 8*8 elements
+		if ker_wid == 3 {
+			for i := range bn_af {
+				bn_af[i] = 1.0 / (7 * 7) // for reduce mean on 8*8 elements
+			}
+		} else {
+			for i := range bn_af {
+				bn_af[i] = 1.0 / (6 * 6) // for reduce mean on 8*8 elements
+			}
 		}
 		bn_bf := make([]float64, real_batch[1]*2)
 		for i := range bn_bf {
