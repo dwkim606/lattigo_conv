@@ -1260,8 +1260,8 @@ func testImageNet_BL_final() {
 
 func testImageNet_BL_final_in(st, end int) {
 	pad0 := 2
-	ker_name := "ker5" // change rot_ultil, min_wid -> min_wid - 2
-	ker_wid := 5
+	ker_name := "ker3" // change rot_ultil, min_wid -> min_wid - 2
+	ker_wid := 3
 	weight_dir := "weight_imgnet_" + ker_name + "_h5/"
 	logN := 16
 	raw_in_wids := []int{14, 7} // same as python	// not for input but, {12, 6} and/or just pad1 := 2 for ker 5
@@ -1373,8 +1373,8 @@ func testImageNet_BL_final_in(st, end int) {
 		new_start = time.Now()
 		ct_res := make([]*ckks.Ciphertext, 4)
 		for pos := 0; pos < 4; pos++ {
-			ct_res[pos] = cont.evaluator.AddNew(evalConv_BNRelu_BL(cont, ct_input1, ker_in12_sep[pos][0], bn_a12_sep[pos], bn_b12_sep[pos], alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad0, false, false, false),
-				evalConv_BNRelu_BL(cont, ct_input2, ker_in12_sep[pos][1], bn_a12_sep[pos], zeros, alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad0, false, false, false))
+			ct_res[pos] = cont.evaluator.AddNew(evalConv_BN_BL(cont, ct_input1, ker_in12_sep[pos][0], bn_a12_sep[pos], bn_b12_sep[pos], in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, pos, 1, pad0, false, false),
+				evalConv_BN_BL(cont, ct_input2, ker_in12_sep[pos][1], bn_a12_sep[pos], zeros, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, pos, 1, pad0, false, false))
 			ct_res[pos] = evalRot_BL(cont, ct_res[pos], in_wids[0], pos, false)
 		}
 		ct_result := cont.evaluator.AddNew(cont.evaluator.AddNew(ct_res[0], ct_res[1]), cont.evaluator.AddNew(ct_res[2], ct_res[3]))

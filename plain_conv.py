@@ -781,7 +781,7 @@ def imgnet_gen_ct_in_one(iter_st):
 
 # gen_plain_predictions()
 
-post_process_Imgnet(10, 'ker5', True)
+post_process_Imgnet(100, 'ker3', True)
 
 # conv_bnReLU_BL_bench(False, False, True)
 
@@ -855,7 +855,7 @@ post_process_Imgnet(10, 'ker5', True)
 # input_image = tf.reshape(tf.constant(np.array(input_image), tf.float32), [1, 224, 224, 3])
 # plain_imagenet(input_image, 'ker5_')
 
-# post_process(100, 'ker7_', False)
+# post_process(100, 'ker7_', True)
 # exit(1)
 # num_samples = 1000
 # pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
