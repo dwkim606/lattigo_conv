@@ -556,11 +556,11 @@ func testConv_noBoot_old(kind string, printResult bool) (ct_result *ckks.Ciphert
 // For trans, assume that input: full bached ciphertext, outputs 1/4 batched 1ctxt due to expansion
 func testConv_BNRelu(kind string, printResult bool) {
 	raw_in_batch := 256 // same as python
-	raw_in_wid := 15    // same as python
+	raw_in_wid := 14    // same as python
 	in_batch := 256     // needs to be divided by 4 (to pack the output of transConv)
 	in_wid := 16
 	norm := in_batch / raw_in_batch
-	ker_wid := 3
+	ker_wid := 5
 	alpha := 0.0 // for ReLU: 0.0 , leakyReLU : 0.3
 	pack_pos := 0
 
@@ -644,15 +644,15 @@ func testConv_BNRelu(kind string, printResult bool) {
 func testResNet_in(st, end int) {
 	// For ResNet, we use padding: i.e., in_wid**2 element is contained in (2*in_wid)**2 sized block
 	// So ReLU, keep or rot, StoC done only on the 1st part of the CtoS ciphertexts
-	weight_dir := "weight_ker3_h5/"
-	ker_name := "ker3"
+	weight_dir := "weight_ker7_h5/"
+	ker_name := "ker7"
 	logN := 16
-	num_blc1 := 7                   // 3 // 5 // 7
-	num_blc2 := 5                   // 1 // 3 // 5
-	num_blc3 := 5                   // 1 // 3 // 5
+	num_blc1 := 3                   // 3 // 5 // 7
+	num_blc2 := 1                   // 1 // 3 // 5
+	num_blc3 := 1                   // 1 // 3 // 5
 	raw_in_wids := []int{32, 16, 8} // same as python
 	real_batch := []int{16, 32, 64} // same as python
-	ker_wid := 3
+	ker_wid := 7
 	padding := true
 	fast_pack := true
 	in_wids := make([]int, len(raw_in_wids))

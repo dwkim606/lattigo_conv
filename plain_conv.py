@@ -493,6 +493,7 @@ def plain_resnet(input_image, ker_name):
             ten_a = tf.reshape(tf.constant(bn_a, tf.float32), [1, in_wid[blc], in_wid[blc], batch[blc]])
             ten_b = tf.reshape(tf.constant(bn_b, tf.float32), [1, in_wid[blc], in_wid[blc], batch[blc]])
             conv = ten_a * conv + ten_b
+            print("max:", tf.reduce_max(conv, [0,1,2,3]))
             conv = tf.nn.relu(conv)
             if i == 0:
                 print(blc," to ", blc+1," block. ")
@@ -613,6 +614,7 @@ def post_process(iter_num, ker_name, base_line):
     # base_line = False
     num_samples = 100
     pred = np.reshape(np.loadtxt('Resnet_plain_data/plain_prediction_'+ker_name+str(num_samples)+'.csv'), [num_samples, 10])    
+    true_pred = np.reshape(np.loadtxt('Resnet_plain_data/test_labels_'+str(num_samples)+'.csv'), [num_samples])    
     result_dir = 'Resnet_enc_result_'+ker_name
     if base_line:
         result_dir = result_dir + "BL"
@@ -621,6 +623,8 @@ def post_process(iter_num, ker_name, base_line):
     bias_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fcbias.csv'), tf.float32), [10])
 
     acc = 0
+    true_acc = 0
+    pl_true_acc = 0
     total = 0
     no_iters = []
     wrong_result = {}
@@ -657,8 +661,15 @@ def post_process(iter_num, ker_name, base_line):
             wrong_result[str(iter)] = []
             wrong_result[str(iter)].insert(0, res_np)
             wrong_result[str(iter)].insert(1, pred[iter])
+            wrong_result[str(iter)].insert(2, true_pred[iter])
+        if (np.argmax(res_np) == true_pred[iter]):
+            true_acc += 1
+        if (np.argmax(pred[iter]) == true_pred[iter]):
+            pl_true_acc += 1
 
-    print("precision: ", acc, "/", total)
+    print("Plain precision: ", pl_true_acc, "/", total)
+    print("Enc precision: ", true_acc, "/", total)
+    print("plain vs enc accordance: ", acc, "/", total)
     print("among ", iter_num, " samples.")
     print("missing: ", no_iters)
     print("\n wrong results: \n")
@@ -666,6 +677,7 @@ def post_process(iter_num, ker_name, base_line):
         print(i, "-th iter.")
         print("enc: ", result[0], "argmax: ", np.argmax(result[0]))
         print("plain: ", result[1], "argmax: ", np.argmax(result[1]), "\n")
+        print("true: ", result[2], " \n" )
 
     # tf_images = tf.reshape(tf.constant(np.loadtxt('test_images_'+str(num_samples)+'.csv'), tf.float32), [num_samples, 32, 32, 3])
     # pred = plain_resnet(tf_images)
@@ -685,6 +697,7 @@ def post_process_Imgnet(iter_num, ker_name, base_line):
         result_dir = result_dir + "_BL"
     in_dir = 'weight_imgnet_'+ker_name+'_h5/'
 
+    true_acc = 0
     acc = 0
     total = 0
     no_iters = []
@@ -709,7 +722,10 @@ def post_process_Imgnet(iter_num, ker_name, base_line):
             wrong_result[str(iter)].insert(0, read)
             wrong_result[str(iter)].insert(1, pred[iter,:])
             wrong_result[str(iter)].insert(2, true_pred[iter,:])
+        if (np.argmax(read) == np.argmax(true_pred[iter,:])):
+            true_acc += 1
 
+    print("True precision: ", true_acc, "/", total)
     print("precision: ", acc, "/", total)
     print("among ", iter_num, " samples.")
     print("missing: ", no_iters)
@@ -754,13 +770,20 @@ def separate_data(num_outs):
 
 def gen_plain_predictions():
     ker_name = 'ker7_'
-    num_samples = 1000 # or 1000
-    tf_labels = tf.constant(np.loadtxt('Resnet_plain_data/test_labels_'+str(num_samples)+'.csv'), tf.int64)
-    tf_images = tf.reshape(tf.constant(np.loadtxt('Resnet_plain_data/test_images_'+str(num_samples)+'.csv'), tf.float32), [num_samples, 32, 32, 3])
+    num_samples = 10000 # or 1000
+    if num_samples == 10000:
+        tf_labels = tf.constant(np.loadtxt('Resnet_plain_data/test_labels.csv'), tf.int64)
+        tf_images = tf.reshape(tf.constant(np.loadtxt('Resnet_plain_data/test_images.csv'), tf.float32), [num_samples, 32, 32, 3])
+    else:
+        tf_labels = tf.constant(np.loadtxt('Resnet_plain_data/test_labels_'+str(num_samples)+'.csv'), tf.int64)
+        tf_images = tf.reshape(tf.constant(np.loadtxt('Resnet_plain_data/test_images_'+str(num_samples)+'.csv'), tf.float32), [num_samples, 32, 32, 3])
 
     # np.savetxt('test_data/test_labels.csv',tf_labels, fmt='%d', delimiter=',')
     # for i in range(num_samples):
     #     np.savetxt('test_data/test_image_'+str(i)+'.csv',np.reshape(tf_images[i,:,:,:], [-1]), fmt='%.18e', delimiter=',')
+
+    tf_images = tf_images[:200,:,:,:]
+    tf_labels = tf_labels[:200]
 
     predictions = plain_resnet(tf_images, ker_name)
     # tf_image = tf_images[0,:,:,:]
@@ -781,7 +804,7 @@ def imgnet_gen_ct_in_one(iter_st):
 
 # gen_plain_predictions()
 
-post_process_Imgnet(100, 'ker3', True)
+# post_process_Imgnet(100, 'ker5', False)
 
 # conv_bnReLU_BL_bench(False, False, True)
 
@@ -855,7 +878,7 @@ post_process_Imgnet(100, 'ker3', True)
 # input_image = tf.reshape(tf.constant(np.array(input_image), tf.float32), [1, 224, 224, 3])
 # plain_imagenet(input_image, 'ker5_')
 
-# post_process(100, 'ker7_', True)
+# post_process(100, 'ker7_', False)
 # exit(1)
 # num_samples = 1000
 # pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
@@ -875,4 +898,4 @@ post_process_Imgnet(100, 'ker3', True)
 # print("enc: ", conv[:10], "argmax: ", np.argmax(conv[:10]))
 # print("plain: ", pred[5], "argmax: ", np.argmax(pred[5]))
 
-# gen_plain_predictions()
+gen_plain_predictions()

@@ -475,7 +475,25 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 		new_encoder := ckks.NewEncoder(new_params)
 
 		cont.pl_idx, cont.pack_evaluator = gen_idxNlogs(0, new_kgen, sk, new_encoder, new_params)
-	}
+	} //else {
+	// All rotations BL can be here
+	// new_params, err := ckks.NewParametersFromLiteral(ckks.ParametersLiteral{
+	// 	LogN: logN,
+	// 	Q:    cont.params.Q(),
+	// 	P:    []uint64{0x1fffffffffe00001}, // Pi 61
+	// 	// Pi 61
+	// 	Sigma:    rlwe.DefaultSigma,
+	// 	LogSlots: logN - 1,
+	// 	Scale:    float64(1 << 30),
+	// })
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// new_kgen := ckks.NewKeyGenerator(new_params)
+	// new_rlk := new_kgen.GenRelinearizationKey(sk, 2)
+	// new_rotkeys := new_kgen.GenRotationKeysForRotations(rotations, false, sk)
+	// cont.pack_evaluator = ckks.NewEvaluator(new_params, rlwe.EvaluationKey{Rlk: new_rlk, Rtks: new_rotkeys})
+	//}
 
 	if boot {
 		fmt.Println("Generating bootstrapping keys...")
@@ -517,13 +535,14 @@ func main() {
 	end, _ := strconv.Atoi(os.Args[2])
 	// testImagenet_final_in(st, end)
 	// testImagenet_final_fast_in(st, end)
-	testImageNet_BL_final_in(st, end)
+	// testImageNet_BL_final_in(st, end)
 	// testImagenet_in(st, end)
-	// testResNet_in_BL(iter)
+	testResNet_in_BL(st, end)
 	// testResNet_in(st, end)
 
 	// testImageNet_BL_final()
 
+	// testConv_BNRelu_BL_same()
 	// testConv_BNRelu_BL("Conv", false)
 	// testConv_noBoot_BL("Conv", true)
 	// testResNet_BL()
