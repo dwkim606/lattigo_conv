@@ -10,6 +10,7 @@ import random
 import os
 import tensorflow as tf
 from tensorflow.keras.layers import Cropping2D
+from statistics import mean, stdev
 
 def prt_list(input, start, width, showAll):
     if showAll:
@@ -612,7 +613,7 @@ def post_process(iter_num, ker_name, base_line):
     ## First load plain result
     # ker_name = 'ker7_'
     # base_line = False
-    num_samples = 100
+    num_samples = 1000
     pred = np.reshape(np.loadtxt('Resnet_plain_data/plain_prediction_'+ker_name+str(num_samples)+'.csv'), [num_samples, 10])    
     true_pred = np.reshape(np.loadtxt('Resnet_plain_data/test_labels_'+str(num_samples)+'.csv'), [num_samples])    
     result_dir = 'Resnet_enc_result_'+ker_name
@@ -690,14 +691,22 @@ def post_process_Imgnet(iter_num, ker_name, base_line):
     # ker_name = 'ker3'
     # base_line = False
     num_samples = 100
-    true_pred = np.reshape(np.loadtxt('Imagenet/'+ker_name+'_true_label/'+ker_name+'_true_label0.csv'), [num_samples, 1000])    
-    pred = np.reshape(np.loadtxt('Imagenet/'+ker_name+'_final_out/'+ker_name+'_final_out0.csv'), [num_samples, 1000])    
+
+    true_pred0 = np.reshape(np.loadtxt('Imagenet/'+ker_name+'_true_label/'+ker_name+'_true_label0.csv'), [num_samples, 1000])    
+    pred0 = np.reshape(np.loadtxt('Imagenet/'+ker_name+'_final_out/'+ker_name+'_final_out0.csv'), [num_samples, 1000])    
+    true_pred1 = np.reshape(np.loadtxt('Imagenet/'+ker_name+'_true_label/'+ker_name+'_true_label1.csv'), [num_samples, 1000])    
+    pred1 = np.reshape(np.loadtxt('Imagenet/'+ker_name+'_final_out/'+ker_name+'_final_out1.csv'), [num_samples, 1000])    
+
+    true_pred = np.concatenate((true_pred0, true_pred1), axis = 0)
+    pred = np.concatenate((pred0, pred1), axis = 0)
+
     result_dir = 'Imagenet/imgnet_class_result_'+ker_name+'_final_fast'
     if base_line:
         result_dir = result_dir + "_BL"
     in_dir = 'weight_imgnet_'+ker_name+'_h5/'
 
     true_acc = 0
+    pl_true_acc = 0
     acc = 0
     total = 0
     no_iters = []
@@ -724,9 +733,13 @@ def post_process_Imgnet(iter_num, ker_name, base_line):
             wrong_result[str(iter)].insert(2, true_pred[iter,:])
         if (np.argmax(read) == np.argmax(true_pred[iter,:])):
             true_acc += 1
+        if (np.argmax(pred[iter,:]) == np.argmax(true_pred[iter,:])):
+            pl_true_acc += 1
 
-    print("True precision: ", true_acc, "/", total)
-    print("precision: ", acc, "/", total)
+
+    print("Plain precision: ", pl_true_acc, "/", total)
+    print("Enc precision: ", true_acc, "/", total)
+    print("Plain vs Enc Accordance: ", acc, "/", total)
     print("among ", iter_num, " samples.")
     print("missing: ", no_iters)
     print("\n wrong results: \n")
@@ -799,12 +812,42 @@ def imgnet_gen_ct_in_one(iter_st):
         np.savetxt("Imagenet/ker5_ct_in_one2/input_"+str(i)+".csv", np.reshape(ct_in[j,:,:,:], [-1]))
         j+=1
 
-  
+def read_out_analysis():
+    res_dir = 'Resnet_enc_result_ker3_'
+    os_path = res_dir+'/iter_1000'
+    prefix = "Total done in"
+
+    line_number = 0
+    list_results = [] 
+    if os.path.exists(os_path):
+        with open(os_path, 'r') as read_obj:
+            for line in read_obj:
+                if prefix in line:
+                    time_str = line.strip(prefix).strip()
+                    list_results.append(get_seconds(time_str))
+                    line_number += 1
+    else:
+        print("No file exists")
+        exit(1)
+    
+    return(list_results)
+
+
+def get_seconds(time_str):
+    m, s = time_str.split('m')
+    s, _ = s.split('s')
+    return int(m)*60 + int(float(s))
+
+
 #### Main Start #### 
+
+# result_list = read_out_analysis()
+# print("num: ", len(result_list), "avg: ", mean(result_list), "std: ", stdev(result_list))
+# exit(1)
 
 # gen_plain_predictions()
 
-# post_process_Imgnet(100, 'ker5', False)
+post_process_Imgnet(200, 'ker3', False)
 
 # conv_bnReLU_BL_bench(False, False, True)
 
@@ -878,7 +921,7 @@ def imgnet_gen_ct_in_one(iter_st):
 # input_image = tf.reshape(tf.constant(np.array(input_image), tf.float32), [1, 224, 224, 3])
 # plain_imagenet(input_image, 'ker5_')
 
-# post_process(100, 'ker7_', False)
+# post_process(200, 'ker7_', False)
 # exit(1)
 # num_samples = 1000
 # pred = np.reshape(np.loadtxt('plain_prediction'+str(num_samples)+'.csv'), [num_samples, 10])    
@@ -898,4 +941,4 @@ def imgnet_gen_ct_in_one(iter_st):
 # print("enc: ", conv[:10], "argmax: ", np.argmax(conv[:10]))
 # print("plain: ", pred[5], "argmax: ", np.argmax(pred[5]))
 
-gen_plain_predictions()
+# gen_plain_predictions()
