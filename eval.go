@@ -75,9 +75,9 @@ func evalConv_BN_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b
 	out_size := in_size
 	max_batch := cont.N / (2 * in_size)
 
-	fmt.Println()
-	fmt.Println("===============  (KER) PREPARATION  ===============")
-	fmt.Println()
+	// fmt.Println()
+	// fmt.Println("===============  (KER) PREPARATION  ===============")
+	// fmt.Println()
 	start = time.Now()
 	max_ker_rs := reshape_ker_BL(ker_in, bn_a, ker_wid, real_ib, real_ob, max_batch, pos, norm, trans)
 	scale_exp := cont.params.Scale() * cont.params.Scale()
@@ -97,9 +97,9 @@ func evalConv_BN_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b
 	cont.encoder.EncodeNTT(pl_bn_b, bn_b_slots, cont.logN-1)
 	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
 
-	fmt.Println()
-	fmt.Println("===============  EVALUATION  ===============")
-	fmt.Println()
+	// fmt.Println()
+	// fmt.Println("===============  EVALUATION  ===============")
+	// fmt.Println()
 	start = time.Now()
 	ct_inputs_rots := preConv_BL(cont.evaluator, ct_input, in_wid, ker_wid)
 	fmt.Printf("preConv done in %s \n", time.Since(start))
@@ -116,6 +116,65 @@ func evalConv_BN_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b
 			ct_res = ct_tmp
 		} else {
 			cont.evaluator.Add(ct_res, cont.evaluator.RotateNew(ct_tmp, norm*i*out_size), ct_res)
+		}
+	}
+
+	if ct_res.Scale != scale_exp {
+		panic("Different scale between pl_bn_b and ctxt")
+	}
+	cont.evaluator.Add(ct_res, pl_bn_b, ct_res)
+	fmt.Printf("Conv (with BN) Done in %s \n", time.Since(start))
+
+	return ct_res
+}
+
+// only for test, use pack_evaluator optimizer
+func evalConv_BN_BL_test(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob, pos, norm, pad int, trans, printResult bool) (ct_res *ckks.Ciphertext) {
+	in_size := in_wid * in_wid
+	out_size := in_size
+	max_batch := cont.N / (2 * in_size)
+
+	// fmt.Println()
+	// fmt.Println("===============  (KER) PREPARATION  ===============")
+	// fmt.Println()
+	start = time.Now()
+	max_ker_rs := reshape_ker_BL(ker_in, bn_a, ker_wid, real_ib, real_ob, max_batch, pos, norm, trans)
+	scale_exp := cont.params.Scale() * cont.params.Scale()
+	if trans {
+		scale_exp = cont.params.Scale() * cont.params.Scale() * cont.params.Scale()
+	}
+	bn_b_slots := make([]complex128, cont.N/2)
+	for i, elt := range bn_b {
+		for j := 0; j < in_wid-pad; j++ {
+			for k := 0; k < in_wid-pad; k++ {
+				bn_b_slots[j+k*in_wid+norm*out_size*i] = complex(elt, 0)
+			}
+		}
+	}
+
+	pl_bn_b := ckks.NewPlaintext(cont.params, cont.ECD_LV, scale_exp)
+	cont.encoder.EncodeNTT(pl_bn_b, bn_b_slots, cont.logN-1)
+	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
+
+	// fmt.Println()
+	// fmt.Println("===============  EVALUATION  ===============")
+	// fmt.Println()
+	start = time.Now()
+	ct_inputs_rots := preConv_BL(cont.pack_evaluator, ct_input, in_wid, ker_wid)
+	fmt.Printf("preConv done in %s \n", time.Since(start))
+
+	var rot_iters int
+	if norm*real_ob == max_batch {
+		rot_iters = real_ob
+	} else {
+		rot_iters = max_batch
+	}
+	for i := 0; i < rot_iters; i++ {
+		ct_tmp := postConv_BL(cont.params, cont.encoder, cont.pack_evaluator, ct_inputs_rots, in_wid, ker_wid, norm*i, pad, max_ker_rs)
+		if i == 0 {
+			ct_res = ct_tmp
+		} else {
+			cont.evaluator.Add(ct_res, cont.pack_evaluator.RotateNew(ct_tmp, norm*i*out_size), ct_res)
 		}
 	}
 
@@ -370,9 +429,9 @@ func evalRMFC_BL_old(cont *context, ct_input *ckks.Ciphertext, ker_fc, bias []fl
 func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob, norm int, out_scale float64, printResult, trans bool) (ct_res *ckks.Ciphertext) {
 	max_batch := cont.N / (in_wid * in_wid)
 
-	fmt.Println()
-	fmt.Println("===============  (KER) PREPARATION  ===============")
-	fmt.Println()
+	// fmt.Println()
+	// fmt.Println("===============  (KER) PREPARATION  ===============")
+	// fmt.Println()
 	start = time.Now()
 	pl_ker := prep_Ker(cont.params, cont.encoder, ker_in, bn_a, in_wid, ker_wid, real_ib, real_ob, norm, cont.ECD_LV, 0, trans)
 	fmt.Printf("for prep_ker %s \n", time.Since(start))
@@ -389,9 +448,9 @@ func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []
 	cont.encoder.ToNTT(pl_bn_b)
 	fmt.Printf("Plaintext (kernel) preparation, Done in %s \n", time.Since(start))
 
-	fmt.Println()
-	fmt.Println("===============  EVALUATION  ===============")
-	fmt.Println()
+	// fmt.Println()
+	// fmt.Println("===============  EVALUATION  ===============")
+	// fmt.Println()
 
 	start = time.Now()
 	ct_res = conv_then_pack(cont.params, cont.pack_evaluator, ct_input, pl_ker, cont.pl_idx, max_batch, norm, cont.ECD_LV, out_scale)

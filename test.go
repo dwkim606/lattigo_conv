@@ -478,6 +478,57 @@ func testConv_noBoot(kind string, printResult bool) (ct_result *ckks.Ciphertext)
 	return ct_result
 }
 
+func testConv_noBoot_in(in_batch, in_wid, ker_wid int) {
+	total_test_num := 10
+	kind := "Conv"
+	printResult := false
+	raw_in_batch := in_batch         // same as python
+	raw_in_wid := in_wid - ker_wid/2 // same as python
+	norm := in_batch / raw_in_batch
+	test_dir := "test_conv_data/"
+
+	// set basic variables for above input variables
+	kp_wid, out_batch, logN, trans := set_Variables(in_batch, raw_in_wid, in_wid, ker_wid, kind)
+	raw_out_batch := out_batch / norm
+
+	// generate Context: params, Keys, rotations, general plaintexts
+	cont := newContext(logN, ker_wid, []int{in_wid}, []int{kp_wid}, false, kind)
+	fmt.Println("vec size: log2 = ", cont.logN)
+	fmt.Println("raw input width: ", raw_in_wid)
+	fmt.Println("kernel width: ", ker_wid)
+	fmt.Println("num raw batches in & out: ", raw_in_batch, ", ", raw_out_batch)
+
+	for test_iter := 0; test_iter < total_test_num; test_iter++ {
+		fmt.Println(test_iter, "-th iter...start")
+		raw_input := readTxt(test_dir+"test_conv"+strconv.Itoa(ker_wid)+"_batch_"+strconv.Itoa(in_batch)+"_in_"+strconv.Itoa(test_iter)+".csv", raw_in_wid*raw_in_wid*raw_in_batch)
+		ker_in := readTxt(test_dir+"test_conv"+strconv.Itoa(ker_wid)+"_batch_"+strconv.Itoa(in_batch)+"_ker_"+strconv.Itoa(test_iter)+".csv", raw_in_batch*raw_out_batch*ker_wid*ker_wid)
+		bn_a := readTxt(test_dir+"test_conv"+strconv.Itoa(ker_wid)+"_batch_"+strconv.Itoa(in_batch)+"_bna_"+strconv.Itoa(test_iter)+".csv", raw_out_batch)
+		bn_b := readTxt(test_dir+"test_conv"+strconv.Itoa(ker_wid)+"_batch_"+strconv.Itoa(in_batch)+"_bnb_"+strconv.Itoa(test_iter)+".csv", raw_out_batch)
+
+		// input encryption
+		input := prep_Input(raw_input, raw_in_wid, in_wid, cont.N, norm, trans, printResult)
+		start = time.Now()
+		plain_tmp := ckks.NewPlaintext(cont.params, cont.ECD_LV, cont.params.Scale()) // contain plaintext values
+		cont.encoder.EncodeCoeffs(input, plain_tmp)
+		ctxt_input := cont.encryptor.EncryptNew(plain_tmp)
+		fmt.Printf("Encryption done in %s \n", time.Since(start))
+
+		// Kernel Prep & Conv (+BN) Evaluation
+		ct_result := evalConv_BN(cont, ctxt_input, ker_in, bn_a, bn_b, in_wid, ker_wid, raw_in_batch, raw_out_batch, norm, float64(1<<30), printResult, trans)
+
+		start = time.Now()
+		cont.decryptor.Decrypt(ct_result, plain_tmp)
+		cfs_tmp := cont.encoder.DecodeCoeffs(plain_tmp)
+		fmt.Printf("Decryption Done in %s \n", time.Since(start))
+
+		test_out := post_process(cfs_tmp, raw_in_wid, in_wid)
+		real_out := readTxt(test_dir+"test_conv"+strconv.Itoa(ker_wid)+"_batch_"+strconv.Itoa(in_batch)+"_out_"+strconv.Itoa(test_iter)+".csv", raw_in_wid*raw_in_wid*raw_in_batch)
+
+		printDebugCfsPlain(test_out, real_out)
+	}
+
+}
+
 // Fast Conv without boot, Assume full batch with Po2 in_wid & N
 // Normal Conv without output modification (e.g., trimming or expanding)
 // Assume that the input is 0 padded according to kernel size: only in_wid - (ker_wid-1)/2 elements in row and columns are nonzero

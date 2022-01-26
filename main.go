@@ -61,6 +61,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	if err != nil {
 		panic(err)
 	}
+
 	fmt.Printf("CKKS parameters: logN = %d, logSlots = %d, h = %d, logQP = %d, levels = %d, scale= 2^%f, sigma = %f \n",
 		cont.params.LogN(), cont.params.LogSlots(), btpParams.H, cont.params.LogQP(), cont.params.QCount(), math.Log2(cont.params.Scale()), cont.params.Sigma())
 	if cont.params.N() != cont.N {
@@ -451,11 +452,36 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	sk, _ := kgen.GenKeyPairSparse(btpParams.H)
 	rlk := kgen.GenRelinearizationKey(sk, 2)
 	fmt.Println("Num Rotations: ", len(rotations))
-	rotkeys := kgen.GenRotationKeysForRotations(rotations, false, sk)
-	cont.encoder = ckks.NewEncoder(cont.params)
-	cont.decryptor = ckks.NewDecryptor(cont.params, sk)
-	cont.encryptor = ckks.NewEncryptor(cont.params, sk)
-	cont.evaluator = ckks.NewEvaluator(cont.params, rlwe.EvaluationKey{Rlk: rlk, Rtks: rotkeys})
+	var rotkeys *rlwe.RotationKeySet
+	// additional optimization with 2 P
+	if kind == "BL_Conv" {
+		new_params, err := ckks.NewParametersFromLiteral(ckks.ParametersLiteral{
+			LogN: logN,
+			Q:    cont.params.Q(),
+			P:    []uint64{0x1fffffffffe00001, 0x1fffffffffc80001}, // Pi 61
+			// Pi 61
+			Sigma:    rlwe.DefaultSigma,
+			LogSlots: logN - 1,
+			Scale:    float64(1 << 30),
+		})
+		if err != nil {
+			panic(err)
+		}
+		new_kgen := ckks.NewKeyGenerator(new_params)
+		rotkeys = new_kgen.GenRotationKeysForRotations(rotations, false, sk)
+		cont.pack_evaluator = ckks.NewEvaluator(new_params, rlwe.EvaluationKey{Rlk: rlk, Rtks: rotkeys})
+
+		cont.encoder = ckks.NewEncoder(cont.params)
+		cont.decryptor = ckks.NewDecryptor(cont.params, sk)
+		cont.encryptor = ckks.NewEncryptor(cont.params, sk)
+		cont.evaluator = ckks.NewEvaluator(cont.params, rlwe.EvaluationKey{Rlk: rlk})
+	} else {
+		rotkeys = kgen.GenRotationKeysForRotations(rotations, false, sk)
+		cont.encoder = ckks.NewEncoder(cont.params)
+		cont.decryptor = ckks.NewDecryptor(cont.params, sk)
+		cont.encryptor = ckks.NewEncryptor(cont.params, sk)
+		cont.evaluator = ckks.NewEvaluator(cont.params, rlwe.EvaluationKey{Rlk: rlk, Rtks: rotkeys})
+	}
 
 	if !((kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet") || (kind == "BL_Imagenet") || (kind == "BL_Imagenet_final")) {
 		// we use smaller keys for rotations for pack_ctxts
@@ -531,13 +557,13 @@ func main() {
 	// fmt.Println("Now, fast version (norm = 1)")
 	// testImagenet_final_fast()
 
-	st, _ := strconv.Atoi(os.Args[1])
-	end, _ := strconv.Atoi(os.Args[2])
+	// st, _ := strconv.Atoi(os.Args[1])
+	// end, _ := strconv.Atoi(os.Args[2])
 	// testImagenet_final_in(st, end)
 	// testImagenet_final_fast_in(st, end)
 	// testImageNet_BL_final_in(st, end)
 	// testImagenet_in(st, end)
-	testResNet_in_BL(st, end)
+	// testResNet_in_BL(st, end)
 	// testResNet_in(st, end)
 
 	// testImageNet_BL_final()
@@ -551,7 +577,25 @@ func main() {
 	// basic()
 
 	// testBRrot()
-	// testConv_noBoot("Conv", false)
+
+	kers := [3]int{3, 5, 7}
+	batchs := [5]int{4, 16, 64, 256, 1024}
+	widths := [5]int{128, 64, 32, 16, 8}
+
+	for _, k := range kers {
+		for i := 0; i < 5; i++ {
+			testConv_noBoot_in(batchs[i], widths[i], k)
+		}
+	}
+
+	fmt.Println("BL end!")
+
+	for _, k := range kers {
+		for i := 0; i < 5; i++ {
+			testConv_noBoot_in(batchs[i], widths[i], k)
+		}
+	}
+
 	// testConv_noBoot("Conv", true)
 	// testConv_BNRelu("Conv", false)
 
@@ -604,7 +648,7 @@ func printDebugCfs(params ckks.Parameters, ciphertext *ckks.Ciphertext, valuesWa
 }
 
 func printDebugCfsPlain(valuesTest, valuesWant []float64) {
-	total_size := make([]int, 15)
+	total_size := make([]int, 10)
 
 	fmt.Printf("ValuesTest:")
 	for i := range total_size {
@@ -921,4 +965,52 @@ func removeDuplicateInt(intSlice []int) []int {
 		}
 	}
 	return list
+}
+
+// only returns valid values from
+func post_process(in_cfs []float64, raw_in_wid, in_wid int) []float64 {
+	batch := len(in_cfs) / (in_wid * in_wid)
+	out := make([]float64, raw_in_wid*raw_in_wid*batch)
+
+	for i := 0; i < raw_in_wid; i++ {
+		for j := 0; j < raw_in_wid; j++ {
+			for b := 0; b < batch; b++ {
+				out[i*raw_in_wid*batch+batch*j+b] = in_cfs[i*in_wid*batch+batch*j+b]
+			}
+		}
+	}
+
+	return out
+}
+
+// from 8*8 with 1 pad -> 7*7
+func post_trim_BL(in_vals []complex128, raw_in_wid, in_wid int) []float64 {
+	batch := len(in_vals) / (in_wid * in_wid)
+	out := make([]float64, raw_in_wid*raw_in_wid*batch)
+
+	for b := 0; b < batch; b++ {
+		for i := 0; i < raw_in_wid; i++ {
+			for j := 0; j < raw_in_wid; j++ {
+				out[b*raw_in_wid*raw_in_wid+i*raw_in_wid+j] = real(in_vals[b*in_wid*in_wid+i*in_wid+j])
+			}
+		}
+	}
+
+	return out
+}
+
+// only returns valid values from
+func post_process_BL(in_vals []float64, raw_in_wid int) []float64 {
+	batch := len(in_vals) / (raw_in_wid * raw_in_wid)
+	out := make([]float64, raw_in_wid*raw_in_wid*batch)
+
+	for i := 0; i < raw_in_wid; i++ {
+		for j := 0; j < raw_in_wid; j++ {
+			for b := 0; b < batch; b++ {
+				out[i*raw_in_wid*batch+j*batch+b] = in_vals[b*raw_in_wid*raw_in_wid+i*raw_in_wid+j]
+			}
+		}
+	}
+
+	return out
 }

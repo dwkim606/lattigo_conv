@@ -134,6 +134,119 @@ func testConv_noBoot_BL(in_kind string, printResult bool) {
 	}
 }
 
+func testConv_noBoot_BL_in(real_batch, in_wid, ker_wid int) {
+	total_test_num := 10
+	in_kind := "Conv"
+	test_dir := "test_conv_data/"
+	if (in_kind != "TransConv") && (in_kind != "Conv") && (in_kind != "StrConv") {
+		panic("Wrong in_kind!")
+	}
+	pad := ker_wid / 2
+	raw_in_wid := in_wid - pad // = in_wid
+
+	in_size := raw_in_wid * raw_in_wid
+	ker_size := ker_wid * ker_wid
+	slots := real_batch / 2 * in_size
+	log_slots := 0
+	for ; (1 << log_slots) < slots; log_slots++ {
+	}
+	out_batch := real_batch
+	if in_kind == "TransConv" {
+		out_batch = real_batch / 4
+	}
+	kp_wid := 0
+	kind := "BL_" + in_kind
+	in_batch := real_batch
+
+	// generate Context: params, Keys, rotations, general plaintexts
+	cont := newContext(log_slots+1, ker_wid, []int{in_wid}, []int{kp_wid}, false, kind)
+	fmt.Println("vec size: log2 = ", cont.logN)
+	fmt.Println("raw input width: ", raw_in_wid)
+	fmt.Println("kernel width: ", ker_wid)
+	fmt.Println("num batches in & out: ", real_batch, ", ", out_batch)
+
+	for test_iter := 0; test_iter < total_test_num; test_iter++ {
+		fmt.Println(test_iter, "-th iter...start")
+		input := readTxt(test_dir+"test_conv"+strconv.Itoa(ker_wid)+"_batch_"+strconv.Itoa(in_batch)+"_in_"+strconv.Itoa(test_iter)+".csv", raw_in_wid*raw_in_wid*in_batch)
+		ker_in := readTxt(test_dir+"test_conv"+strconv.Itoa(ker_wid)+"_batch_"+strconv.Itoa(in_batch)+"_ker_"+strconv.Itoa(test_iter)+".csv", in_batch*in_batch*ker_wid*ker_wid)
+		bn_a := readTxt(test_dir+"test_conv"+strconv.Itoa(ker_wid)+"_batch_"+strconv.Itoa(in_batch)+"_bna_"+strconv.Itoa(test_iter)+".csv", in_batch)
+		bn_b := readTxt(test_dir+"test_conv"+strconv.Itoa(ker_wid)+"_batch_"+strconv.Itoa(in_batch)+"_bnb_"+strconv.Itoa(test_iter)+".csv", in_batch)
+		real_out := readTxt(test_dir+"test_conv"+strconv.Itoa(ker_wid)+"_batch_"+strconv.Itoa(in_batch)+"_out_"+strconv.Itoa(test_iter)+".csv", raw_in_wid*raw_in_wid*in_batch)
+
+		pad_input1 := make([]float64, in_wid*in_wid*real_batch/2)
+		pad_input2 := make([]float64, in_wid*in_wid*real_batch/2)
+		for i := 0; i < raw_in_wid; i++ {
+			for j := 0; j < raw_in_wid; j++ {
+				for b := 0; b < real_batch/2; b++ {
+					pad_input1[b+j*real_batch/2+i*real_batch/2*in_wid] = input[b+j*real_batch+i*real_batch*raw_in_wid]
+					pad_input2[b+j*real_batch/2+i*real_batch/2*in_wid] = input[b+real_batch/2+j*real_batch+i*real_batch*raw_in_wid]
+				}
+			}
+		}
+
+		bn_a_sep := make([][]float64, 2)
+		bn_b_sep := make([][]float64, 2)
+		zeros := make([]float64, real_batch/2)
+		for out := 0; out < 2; out++ {
+			bn_a_sep[out] = make([]float64, real_batch/2)
+			bn_b_sep[out] = make([]float64, real_batch/2)
+			for i := 0; i < real_batch/2; i++ {
+				bn_a_sep[out][i] = bn_a[i+out*real_batch/2]
+				bn_b_sep[out][i] = bn_b[i+out*real_batch/2]
+			}
+		}
+
+		ker_in_sep := make([][][]float64, 2) // number of output ctxts
+		for out := 0; out < 2; out++ {
+			ker_in_sep[out] = make([][]float64, 2) // number of input ctxts
+			for in := 0; in < 2; in++ {
+				ker_in_sep[out][in] = make([]float64, len(ker_in)/(2*2))
+				for k := 0; k < ker_size; k++ {
+					for i := 0; i < real_batch/2; i++ { // in
+						for j := 0; j < real_batch/2; j++ { // out
+							ker_in_sep[out][in][k*real_batch*real_batch/4+i*real_batch/2+j] =
+								ker_in[k*real_batch*real_batch+(i+in*real_batch/2)*real_batch+out*real_batch/2+j] // [i][4*j]
+						}
+					}
+				}
+			}
+		}
+
+		// input encryption
+		// fmt.Println()
+		// fmt.Println("===============  ENCRYPTION  ===============")
+		// fmt.Println()
+		input1_rs := reshape_input_BL(pad_input1, in_wid)
+		input2_rs := reshape_input_BL(pad_input2, in_wid)
+		start = time.Now()
+		ct_input1 := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input1_rs, cont.logN-1))
+		ct_input2 := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input2_rs, cont.logN-1))
+		fmt.Printf("Encryption done in %s \n", time.Since(start))
+
+		start_eval := time.Now()
+		ct_res := make([]*ckks.Ciphertext, 2)
+		for pos := 0; pos < 2; pos++ {
+			ct_res[pos] = cont.evaluator.AddNew(evalConv_BN_BL_test(cont, ct_input1, ker_in_sep[pos][0], bn_a_sep[pos], bn_b_sep[pos], in_wid, ker_wid, real_batch/2, real_batch/2, 0, 1, pad, false, false),
+				evalConv_BN_BL_test(cont, ct_input2, ker_in_sep[pos][1], bn_a_sep[pos], zeros, in_wid, ker_wid, real_batch/2, real_batch/2, 0, 1, pad, false, false))
+		}
+		fmt.Printf("Evaluation total done in %s \n", time.Since(start_eval))
+
+		// fmt.Println()
+		// fmt.Println("===============  DECRYPTION  ===============")
+		// fmt.Println()
+		start = time.Now()
+		vals_tmp1 := cont.encoder.Decode(cont.decryptor.DecryptNew(ct_res[0]), log_slots)
+		vals_tmp2 := cont.encoder.Decode(cont.decryptor.DecryptNew(ct_res[1]), log_slots)
+		fmt.Printf("Decryption Done in %s \n", time.Since(start))
+
+		test_out := post_trim_BL(vals_tmp1, raw_in_wid, in_wid)
+		test_out = append(test_out, post_trim_BL(vals_tmp2, raw_in_wid, in_wid)...)
+		test_out = post_process_BL(test_out, raw_in_wid)
+
+		printDebugCfsPlain(test_out, real_out)
+	}
+}
+
 // BaseLine Conv without boot, Assume full batch with Po2 in_wid & N
 // Normal Conv without output modification (e.g., trimming or expanding)
 // Input does not need padding
@@ -1092,8 +1205,8 @@ func testConv_BNRelu_BL_same() {
 		bn_a12_sep[out] = make([]float64, real_batch[0]/2)
 		bn_b12_sep[out] = make([]float64, real_batch[0]/2)
 		for i := 0; i < real_batch[0]/2; i++ {
-			bn_a12_sep[out][i] = bn_a12[2*i+out]
-			bn_b12_sep[out][i] = bn_b12[2*i+out]
+			bn_a12_sep[out][i] = bn_a12[i+out*real_batch[0]/2]
+			bn_b12_sep[out][i] = bn_b12[i+out*real_batch[0]/2]
 		}
 	}
 
@@ -1106,7 +1219,7 @@ func testConv_BNRelu_BL_same() {
 				for i := 0; i < real_batch[0]/2; i++ { // in
 					for j := 0; j < real_batch[0]/2; j++ { // out
 						ker_in12_sep[out][in][k*real_batch[0]*real_batch[0]/4+i*real_batch[0]/2+j] =
-							ker_in12[k*real_batch[0]*real_batch[0]+(i+in*real_batch[0]/4)*real_batch[0]+2*j+out] // [i][4*j]
+							ker_in12[k*real_batch[0]*real_batch[0]+(i+in*real_batch[0]/2)*real_batch[0]+real_batch[0]/2*out+j] // [i][4*j]
 					}
 				}
 			}

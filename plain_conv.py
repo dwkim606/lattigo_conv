@@ -380,12 +380,79 @@ def plain_resnet_bench():
         print(i+1,"layer done\n")
     print("after 3rd block\n", conv, "\n")      
 
+
+def conv_bnReLU_BL_bench_input(ker_width, case_num, test_num):
+    trans = False
+    strides = False
+    in_dir = "test_conv_data/"
+    batchs = [4, 16, 64, 256, 1024]
+    widths = [128, 64, 32, 16, 8]
+    for i in range(len(widths)):
+        widths[i] = widths[i] - ker_width//2
+
+    batch = batchs[case_num]
+    input_width = widths[case_num]
+    vec_size = batch*input_width**2
+
+    #bn_a = [[np.loadtxt(in_dir+'w'+str(num)+'-a.csv') for i in range(in_wid[0])] for j in range(in_wid[0])]
+    #bn_b = [[np.loadtxt(in_dir+'w'+str(num)+'-b.csv') for i in range(in_wid[0])] for j in range(in_wid[0])]
+
+    ker_size = ker_width**2 
+    if trans:
+        out_batch = batch//4 
+    elif strides:
+        out_batch = batch
+    else:
+        out_batch = batch
+    ker_len = batch * out_batch * ker_size
+
+    ## Correctness Check: Compare with TF NN CONV2D
+    raw_input = [random.random() for i in range(vec_size)]  # #[1.0*i for i in range(vec_size)] 
+    np.savetxt(in_dir+'test_conv'+str(ker_width)+'_batch_'+str(batch)+'_in_'+str(test_num)+'.csv', raw_input, fmt='%.18e', delimiter=',')
+    ker = [random.random() for i in range(ker_len)]
+    np.savetxt(in_dir+'test_conv'+str(ker_width)+'_batch_'+str(batch)+'_ker_'+str(test_num)+'.csv', ker, fmt='%.18e', delimiter=',')
+
+    if test_num == 0:
+        print("input width:", input_width)
+        print("batch:", batch)
+        print("ker width:", ker_width)
+
+    ten_x = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, input_width, input_width, batch])
+    if trans:
+        ten_k = tf.reshape(tf.constant(np.array(ker), tf.float32), [ker_width, ker_width, out_batch, batch])
+        conv = tf.nn.conv2d_transpose(ten_x, ten_k, output_shape=(1, 2*input_width, 2*input_width, out_batch), strides=[1, 2, 2, 1], padding="SAME")
+    elif strides:
+        ten_k = tf.reshape(tf.constant(np.array(ker), tf.float32), [ker_width, ker_width, batch, out_batch])
+        conv = tf.nn.conv2d(ten_x, ten_k, strides = [1,2,2,1], padding = "SAME")
+    else:
+        ten_k = tf.reshape(tf.constant(np.array(ker), tf.float32), [ker_width, ker_width, batch, out_batch])
+        conv = tf.nn.conv2d(ten_x, ten_k, strides = [1,1,1,1], padding = "SAME")
+
+    mean = tf.reduce_mean(conv, [1,2])
+    std = tf.math.reduce_std(conv, [1,2])
+
+    bn_a = 1/std
+    bn_b = -mean/std
+    np.savetxt(in_dir+'test_conv'+str(ker_width)+'_batch_'+str(batch)+"_bna_"+str(test_num)+'.csv', tf.reshape(bn_a, [-1]), fmt='%.18e', delimiter=',')
+    np.savetxt(in_dir+'test_conv'+str(ker_width)+'_batch_'+str(batch)+"_bnb_"+str(test_num)+'.csv', tf.reshape(bn_b, [-1]), fmt='%.18e', delimiter=',')
+
+    conv = conv*bn_a + bn_b
+    np.savetxt(in_dir+'test_conv'+str(ker_width)+'_batch_'+str(batch)+"_out_"+str(test_num)+'.csv', tf.reshape(conv, [-1]), fmt='%.18e', delimiter=',')
+
+    conv = tf.nn.relu(conv)
+    np.savetxt(in_dir+'test_conv'+str(ker_width)+'_batch_'+str(batch)+"_reluout_"+str(test_num)+'.csv', tf.reshape(conv, [-1]), fmt='%.18e', delimiter=',')
+    
+    
+    # print("\n result: \n", conv, "\n")
+
+
 def conv_bnReLU_BL_bench(trans, strides, relu):
     batch = 8
     input_width = 15
     vec_size = batch*input_width**2
     ker_width = 3
     bn_a = 1.0
+
     ker_size = ker_width**2 
     if trans:
         out_batch = batch//4 
@@ -847,9 +914,14 @@ def get_seconds(time_str):
 
 # gen_plain_predictions()
 
-post_process_Imgnet(200, 'ker3', False)
+# post_process_Imgnet(200, 'ker3', False)
+#conv_bnReLU_BL_bench(False, False, False)
 
-# conv_bnReLU_BL_bench(False, False, True)
+kers = [3, 5, 7]
+for k in kers:
+    for i in range(5):
+        for j in range(10):
+            conv_bnReLU_BL_bench_input(k, i, j)
 
 # for i in range(10):
 #     imgnet_gen_ct_in_one(i)
