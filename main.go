@@ -578,23 +578,30 @@ func main() {
 
 	// testBRrot()
 
-	kers := [3]int{3, 5, 7}
+	// kers := [3]int{3, 5, 7}
 	batchs := [5]int{4, 16, 64, 256, 1024}
 	widths := [5]int{128, 64, 32, 16, 8}
 
-	for _, k := range kers {
-		for i := 0; i < 5; i++ {
-			testConv_noBoot_in(batchs[i], widths[i], k)
-		}
-	}
+	ker, _ := strconv.Atoi(os.Args[1])
+	i, _ := strconv.Atoi(os.Args[2])
 
-	fmt.Println("BL end!")
+	testConv_noBoot_in(batchs[i], widths[i], ker, true)
+	fmt.Println("BL start.")
+	testConv_noBoot_BL_in(batchs[i], widths[i], ker, true)
 
-	for _, k := range kers {
-		for i := 0; i < 5; i++ {
-			testConv_noBoot_in(batchs[i], widths[i], k)
-		}
-	}
+	// for _, k := range kers {
+	// 	for i := 4; i < 5; i++ {
+	// 		testConv_noBoot_BL_in(batchs[i], widths[i], k)
+	// 	}
+	// }
+
+	// fmt.Println("BL end!")
+
+	// for _, k := range kers {
+	// 	for i := 4; i < 5; i++ {
+	// 		testConv_noBoot_in(batchs[i], widths[i], k)
+	// 	}
+	// }
 
 	// testConv_noBoot("Conv", true)
 	// testConv_BNRelu("Conv", false)

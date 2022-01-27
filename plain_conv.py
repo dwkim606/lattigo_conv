@@ -1,6 +1,7 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT license.
 
+from email.mime import base
 import numpy as np
 import time
 import sys
@@ -696,9 +697,10 @@ def post_process(iter_num, ker_name, base_line):
     total = 0
     no_iters = []
     wrong_result = {}
-    os_path = result_dir+'/class_result_'+ker_name
+    os_path = result_dir+'/class_result_'
     if base_line:
         os_path = os_path+'BL_'
+    os_path = os_path + ker_name
     for iter in range(iter_num):
         if os.path.exists(os_path+str(iter)+'.csv'):
             read = np.loadtxt(os_path+str(iter)+'.csv')
@@ -880,19 +882,47 @@ def imgnet_gen_ct_in_one(iter_st):
         j+=1
 
 def read_out_analysis():
-    res_dir = 'Resnet_enc_result_ker3_'
-    os_path = res_dir+'/iter_1000'
-    prefix = "Total done in"
+    # res_dir = 'Resnet_enc_result_ker7_BL'
+    # os_path = res_dir+'/total200.out'
+    os_path = 'test_convRelu_ker5.out'
+
+
+    # prefix = "Evaluation total done in "
+    # prefix = "After CtS    :"
+    # prefix = "After Sine   :"
+    # prefix = "After StC    : "
+    # prefix = "Eval: Relu Done in"
+
+    # prefix = "Total done in "
+    # prefix = "Done in "
+    # prefix = "Conv (with BN) Done in" 
+    # prefix = "(until CtoS):"
+    # prefix = "Eval: Eval: ReLU Done in"
+    # prefix = "Boot (StoC) Done in "
+    prefix = "AVG Prec : ("
 
     line_number = 0
     list_results = [] 
+    base_line = False
     if os.path.exists(os_path):
         with open(os_path, 'r') as read_obj:
             for line in read_obj:
-                if prefix in line:
-                    time_str = line.strip(prefix).strip()
-                    list_results.append(get_seconds(time_str))
-                    line_number += 1
+                if "BL" in line:
+                    base_line = True
+                if not base_line:
+                    if prefix in line:
+                        # try:
+                        #     time_str = line.strip(prefix).rstrip()
+                        #     if line_number%6 == 0:
+                        #         list_results.append(get_seconds(time_str))
+                        #     line_number += 1
+                        # except:
+                        #     continue
+                        line_number += 1
+                        time_str, _ = line.strip(prefix).split(',') # for prec
+                        if line_number%7 == 0:
+                            list_results.append(float(time_str))      # for prec
+                        
     else:
         print("No file exists")
         exit(1)
@@ -901,27 +931,43 @@ def read_out_analysis():
 
 
 def get_seconds(time_str):
-    m, s = time_str.split('m')
-    s, _ = s.split('s')
-    return int(m)*60 + int(float(s))
+    try:
+        ms, _ = time_str.split('ms')
+        m = 0
+        s = 0
+    except:
+        ms = 0
+        try:
+            m, s = time_str.split('m')
+            s, _ = s.split('s')
+        except:
+            m = 0
+            s, _ = time_str.split('s')
+        
+    return float(m)*60 + float(s) + float(ms)*0.001
 
 
 #### Main Start #### 
 
-# result_list = read_out_analysis()
-# print("num: ", len(result_list), "avg: ", mean(result_list), "std: ", stdev(result_list))
-# exit(1)
+## reading result from *.out
+result_list = read_out_analysis()
+for res in result_list:
+    print(res)
+# print(result_list)
+print("num: ", len(result_list), "avg: ", mean(result_list), "std: ", stdev(result_list))
+exit(1)
 
 # gen_plain_predictions()
 
-# post_process_Imgnet(200, 'ker3', False)
+# post_process_Imgnet(200, 'ker5', False)
 #conv_bnReLU_BL_bench(False, False, False)
 
-kers = [3, 5, 7]
-for k in kers:
-    for i in range(5):
-        for j in range(10):
-            conv_bnReLU_BL_bench_input(k, i, j)
+## Output test data for Conv
+# kers = [3, 5, 7]
+# for k in kers:
+#     for i in range(5):
+#         for j in range(10):
+#             conv_bnReLU_BL_bench_input(k, i, j)
 
 # for i in range(10):
 #     imgnet_gen_ct_in_one(i)

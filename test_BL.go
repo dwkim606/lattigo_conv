@@ -134,7 +134,7 @@ func testConv_noBoot_BL(in_kind string, printResult bool) {
 	}
 }
 
-func testConv_noBoot_BL_in(real_batch, in_wid, ker_wid int) {
+func testConv_noBoot_BL_in(real_batch, in_wid, ker_wid int, boot bool) {
 	total_test_num := 10
 	in_kind := "Conv"
 	test_dir := "test_conv_data/"
@@ -144,7 +144,7 @@ func testConv_noBoot_BL_in(real_batch, in_wid, ker_wid int) {
 	pad := ker_wid / 2
 	raw_in_wid := in_wid - pad // = in_wid
 
-	in_size := raw_in_wid * raw_in_wid
+	in_size := in_wid * in_wid
 	ker_size := ker_wid * ker_wid
 	slots := real_batch / 2 * in_size
 	log_slots := 0
@@ -159,7 +159,7 @@ func testConv_noBoot_BL_in(real_batch, in_wid, ker_wid int) {
 	in_batch := real_batch
 
 	// generate Context: params, Keys, rotations, general plaintexts
-	cont := newContext(log_slots+1, ker_wid, []int{in_wid}, []int{kp_wid}, false, kind)
+	cont := newContext(log_slots+1, ker_wid, []int{in_wid}, []int{kp_wid}, boot, kind)
 	fmt.Println("vec size: log2 = ", cont.logN)
 	fmt.Println("raw input width: ", raw_in_wid)
 	fmt.Println("kernel width: ", ker_wid)
@@ -171,7 +171,12 @@ func testConv_noBoot_BL_in(real_batch, in_wid, ker_wid int) {
 		ker_in := readTxt(test_dir+"test_conv"+strconv.Itoa(ker_wid)+"_batch_"+strconv.Itoa(in_batch)+"_ker_"+strconv.Itoa(test_iter)+".csv", in_batch*in_batch*ker_wid*ker_wid)
 		bn_a := readTxt(test_dir+"test_conv"+strconv.Itoa(ker_wid)+"_batch_"+strconv.Itoa(in_batch)+"_bna_"+strconv.Itoa(test_iter)+".csv", in_batch)
 		bn_b := readTxt(test_dir+"test_conv"+strconv.Itoa(ker_wid)+"_batch_"+strconv.Itoa(in_batch)+"_bnb_"+strconv.Itoa(test_iter)+".csv", in_batch)
-		real_out := readTxt(test_dir+"test_conv"+strconv.Itoa(ker_wid)+"_batch_"+strconv.Itoa(in_batch)+"_out_"+strconv.Itoa(test_iter)+".csv", raw_in_wid*raw_in_wid*in_batch)
+		var real_out []float64
+		if boot {
+			real_out = readTxt(test_dir+"test_conv"+strconv.Itoa(ker_wid)+"_batch_"+strconv.Itoa(in_batch)+"_reluout_"+strconv.Itoa(test_iter)+".csv", raw_in_wid*raw_in_wid*in_batch)
+		} else {
+			real_out = readTxt(test_dir+"test_conv"+strconv.Itoa(ker_wid)+"_batch_"+strconv.Itoa(in_batch)+"_out_"+strconv.Itoa(test_iter)+".csv", raw_in_wid*raw_in_wid*in_batch)
+		}
 
 		pad_input1 := make([]float64, in_wid*in_wid*real_batch/2)
 		pad_input2 := make([]float64, in_wid*in_wid*real_batch/2)
@@ -230,6 +235,45 @@ func testConv_noBoot_BL_in(real_batch, in_wid, ker_wid int) {
 				evalConv_BN_BL_test(cont, ct_input2, ker_in_sep[pos][1], bn_a_sep[pos], zeros, in_wid, ker_wid, real_batch/2, real_batch/2, 0, 1, pad, false, false))
 		}
 		fmt.Printf("Evaluation total done in %s \n", time.Since(start_eval))
+
+		if boot {
+			for pos := 0; pos < 2; pos++ {
+				alpha := 0.0
+				ct_res[pos].Scale = ct_res[pos].Scale * math.Pow(2, pow)
+				// vals_preB := cont.encoder.Decode(cont.decryptor.DecryptNew(ct_res[pos]), cont.logN-1)
+				fmt.Println("\n ========= Bootstrapping... (original) ========= ")
+				start_boot := time.Now()
+				// fmt.Println("initial (before boot): LV = ", ct_res[pos].Level(), " Scale = ", math.Log2(ct_res[pos].Scale))
+
+				ct_boot := cont.btp.Bootstrapp(ct_res[pos])
+				fmt.Printf("Done in %s \n", time.Since(start_boot))
+				// fmt.Println("after Boot: LV = ", ct_boot.Level(), " Scale = ", math.Log2(ct_boot.Scale))
+
+				// Only for checking the correctness (for Boot)
+				// vals_postB := printDebug(cont.params, ct_boot, vals_preB, cont.decryptor, cont.encoder)
+				// vals_relu := make([]complex128, len(vals_postB))
+				// for i, elt := range vals_postB {
+				// 	vals_relu[i] = complex((math.Max(0, real(elt))+math.Min(0, real(elt)*alpha))*math.Pow(2, pow), 0)
+				// }
+
+				start = time.Now()
+				pl_scale := ckks.NewPlaintext(cont.params, ct_boot.Level(), math.Pow(2, 30)*float64(cont.params.Q()[14])*float64(cont.params.Q()[13])/ct_boot.Scale)
+				val_scale := make([]complex128, cont.N/2)
+				for i := range val_scale {
+					val_scale[i] = complex(1.0, 0) // val_scale[i] = complex(1.0/math.Pow(2, pow), 0)
+				}
+				cont.encoder.EncodeNTT(pl_scale, val_scale, cont.logN-1)
+				cont.evaluator.Mul(ct_boot, pl_scale, ct_boot)
+				cont.evaluator.Rescale(ct_boot, cont.params.Scale(), ct_boot)
+
+				// fmt.Println("after Rescale: LV = ", ct_boot.Level(), " Scale = 2^", math.Log2(ct_boot.Scale))
+				ct_res[pos] = evalReLU(cont.params, cont.evaluator, ct_boot, alpha)
+				cont.evaluator.MulByPow2(ct_res[pos], pow, ct_res[pos])
+				cont.evaluator.SetScale(ct_res[pos], cont.params.Scale())
+				fmt.Printf("Relu Done in %s \n", time.Since(start))
+				// printDebug(cont.params, ct_res[pos], vals_relu, cont.decryptor, cont.encoder)
+			}
+		}
 
 		// fmt.Println()
 		// fmt.Println("===============  DECRYPTION  ===============")

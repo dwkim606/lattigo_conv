@@ -478,7 +478,7 @@ func testConv_noBoot(kind string, printResult bool) (ct_result *ckks.Ciphertext)
 	return ct_result
 }
 
-func testConv_noBoot_in(in_batch, in_wid, ker_wid int) {
+func testConv_noBoot_in(in_batch, in_wid, ker_wid int, boot bool) {
 	total_test_num := 10
 	kind := "Conv"
 	printResult := false
@@ -492,7 +492,7 @@ func testConv_noBoot_in(in_batch, in_wid, ker_wid int) {
 	raw_out_batch := out_batch / norm
 
 	// generate Context: params, Keys, rotations, general plaintexts
-	cont := newContext(logN, ker_wid, []int{in_wid}, []int{kp_wid}, false, kind)
+	cont := newContext(logN, ker_wid, []int{in_wid}, []int{kp_wid}, boot, kind)
 	fmt.Println("vec size: log2 = ", cont.logN)
 	fmt.Println("raw input width: ", raw_in_wid)
 	fmt.Println("kernel width: ", ker_wid)
@@ -514,7 +514,12 @@ func testConv_noBoot_in(in_batch, in_wid, ker_wid int) {
 		fmt.Printf("Encryption done in %s \n", time.Since(start))
 
 		// Kernel Prep & Conv (+BN) Evaluation
-		ct_result := evalConv_BN(cont, ctxt_input, ker_in, bn_a, bn_b, in_wid, ker_wid, raw_in_batch, raw_out_batch, norm, float64(1<<30), printResult, trans)
+		var ct_result *ckks.Ciphertext
+		if boot {
+			ct_result = evalConv_BNRelu_new(cont, ctxt_input, ker_in, bn_a, bn_b, 0.0, in_wid, kp_wid, ker_wid, raw_in_batch, raw_out_batch, norm, 0, 2, kind, false, false)
+		} else {
+			ct_result = evalConv_BN(cont, ctxt_input, ker_in, bn_a, bn_b, in_wid, ker_wid, raw_in_batch, raw_out_batch, norm, float64(1<<30), printResult, trans)
+		}
 
 		start = time.Now()
 		cont.decryptor.Decrypt(ct_result, plain_tmp)
@@ -522,7 +527,12 @@ func testConv_noBoot_in(in_batch, in_wid, ker_wid int) {
 		fmt.Printf("Decryption Done in %s \n", time.Since(start))
 
 		test_out := post_process(cfs_tmp, raw_in_wid, in_wid)
-		real_out := readTxt(test_dir+"test_conv"+strconv.Itoa(ker_wid)+"_batch_"+strconv.Itoa(in_batch)+"_out_"+strconv.Itoa(test_iter)+".csv", raw_in_wid*raw_in_wid*raw_in_batch)
+		var real_out []float64
+		if boot {
+			real_out = readTxt(test_dir+"test_conv"+strconv.Itoa(ker_wid)+"_batch_"+strconv.Itoa(in_batch)+"_reluout_"+strconv.Itoa(test_iter)+".csv", raw_in_wid*raw_in_wid*raw_in_batch)
+		} else {
+			real_out = readTxt(test_dir+"test_conv"+strconv.Itoa(ker_wid)+"_batch_"+strconv.Itoa(in_batch)+"_out_"+strconv.Itoa(test_iter)+".csv", raw_in_wid*raw_in_wid*raw_in_batch)
+		}
 
 		printDebugCfsPlain(test_out, real_out)
 	}
