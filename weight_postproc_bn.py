@@ -6,10 +6,10 @@ import numpy as np
 # rename variables
 # process batch normalization, i.e., processing beta, gamma, mean, var => a, b
 
-in_dir = 'weight_h5/'
+in_dir = 'weight_ker3_crop_h5/'#'weight_h5/'
 
 blocks = [1, 2, 3]
-units = [1, 2, 3]
+units = [1,2,3]
 subs = [1,2]
 f_initial = 'w'
 f_mid = ''
