@@ -584,6 +584,83 @@ def plain_resnet(input_image, ker_name):
     # conv = tf.argmax(conv, 1)
     return conv
 
+def plain_resnet_crop(input_image, ker_name):
+    in_dir = 'weight_'+ker_name+'crop_h5/'
+    in_wid = [32, 16, 8]
+    batch = [16, 32, 64]
+    
+    ker_list = {'ker3_': 3, 'ker5_': 5, 'ker7_': 7}
+    blc_list = {'ker3_': [7,6,6], 'ker5_': [5,4,4], 'ker7_': [3,2,2]}
+    pad_list = {'ker3_': 1, 'ker5_': 2, 'ker7_': 3}
+
+    ker_wid = ker_list[ker_name]
+    ker_size = ker_wid**2
+    blcs = blc_list[ker_name] #ker7 [3,2,2] #ker5 [5,4,4] #ker3 [7,6,6]
+    pad_size = pad_list[ker_name]
+
+    pad = [[[1.0 if ((i<32-pad_size) and (j<32-pad_size)) else 0.0 for k in range(3)] for i in range(32)] for j in range(32)] 
+    pad0 = [[[1.0 if ((i<32-pad_size) and (j<32-pad_size)) else 0.0 for k in range(batch[0])] for i in range(32)] for j in range(32)] 
+    pad1 = [[[1.0 if ((i<16-pad_size) and (j<16-pad_size)) else 0.0 for k in range(batch[1])] for i in range(16)] for j in range(16)] 
+    pad2 = [[[1.0 if ((i<8-pad_size) and (j<8-pad_size)) else 0.0 for k in range(batch[2])] for i in range(8)] for j in range(8)] 
+    pads = {-1: pad, 0: pad0, 1:pad1, 2:pad2}
+
+    # load weights
+    # blocks = [1, 2, 3]
+    # units = range(2)
+    # kinds = ['a', 'b', 'conv']
+
+    # raw_input = [0.1*i/3000.0 for i in range(32*32*3)]
+    # conv = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, in_wid[0], in_wid[0], 3])
+    conv = input_image
+
+    num = 0
+    for blc in range(3):
+        for i in range(blcs[blc]):
+            if i == 0:
+                if blc == 0:
+                    ten_k = tf.reshape(tf.constant(np.loadtxt(in_dir+'w'+str(num)+'-conv.csv'), tf.float32), [ker_wid, ker_wid, 3, batch[blc]])
+                    ten_pad = tf.reshape(tf.constant(pads[-1], tf.float32), [1, 32, 32, 3])
+                    conv = conv * ten_pad
+                    conv = tf.nn.conv2d(conv, ten_k, strides = [1,1,1,1], padding = "SAME")
+                else:
+                    ten_k = tf.reshape(tf.constant(np.loadtxt(in_dir+'w'+str(num)+'-conv.csv'), tf.float32), [ker_wid, ker_wid, batch[blc-1], batch[blc]])
+                    ten_pad = tf.reshape(tf.constant(pads[blc-1], tf.float32), [1, in_wid[blc-1], in_wid[blc-1], batch[blc-1]])
+                    conv = conv*ten_pad
+                    conv = tf.nn.conv2d(conv, ten_k, strides = [1,2,2,1], padding = "SAME")
+            else:
+                ten_k = tf.reshape(tf.constant(np.loadtxt(in_dir+'w'+str(num)+'-conv.csv'), tf.float32), [ker_wid, ker_wid, batch[blc], batch[blc]])
+                ten_pad = tf.reshape(tf.constant(pads[blc], tf.float32), [1, in_wid[blc], in_wid[blc], batch[blc]])
+                conv = conv * ten_pad
+                conv = tf.nn.conv2d(conv, ten_k, strides = [1,1,1,1], padding = "SAME")
+            bn_a = [[np.loadtxt(in_dir+'w'+str(num)+'-a.csv') for i in range(in_wid[blc])] for j in range(in_wid[blc])]
+            bn_b = [[np.loadtxt(in_dir+'w'+str(num)+'-b.csv') for i in range(in_wid[blc])] for j in range(in_wid[blc])]
+            ten_a = tf.reshape(tf.constant(bn_a, tf.float32), [1, in_wid[blc], in_wid[blc], batch[blc]])
+            ten_b = tf.reshape(tf.constant(bn_b, tf.float32), [1, in_wid[blc], in_wid[blc], batch[blc]])
+            conv = ten_a * conv + ten_b
+            print("max:", tf.reduce_max(conv, [0,1,2,3]))
+            conv = tf.nn.relu(conv)
+            # if i == 0:
+            #     print(blc," to ", blc+1," block. ")
+            #     # print(conv)
+            # else:
+            #     print(blc+1,"-th block, ", i,"-th layer")
+            #     # print(conv)
+            num += 1
+            # print(i+1,"layer done\n")
+        # print("after", blc_iter+1, "-th block\n", conv, "\n")
+
+    conv = conv * ten_pad # zeroizing the relus(ten_b) part!!
+    ten_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fckernel.csv'), tf.float32), [1, 1, 64, 10])
+    bias_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fcbias.csv'), tf.float32), [10])
+    conv = tf.reduce_mean(conv, [1,2], keepdims = True)*64.0/49.0
+    conv = tf.nn.conv2d(conv, ten_final, strides = [1,1,1,1], padding = "SAME")
+    conv = conv + bias_final
+
+    conv = tf.squeeze(conv, axis=[1,2])
+    # conv = tf.argmax(conv, 1)
+    return conv
+
+
 def plain_fast_resnet(input_image, ker_name):
     in_dir = 'weight_'+ker_name+'h5/'
     in_wid = [32, 16, 8]
@@ -851,7 +928,7 @@ def separate_data(num_outs):
         np.savetxt('test_data/test_image_'+str(i)+'.csv',np.reshape(tf_images[i,:,:,:], [-1]), fmt='%.18e', delimiter=',')
 
 def gen_plain_predictions():
-    ker_name = 'ker7_'
+    ker_name = 'ker3_'
     num_samples = 10000 # or 1000
     if num_samples == 10000:
         tf_labels = tf.constant(np.loadtxt('Resnet_plain_data/test_labels.csv'), tf.int64)
@@ -864,10 +941,11 @@ def gen_plain_predictions():
     # for i in range(num_samples):
     #     np.savetxt('test_data/test_image_'+str(i)+'.csv',np.reshape(tf_images[i,:,:,:], [-1]), fmt='%.18e', delimiter=',')
 
-    tf_images = tf_images[:200,:,:,:]
-    tf_labels = tf_labels[:200]
+    # tf_images = tf_images[:200,:,:,:]
+    # tf_labels = tf_labels[:200]
 
-    predictions = plain_resnet(tf_images, ker_name)
+    predictions = plain_resnet_crop(tf_images, ker_name)
+    # predictions = plain_resnet(tf_images, ker_name)
     # tf_image = tf_images[0,:,:,:]
     # predictions = plain_fast_resnet(tf_images, ker_name)
     # exit(1)
@@ -881,10 +959,67 @@ def imgnet_gen_ct_in_one(iter_st):
         np.savetxt("Imagenet/ker5_ct_in_one2/input_"+str(i)+".csv", np.reshape(ct_in[j,:,:,:], [-1]))
         j+=1
 
+def read_out_analysis_time():
+    # res_dir = 'Imagenet/imgnet_class_result_ker3_final_fast'
+    res_dir = 'Resnet_enc_result_ker7_BL'
+    os_path = res_dir+'/total200.out'
+    # os_path = 'test_convRelu_ker5.out'
+
+
+    # prefix = "Evaluation total done in "
+    # prefix = "After CtS    :"
+    # prefix = "After Sine   :"
+    prefix = "After StC    : "
+    # prefix = "Eval: Relu Done in"
+
+    # prefix = "Total done in "
+    # prefix = "Done in "
+    # prefix = "Conv (with BN) Done in" 
+    # prefix = "(until CtoS):"
+    prefix2 = "Done in"
+    # prefix = "Eval: Eval: ReLU Done in"
+    # prefix = "Boot (StoC) Done in "
+    # prefix = "AVG Prec : ("
+
+    line_number = 0
+    list_results = []
+    get = False
+    if os.path.exists(os_path):
+        with open(os_path, 'r') as read_obj:
+            for line in read_obj:
+                if prefix in line:
+                    get = True
+                if (get) & (prefix2 in line):
+                    time_str = line.strip(prefix2).rstrip()
+                    list_results.append(get_seconds(time_str))
+                    get = False
+                    # if time_str.endswith('ms'):
+                    #     list_results.append(float(time_str.strip('ms'))/1000.0)      # for prec
+                    # elif time_str.endswith('s'):
+                    #     list_results.append(get_seconds(time_str))      # for prec
+                    #     # list_results.append(float(time_str.strip('s')))      # for prec
+                    # else:
+                    #     print("wrong")
+                    #     exit(1)
+
+                    #     if line_number%6 == 0:
+                    #         list_results.append(get_seconds(time_str))
+                    #     line_number += 1
+                    # except:
+                    #     continue
+                    # time_str, _ = line.strip(prefix).split(',') # for prec
+                    
+                        
+    else:
+        print("No file exists")
+        exit(1)
+    
+    return(list_results)
+
 def read_out_analysis():
-    # res_dir = 'Resnet_enc_result_ker7_BL'
-    # os_path = res_dir+'/total200.out'
-    os_path = 'test_convRelu_ker5.out'
+    res_dir = 'Resnet_enc_result_ker3_'
+    os_path = res_dir+'/total200.out'
+    # os_path = 'test_convRelu_ker5.out'
 
 
     # prefix = "Evaluation total done in "
@@ -899,7 +1034,7 @@ def read_out_analysis():
     # prefix = "(until CtoS):"
     # prefix = "Eval: Eval: ReLU Done in"
     # prefix = "Boot (StoC) Done in "
-    prefix = "AVG Prec : ("
+    # prefix = "AVG Prec : ("
 
     line_number = 0
     list_results = [] 
@@ -949,15 +1084,23 @@ def get_seconds(time_str):
 
 #### Main Start #### 
 
-## reading result from *.out
-result_list = read_out_analysis()
-for res in result_list:
-    print(res)
-# print(result_list)
-print("num: ", len(result_list), "avg: ", mean(result_list), "std: ", stdev(result_list))
-exit(1)
 
-# gen_plain_predictions()
+# ## reading timing result from *.out
+# result_list = read_out_analysis_time()
+# for res in result_list:
+#     print(res)
+# print("num: ", len(result_list), "sum: ", sum(result_list)/200.0, "std: ", stdev(result_list))
+# exit(1)
+
+
+# ## reading result from *.out
+# result_list = read_out_analysis()
+# for res in result_list:
+#     print(res)
+# print("num: ", len(result_list), "avg: ", mean(result_list), "std: ", stdev(result_list))
+# exit(1)
+
+gen_plain_predictions()
 
 # post_process_Imgnet(200, 'ker5', False)
 #conv_bnReLU_BL_bench(False, False, False)

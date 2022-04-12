@@ -714,6 +714,7 @@ func testResNet_in_BL(st, end int) {
 		bn_b := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1)+"-b.csv", real_batch[1])
 		ct_result := evalConv_BNRelu_BL(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], ker_wid, real_batch[0], real_batch[1], 1, pad, true, false, prt_result)
 		timings[1] = time.Since(new_start).Seconds()
+		new_start = time.Now()
 		fmt.Println("Block1 to 2 done!")
 
 		// ResNet Block 2
