@@ -616,12 +616,12 @@ func testConv_noBoot_old(kind string, printResult bool) (ct_result *ckks.Ciphert
 // in_wid must be Po2
 // For trans, assume that input: full bached ciphertext, outputs 1/4 batched 1ctxt due to expansion
 func testConv_BNRelu(kind string, printResult bool) {
-	raw_in_batch := 256 // same as python
-	raw_in_wid := 14    // same as python
-	in_batch := 256     // needs to be divided by 4 (to pack the output of transConv)
+	raw_in_batch := 4 // same as python
+	raw_in_wid := 13  // same as python
+	in_batch := 4     // needs to be divided by 4 (to pack the output of transConv)
 	in_wid := 16
 	norm := in_batch / raw_in_batch
-	ker_wid := 5
+	ker_wid := 7
 	alpha := 0.0 // for ReLU: 0.0 , leakyReLU : 0.3
 	pack_pos := 0
 
@@ -635,10 +635,12 @@ func testConv_BNRelu(kind string, printResult bool) {
 	bn_a := make([]float64, raw_out_batch)
 	bn_b := make([]float64, raw_out_batch)
 	for i := range raw_input {
-		raw_input[i] = 0.1 * float64(i) / float64(len(raw_input))
+		raw_input[i] = 0.1 // * float64(i)
+		// raw_input[i] = 0.1 * float64(i) / float64(len(raw_input))
 	}
 	for i := range ker_in {
-		ker_in[i] = 0.5 * float64(i) / float64(len(ker_in))
+		// ker_in[i] = 1.0
+		ker_in[i] = 1.0 * float64(i) / float64(len(ker_in))
 	}
 	for i := range bn_a {
 		bn_a[i] = 1.0
@@ -666,7 +668,7 @@ func testConv_BNRelu(kind string, printResult bool) {
 	// Kernel Prep & Conv (+BN) Evaluation
 
 	fast_pack := false
-	if kind == "StrConv_fast" {
+	if (kind == "StrConv_fast") || (kind == "StrConv_odd") {
 		fast_pack = true
 	}
 	ct_result := evalConv_BNRelu_new(cont, ctxt_input, ker_in, bn_a, bn_b, alpha, in_wid, kp_wid, ker_wid, raw_in_batch, raw_out_batch, norm, pack_pos, 2, kind, fast_pack, printResult)
@@ -685,7 +687,7 @@ func testConv_BNRelu(kind string, printResult bool) {
 		for b := 0; b < in_batch; b++ {
 			print_vec("input ("+strconv.Itoa(b)+")", input, in_wid, b)
 		}
-		if kind == "StrConv" {
+		if (kind == "StrConv") || (kind == "StrConv_odd") || (kind == "StrConv_fast") {
 			out_batch = 4 * out_batch
 		}
 		for b := 0; b < out_batch; b++ {
@@ -693,7 +695,7 @@ func testConv_BNRelu(kind string, printResult bool) {
 			switch kind {
 			case "Conv":
 				print_vec("output ("+strconv.Itoa(b)+")", cfs_tmp, in_wid, b)
-			case "StrConv":
+			case "StrConv", "StrConv_fast", "StrConv_odd":
 				print_vec("output ("+strconv.Itoa(b)+")", cfs_tmp, in_wid/2, b)
 			case "TransConv":
 				print_vec("output ("+strconv.Itoa(b)+")", cfs_tmp, in_wid*2, b)
@@ -1730,6 +1732,226 @@ func testResNet() {
 	res_tmp := cont.encoder.DecodeCoeffs(pl_input)
 	prt_mat_norm(res_tmp, max_batch[2], 4, 0, true)
 	timings[5] = time.Since(new_start).Seconds()
+
+	fmt.Println("Blc1: ", timings[0], " sec")
+	fmt.Println("Blc1->2: ", timings[1], " sec")
+	fmt.Println("Blc2: ", timings[2], " sec")
+	fmt.Println("Blc2->3: ", timings[3], " sec")
+	fmt.Println("Blc3: ", timings[4], " sec")
+	fmt.Println("Final (reduce_mean & FC): ", timings[5], " sec")
+	fmt.Printf("Total done in %s \n", time.Since(begin_start))
+}
+
+func testResNet_crop() {
+	// For ResNet, we use padding: i.e., in_wid**2 element is contained in (2*in_wid)**2 sized block
+	// So ReLU, keep or rot, StoC done only on the 1st part of the CtoS ciphertexts
+
+	logN := 14
+	ker_wid := 3
+	real_batch := []int{4, 8, 16} // same as python
+	norm := []int{4, 2, 8, 4, 16} // only use 1/norm batches
+
+	in_wids := []int{32, 16, 8}
+	raw_in_wids := []int{32 - ker_wid/2, 16 - ker_wid/2, 8 - ker_wid/2} // same as python
+	alpha := 0.0
+	fc_out := 10
+	fast_pack := true
+
+	py_bn_a := []float64{0.2, 0.2, 0.2}
+	num_blc1 := 2
+	num_blc2 := 2
+	num_blc3 := 2
+
+	cont := newContext(logN, ker_wid, in_wids, raw_in_wids, true, "Resnet_crop")
+
+	ker_size := ker_wid * ker_wid
+	max_batch := make([]int, len(real_batch)) // the max batch
+	for i := range max_batch {
+		max_batch[i] = cont.N / (in_wids[i] * in_wids[i])
+	}
+
+	input := make([]float64, cont.N)
+	k := 1.0
+	for i := 0; i < in_wids[0]; i++ {
+		for j := 0; j < in_wids[0]; j++ {
+			for b := 0; b < 3; b++ {
+				if (i < raw_in_wids[0]) && (j < raw_in_wids[0]) {
+					input[i*in_wids[0]*max_batch[0]+j*max_batch[0]+b*norm[0]] = k
+					k -= 1.0 / float64(3*(raw_in_wids[0])*(raw_in_wids[0]))
+				}
+			}
+		}
+	}
+	fmt.Println("Input: ")
+	prt_mat_norm(input, max_batch[0], norm[0], 3, false)
+	ker_in0 := make([]float64, 3*real_batch[0]*ker_size)
+	for i := range ker_in0 {
+		ker_in0[i] = 0.25 * float64(i) / float64(len(ker_in0))
+	}
+	ker_in1 := make([]float64, real_batch[0]*real_batch[0]*ker_size)
+	for i := range ker_in1 {
+		ker_in1[i] = 0.25 * float64(i) / float64(len(ker_in1))
+	}
+	ker_in12 := make([]float64, real_batch[0]*real_batch[1]*ker_size)
+	for i := range ker_in12 {
+		ker_in12[i] = 0.25 * float64(i) / float64(len(ker_in12))
+	}
+	ker_in12_new := make([]float64, 2*real_batch[0]*real_batch[1]*ker_size)
+	for k := 0; k < ker_size; k++ {
+		for i := 0; i < real_batch[0]; i++ {
+			for j := 0; j < real_batch[1]; j++ {
+				ker_in12_new[k*2*real_batch[0]*real_batch[1]+2*i*real_batch[1]+j] = ker_in12[k*real_batch[0]*real_batch[1]+i*real_batch[1]+j]
+			}
+		}
+	}
+	ker_in2 := make([]float64, real_batch[1]*real_batch[1]*ker_size)
+	for i := range ker_in2 {
+		ker_in2[i] = 0.25 * float64(i) / float64(len(ker_in2))
+	}
+	ker_in23 := make([]float64, real_batch[1]*real_batch[2]*ker_size)
+	for i := range ker_in23 {
+		ker_in23[i] = 0.25 * float64(100) / float64(len(ker_in23))
+	}
+	ker_in23_new := make([]float64, 2*real_batch[1]*real_batch[2]*ker_size)
+	for k := 0; k < ker_size; k++ {
+		for i := 0; i < real_batch[1]; i++ {
+			for j := 0; j < real_batch[2]; j++ {
+				ker_in23_new[k*2*real_batch[1]*real_batch[2]+2*i*real_batch[2]+j] = ker_in23[k*real_batch[1]*real_batch[2]+i*real_batch[2]+j]
+			}
+		}
+	}
+	ker_in3 := make([]float64, real_batch[2]*real_batch[2]*ker_size)
+	for i := range ker_in3 {
+		ker_in3[i] = 0.25 * float64(i) / float64(len(ker_in3))
+	}
+	bn_a1 := make([]float64, real_batch[0])
+	bn_b1 := make([]float64, real_batch[0])
+	for i := range bn_a1 {
+		bn_a1[i] = py_bn_a[0] // * float64(i) / float64(batch)
+		bn_b1[i] = 0.0        //0.1 * float64(i) // float64(real_batch[0])
+	}
+	bn_a2 := make([]float64, real_batch[1])
+	bn_b2 := make([]float64, real_batch[1])
+	for i := range bn_a2 {
+		bn_a2[i] = py_bn_a[1] // * float64(i) / float64(batch)
+		bn_b2[i] = 0.0        //0.1 * float64(i)
+	}
+	bn_a3 := make([]float64, real_batch[2])
+	bn_b3 := make([]float64, real_batch[2])
+	for i := range bn_a3 {
+		bn_a3[i] = py_bn_a[2] // * float64(i) / float64(batch)
+		bn_b3[i] = 0.0        //0.1 * float64(i)
+	}
+
+	ker_inf := make([]float64, real_batch[2]*fc_out)
+	for i := range ker_inf {
+		ker_inf[i] = 0.1 * float64(i)
+	}
+	bn_bf := make([]float64, fc_out)
+	for i := range bn_bf {
+		bn_bf[i] = 10. * float64(i)
+	}
+
+	fmt.Println("vec size: ", cont.N)
+	fmt.Println("input width: ", raw_in_wids)
+	fmt.Println("kernel width: ", ker_wid)
+	fmt.Println("num batches: ", real_batch)
+	fmt.Println("Input matrix: ")
+	prt_vec(input)
+
+	start = time.Now()
+	pl_input := ckks.NewPlaintext(cont.params, cont.ECD_LV, cont.params.Scale()) // contain plaintext values
+	cont.encoder.EncodeCoeffs(input, pl_input)
+	ct_input := cont.encryptor.EncryptNew(pl_input)
+	fmt.Printf("Encryption done in %s \n", time.Since(start))
+
+	timings := make([]float64, 6)
+	begin_start := time.Now()
+	new_start := time.Now()
+
+	// ResNet Block 1
+	ct_layer := ct_input
+	prt_result := true
+	for i := 1; i <= num_blc1; i++ {
+		if i == num_blc1 {
+			prt_result = true
+		}
+		if i == 1 {
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in0, bn_a1, bn_b1, alpha, in_wids[0], raw_in_wids[0], ker_wid, 3, real_batch[0], norm[0], 0, 2, "Conv", fast_pack, prt_result)
+		} else {
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in1, bn_a1, bn_b1, alpha, in_wids[0], raw_in_wids[0], ker_wid, real_batch[0], real_batch[0], norm[0], 0, 2, "Conv", fast_pack, prt_result)
+		}
+		fmt.Println("Block1, Layer ", i, "done!")
+	}
+	fmt.Println("done.")
+	timings[0] = time.Since(new_start).Seconds()
+	new_start = time.Now()
+
+	ct_result := evalConv_BNRelu_new(cont, ct_layer, ker_in12_new, bn_a2, bn_b2, alpha, in_wids[0], 2*raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, 2, "StrConv_odd", fast_pack, prt_result)
+
+	fmt.Println("Block1 to 2 done!")
+	max_bat := cont.N / (in_wids[1] * in_wids[1])
+	res_ttmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_result))
+	prt_mat_norm(res_ttmp, max_bat, norm[2], 3, false)
+
+	timings[1] = time.Since(new_start).Seconds()
+	new_start = time.Now()
+
+	// ResNet Block 2
+	ct_layer = ct_result
+	prt_result = true
+	for i := 1; i <= num_blc2; i++ {
+		if i == num_blc2 {
+			prt_result = true
+		}
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[2], 0, 2, "Conv", fast_pack, prt_result)
+		fmt.Println("Block2, Layer ", i, "done!")
+	}
+	timings[2] = time.Since(new_start).Seconds()
+	new_start = time.Now()
+
+	ct_result = evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, in_wids[1], 2*raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[3], 0, 2, "StrConv_odd", fast_pack, prt_result)
+
+	fmt.Println("Block2 to 3 done!")
+	max_bat = cont.N / (in_wids[2] * in_wids[2])
+	res_ttmp = cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_result))
+	prt_mat_norm(res_ttmp, max_bat, norm[4], 3, false)
+
+	timings[3] = time.Since(new_start).Seconds()
+	new_start = time.Now()
+
+	// ResNet Block 3
+	ct_layer = ct_result
+	prt_result = true
+	for i := 1; i <= num_blc3; i++ {
+		if i == num_blc3 {
+			prt_result = true
+		}
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, in_wids[2], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[4], 0, 2, "Conv", fast_pack, prt_result)
+		fmt.Println("Block3, Layer ", i, "done!")
+	}
+	timings[4] = time.Since(new_start).Seconds()
+	new_start = time.Now()
+
+	ker_inf_wid := raw_in_wids[2]
+	ker_inf_ := make([]float64, ker_inf_wid*ker_inf_wid*real_batch[2]*fc_out)
+	for i := range ker_inf {
+		for b := 0; b < ker_inf_wid*ker_inf_wid; b++ {
+			ker_inf_[i+b*real_batch[2]*fc_out] = ker_inf[i]
+		}
+	}
+	bn_af := make([]float64, fc_out)
+	for i := range bn_af {
+		bn_af[i] = 1.0 / float64(ker_inf_wid*ker_inf_wid) // for reduce mean on raw_in_wids[2]**2 elements
+	}
+	ct_result = evalConv_BN(cont, ct_layer, ker_inf_, bn_af, bn_bf, in_wids[2], ker_inf_wid, real_batch[2], 10, norm[4], float64(1<<30), true, false)
+	timings[5] = time.Since(new_start).Seconds()
+
+	cont.decryptor.Decrypt(ct_result, pl_input)
+	res_tmp := cont.encoder.DecodeCoeffs(pl_input)
+	prt_mat_norm(res_tmp, max_batch[2], norm[4], 0, false)
+	res_out := prt_mat_one_norm(res_tmp, max_batch[2], norm[4], ker_inf_wid/2+1, ker_inf_wid/2+1)
+	fmt.Println("\n result: ", res_out[:10])
 
 	fmt.Println("Blc1: ", timings[0], " sec")
 	fmt.Println("Blc1->2: ", timings[1], " sec")

@@ -20,7 +20,7 @@ const log_c_scale = 30
 const log_in_scale = 30
 const log_out_scale = 30
 
-const pow = 6 // making sure that ReLu can cover values in [-2^pow, 2^pow].
+const pow = 3 // making sure that ReLu can cover values in [-2^pow, 2^pow].
 
 type context struct {
 	logN    int
@@ -268,7 +268,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 				}
 			}
 		}
-	case "StrConv_fast":
+	case "StrConv_fast", "StrConv_odd":
 		if boot {
 			iter = 2 // we assume full padding, i.e., up and low is both nonzero
 			for i, elt := range cont.in_wids {
@@ -304,6 +304,36 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 					for k := range cont.r_idx[elt][ul] {
 						rotations = append(rotations, k)
 					}
+				}
+			}
+		}
+	case "Resnet_crop": // Generate ext_idx for extracting valid values from conv with "same" padding
+		iter = 2 // since we use full padding,
+		for i, elt := range cont.in_wids {
+			cont.ext_idx[elt] = make([][]int, iter)
+			for ul := 0; ul < iter; ul++ {
+				cont.ext_idx[elt][ul] = gen_keep_vec(cont.N/2, elt, cont.kp_wids[i], ul)
+			}
+			cont.r_idx[elt] = make([]map[int][]int, 1)
+			cont.r_idx_l[elt] = make([]map[int][]int, 1)
+			cont.m_idx[elt] = make([]map[int][]int, 1)
+			cont.m_idx_l[elt] = make([]map[int][]int, 1)
+
+			pos := 0
+			if i < 2 { // For strides at bl1 to bl2, bl2 to bl3
+				cont.m_idx[elt][pos], cont.r_idx[elt][pos] = gen_comprs_fast(cont.N/2, elt, 2*cont.kp_wids[i+1], pos, 0)
+				cont.m_idx_l[elt][pos], cont.r_idx_l[elt][pos] = gen_comprs_fast(cont.N/2, elt, 2*cont.kp_wids[i+1], pos, 1)
+				for k := range cont.r_idx[elt][pos] {
+					rotations = append(rotations, k)
+				}
+				for k := range cont.r_idx_l[elt][pos] {
+					rotations = append(rotations, k)
+				}
+				for k := range cont.m_idx[elt][pos] {
+					rotations = append(rotations, k)
+				}
+				for k := range cont.m_idx_l[elt][pos] {
+					rotations = append(rotations, k)
 				}
 			}
 		}
@@ -579,15 +609,15 @@ func main() {
 	// testBRrot()
 
 	// kers := [3]int{3, 5, 7}
-	batchs := [5]int{4, 16, 64, 256, 1024}
-	widths := [5]int{128, 64, 32, 16, 8}
+	// batchs := [5]int{4, 16, 64, 256, 1024}
+	// widths := [5]int{128, 64, 32, 16, 8}
 
-	ker, _ := strconv.Atoi(os.Args[1])
-	i, _ := strconv.Atoi(os.Args[2])
+	// ker, _ := strconv.Atoi(os.Args[1])
+	// i, _ := strconv.Atoi(os.Args[2])
 
-	testConv_noBoot_in(batchs[i], widths[i], ker, true)
-	fmt.Println("BL start.")
-	testConv_noBoot_BL_in(batchs[i], widths[i], ker, true)
+	// testConv_noBoot_in(batchs[i], widths[i], ker, true)
+	// fmt.Println("BL start.")
+	// testConv_noBoot_BL_in(batchs[i], widths[i], ker, true)
 
 	// for _, k := range kers {
 	// 	for i := 4; i < 5; i++ {
@@ -605,10 +635,12 @@ func main() {
 
 	// testConv_noBoot("Conv", true)
 	// testConv_BNRelu("Conv", false)
+	// testConv_BNRelu("StrConv_odd", true)
 
 	// testConv_BNRelu("Conv", false)
 
 	// testReduceMean()
+	testResNet_crop()
 	// testResNet()
 	// testDCGAN()
 

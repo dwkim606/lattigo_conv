@@ -579,7 +579,7 @@ func gen_comprs_fast(vec_size, in_wid, kp_wid, pos, ul int) (m_idx, r_idx map[in
 		rot := j*min_wid - 2*min_wid*min_wid + min_wid
 		m_idx[rot] = tmp
 	}
-	for b := 0; b < batch; b++ {
+	for b := 0; b < batch; b++ { // kinds of mov depends on b
 		tmp := make([]int, vec_size)
 		for j := 0; j < 2*min_wid; j++ {
 			for i := 0; i < min_wid; i++ {

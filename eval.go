@@ -26,9 +26,9 @@ func set_Variables(batch, raw_in_wid, in_wid, ker_wid int, kind string) (kp_wid,
 			fmt.Println("max raw_in_wid: ", max_kp_wid)
 			panic("too large raw_in_wid.")
 		}
-	case "StrConv", "StrConv_fast":
+	case "StrConv", "StrConv_fast", "StrConv_odd":
 		trans = false
-		kp_wid = raw_in_wid
+		kp_wid = 2 * (in_wid/2 - ker_wid/2)
 		out_batch = batch
 		if kp_wid > max_kp_wid {
 			fmt.Println("max raw_in_wid: ", max_kp_wid)
@@ -468,7 +468,7 @@ func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []
 }
 
 // the same as evalConv_BN but separate conv_then_pack and use different norm
-// only for log N = 16
+// only for log N = 16 and when 8*8*64 is contained as 16*16*64 in 16*16*256
 func evalConv_BN_sep(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob, norm int, out_scale float64, printResult, trans bool) (ct_res *ckks.Ciphertext) {
 	if cont.logN != 16 {
 		panic("logN must be 16 for Conv_BN_sep!")
@@ -611,7 +611,8 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 // real_ib, real_ob: real number of batches (less or equal than max_batch)
 func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, kp_wid, ker_wid, real_ib, real_ob, norm, pack_pos, iter int, kind string, fast_pack, printResult bool) (ct_res *ckks.Ciphertext) {
 	// iter := 2 // for full packing (contrary to half packing)
-	var trans, stride bool
+	var trans, stride, odd bool
+	odd = false
 	switch kind {
 	case "Conv":
 		trans = false
@@ -619,9 +620,29 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	case "StrConv", "StrConv_fast":
 		trans = false
 		stride = true
+	case "StrConv_odd":
+		trans = false
+		stride = true
+		odd = true
 	case "TransConv":
 		trans = true
 		stride = false
+	}
+
+	if odd { // multiply x^{offset} before conv to move input to appropriate position.
+		var offset int // offset depends on the real_wid = in_wid-ker_wid/2 is even or not
+		if (in_wid-ker_wid/2)%2 == 0 {
+			offset = 0
+		} else {
+			offset = real_ib * norm * (in_wid + 1)
+		}
+		fmt.Println("offset: ", offset)
+		xi := make([]float64, cont.N)
+		xi[offset] = 1.0
+		xi_plain := ckks.NewPlaintext(cont.params, cont.ECD_LV, 1.0)
+		cont.encoder.EncodeCoeffs(xi, xi_plain)
+		cont.encoder.ToNTT(xi_plain)
+		ct_input = cont.evaluator.MulNew(ct_input, xi_plain)
 	}
 
 	ct_conv := evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), printResult, trans)
@@ -738,7 +759,7 @@ func debugStoC(cont *context, slot1, slot2 []complex128, in_wid, kp_wid, pos int
 	case "Conv":
 		tmp1 = keep_vec(slot1_fl, in_wid, kp_wid, 0)
 		tmp2 = keep_vec(slot2_fl, in_wid, kp_wid, 1)
-	case "StrConv", "StrConv_fast":
+	case "StrConv", "StrConv_fast", "StrConv_odd":
 		if fast_pack {
 			tmp1 = comprs_full_fast(slot1_fl, in_wid, kp_wid, pos, 0)
 			tmp2 = comprs_full_fast(slot2_fl, in_wid, kp_wid, pos, 1)
