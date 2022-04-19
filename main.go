@@ -641,7 +641,11 @@ func main() {
 
 	// testReduceMean()
 	// testResNet_crop()
-	testResNet_crop_in(0, 10, 7, false)
+	st, _ := strconv.Atoi(os.Args[1])
+	end, _ := strconv.Atoi(os.Args[2])
+	ker_wid, _ := strconv.Atoi(os.Args[3])
+
+	testResNet_crop_in(st, end, ker_wid, false)
 	// testResNet()
 	// testDCGAN()
 

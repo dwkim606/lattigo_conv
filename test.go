@@ -925,7 +925,7 @@ func testResNet_crop_in(st, end, ker_wid int, wide bool) {
 	// So ReLU, keep or rot, StoC done only on the 1st part of the CtoS ciphertexts
 	ker_name := "ker" + strconv.Itoa(ker_wid)
 	weight_dir := "weight_" + ker_name + "_crop_h5/"
-	out_dir := "result_" + weight_dir
+	out_dir := "result_" + ker_name + "_crop_h5/"
 	fc_out := 10 // 100 for cifar100
 
 	var num_blcs [3]int
@@ -948,6 +948,8 @@ func testResNet_crop_in(st, end, ker_wid int, wide bool) {
 		for i, elt := range norm {
 			norm[i] = elt / 2
 		}
+		weight_dir = "weight_" + ker_name + "_wide_crop_h5/"
+		out_dir = "result_" + ker_name + "_wide_crop_h5/"
 	}
 
 	logN := 16
@@ -965,7 +967,7 @@ func testResNet_crop_in(st, end, ker_wid int, wide bool) {
 
 	for iter := st; iter < end; iter++ {
 		fmt.Println("Running ", iter, "-th iter... ker size: ", ker_wid)
-		image := readTxt("test_data/test_image_"+strconv.Itoa(iter)+".csv", raw_in_wids[0]*raw_in_wids[0]*3)
+		image := readTxt("test_data/test_image_"+strconv.Itoa(iter)+".csv", in_wids[0]*in_wids[0]*3)
 		input := make([]float64, cont.N)
 		k := 0
 		for i := 0; i < in_wids[0]; i++ {
@@ -973,8 +975,8 @@ func testResNet_crop_in(st, end, ker_wid int, wide bool) {
 				for b := 0; b < 3; b++ {
 					if (i < raw_in_wids[0]) && (j < raw_in_wids[0]) {
 						input[i*in_wids[0]*max_batch[0]+j*max_batch[0]+b*norm[0]] = image[k]
-						k++
 					}
+					k++
 				}
 			}
 		}
