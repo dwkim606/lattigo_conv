@@ -382,13 +382,13 @@ def plain_resnet_bench():
     print("after 3rd block\n", conv, "\n")      
 
 def plain_resnet_crop_bench():
-    batch = 4
+    batch = 8
     ker_width = 3
     input_width = 32 - ker_width//2
     vec_size = 3*input_width**2
 
     pad_list = {3: [1,1,1], 5: [2,1,1], 7: [3,2,2]}
-    bn_a = [0.2, 0.2, 0.2]
+    bn_a = [0.1, 0.1, 0.1]
     pad_size = pad_list[ker_width]
 
     num_bl1 = 2
@@ -413,7 +413,7 @@ def plain_resnet_crop_bench():
     ker23 = [(0.25 * 100)/(batch2 * batch3 * ker_size) for i in range(batch2 * batch3 * ker_size)]  # (0.5 * i)/(batch2 * batch3 * ker_size) #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
     ker3 = [(0.25 * i)/(batch3 * batch3 * ker_size) for i in range(batch3 * batch3 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
     fc_a = [0.1*i for i in range(batch3*10)]
-    fc_b = [10.0*i for i in range(10)]
+    fc_b = [0.0*i for i in range(10)]
 
     ten_x = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, input_width, input_width, 3])
     ten_k0 = tf.reshape(tf.constant(np.array(ker0), tf.float32), [ker_width, ker_width, 3, batch])

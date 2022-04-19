@@ -640,7 +640,8 @@ func main() {
 	// testConv_BNRelu("Conv", false)
 
 	// testReduceMean()
-	testResNet_crop()
+	// testResNet_crop()
+	testResNet_crop_in(0, 10, 7, false)
 	// testResNet()
 	// testDCGAN()
 
