@@ -20,7 +20,7 @@ const log_c_scale = 30
 const log_in_scale = 30
 const log_out_scale = 30
 
-const pow = 3 // making sure that ReLu can cover values in [-2^pow, 2^pow].
+const pow = 5 // making sure that ReLu can cover values in [-2^pow, 2^pow].
 
 type context struct {
 	logN    int
@@ -640,12 +640,13 @@ func main() {
 	// testConv_BNRelu("Conv", false)
 
 	// testReduceMean()
-	// testResNet_crop()
-	st, _ := strconv.Atoi(os.Args[1])
-	end, _ := strconv.Atoi(os.Args[2])
-	ker_wid, _ := strconv.Atoi(os.Args[3])
+	testResNet_crop()
 
-	testResNet_crop_in(st, end, ker_wid, false)
+	// st, _ := strconv.Atoi(os.Args[1])
+	// end, _ := strconv.Atoi(os.Args[2])
+	// ker_wid, _ := strconv.Atoi(os.Args[3])
+	// testResNet_crop_in(st, end, ker_wid, true)
+
 	// testResNet()
 	// testDCGAN()
 
