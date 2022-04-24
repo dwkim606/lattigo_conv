@@ -34,6 +34,10 @@ func set_Variables(batch, raw_in_wid, in_wid, ker_wid int, kind string) (kp_wid,
 			fmt.Println("max raw_in_wid: ", max_kp_wid)
 			panic("too large raw_in_wid.")
 		}
+	case "StrConv_prep":
+		trans = false
+		kp_wid = (in_wid/2 - ker_wid/2)
+		out_batch = batch
 	case "TransConv":
 		trans = true
 		kp_wid = 2 * raw_in_wid
@@ -535,7 +539,7 @@ func evalConv_BN_sep(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 // stride = true: apply [1,2,2,1] stride; false: [1,1,1,1]
 // pack_pos: position to pack (0,1,2,3): only for strided case
 // real_ib, real_ob: real number of batches (less or equal than max_batch)
-func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, ker_wid, real_ib, real_ob, norm, pack_pos int, padding, stride, printResult bool) (ct_res *ckks.Ciphertext) {
+func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, ker_wid, real_ib, real_ob, norm, pack_pos, step int, padding, stride, printResult bool) (ct_res *ckks.Ciphertext) {
 	trans := false
 	kp_wid := in_wid / 2 // - ((ker_wid - 1) / 2)
 	ct_conv := evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), printResult, trans)
@@ -577,7 +581,7 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 	} else {
 		kind = "Conv"
 	}
-	cfs_postB := debugStoC(cont, relu1, relu2, in_wid, kp_wid, pack_pos, kind, false)
+	cfs_postB := debugStoC(cont, relu1, relu2, in_wid, kp_wid, pack_pos, step, kind, false)
 
 	// needs to be modified for pack_pos consideration!!
 	start = time.Now()
@@ -609,24 +613,31 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 // stride = true: apply [1,2,2,1] stride; false: [1,1,1,1]
 // pack_pos: position to pack (0,1,2,3): only for strided case
 // real_ib, real_ob: real number of batches (less or equal than max_batch)
-func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, kp_wid, ker_wid, real_ib, real_ob, norm, pack_pos, iter int, kind string, fast_pack, printResult bool) (ct_res *ckks.Ciphertext) {
+// step: step of the output
+func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, kp_wid, ker_wid, real_ib, real_ob, norm, pack_pos, step, iter int, kind string, fast_pack, printResult bool) (ct_res *ckks.Ciphertext) {
 	// iter := 2 // for full packing (contrary to half packing)
-	var trans, stride, odd bool
+	var trans, stride, odd, inside bool
 	odd = false
+	trans = false
+	stride = false
+	inside = false
+	in_step := step
 	switch kind {
-	case "Conv":
-		trans = false
-		stride = false
+	case "Conv_inside":
+		inside = true
+	case "StrConv_prep":
+		in_step = step / 2
+		if step%2 != 0 {
+			panic("step can not be divided by 2 (for strided conv)")
+		}
+		inside = true
 	case "StrConv", "StrConv_fast":
-		trans = false
 		stride = true
 	case "StrConv_odd":
-		trans = false
 		stride = true
 		odd = true
 	case "TransConv":
 		trans = true
-		stride = false
 	}
 
 	if odd { // multiply x^{offset} before conv to move input to appropriate position.
@@ -645,7 +656,25 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 		ct_input = cont.evaluator.MulNew(ct_input, xi_plain)
 	}
 
-	ct_conv := evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), printResult, trans)
+	var ct_conv *ckks.Ciphertext
+	if inside {
+		new_ker_wid := ker_wid*in_step - in_step + 1
+		new_ker_in := make([]float64, len(ker_in)*new_ker_wid*new_ker_wid/(ker_wid*ker_wid))
+
+		for i := 0; i < ker_wid; i++ {
+			for j := 0; j < ker_wid; j++ {
+				for ib := 0; ib < real_ib; ib++ {
+					for ob := 0; ob < real_ob; ob++ {
+						new_ker_in[in_step*i*new_ker_wid*real_ib*real_ob+(in_step*j)*real_ib*real_ob+ib*real_ob+ob] = ker_in[i*ker_wid*real_ib*real_ob+j*real_ib*real_ob+ib*real_ob+ob]
+					}
+				}
+			}
+		}
+		ct_conv = evalConv_BN(cont, ct_input, new_ker_in, bn_a, bn_b, in_wid, new_ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), printResult, trans)
+	} else {
+		ct_conv = evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), printResult, trans)
+	}
+
 	ct_conv.Scale = ct_conv.Scale * math.Pow(2, pow)
 	cfs_preB := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
 	fmt.Println("Bootstrapping... Ours (until CtoS):")
@@ -672,7 +701,7 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	relu1, relu2 := debugReLU(cont, slot1, slot2, alpha)
 	relu1 = printDebug(cont.params, ct_boots[0], relu1, cont.decryptor, cont.encoder)
 	relu2 = printDebug(cont.params, ct_boots[1], relu2, cont.decryptor, cont.encoder)
-	cfs_postB := debugStoC(cont, relu1, relu2, in_wid, kp_wid, pack_pos, kind, fast_pack)
+	cfs_postB := debugStoC(cont, relu1, relu2, in_wid, kp_wid, pack_pos, step, kind, fast_pack)
 
 	start = time.Now()
 	ct_keep := make([]*ckks.Ciphertext, iter) // for extend (rotation) of ctxt_in
@@ -693,6 +722,8 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 					ct_keep[ul] = ext_ctxt(cont.evaluator, cont.encoder, ct_boots[ul], cont.r_idx_l[in_wid][pack_pos], cont.params)
 				}
 			}
+		} else if inside {
+			ct_keep[ul] = keep_ctxt(cont.params, cont.evaluator, cont.encoder, ct_boots[ul], cont.ext_idx[step][ul])
 		} else {
 			ct_keep[ul] = keep_ctxt(cont.params, cont.evaluator, cont.encoder, ct_boots[ul], cont.ext_idx[in_wid][ul])
 		}
@@ -714,7 +745,15 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	if printResult {
 		max_batch := cont.N / (in_wid * in_wid)
 		res_tmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_res))
-		prt_mat_norm(res_tmp, max_batch, norm, 4, false)
+		if inside {
+			start := 1
+			if ker_wid == 5 {
+				start = step
+			}
+			prt_mat_norm_step(res_tmp, max_batch, norm, step, start, 4, false)
+		} else {
+			prt_mat_norm(res_tmp, max_batch, norm, 4, false)
+		}
 	}
 
 	return ct_res
@@ -746,7 +785,7 @@ func debugReLU(cont *context, slot1, slot2 []complex128, alpha float64) (relu1, 
 	return
 }
 
-func debugStoC(cont *context, slot1, slot2 []complex128, in_wid, kp_wid, pos int, kind string, fast_pack bool) (cfs_postB []float64) {
+func debugStoC(cont *context, slot1, slot2 []complex128, in_wid, kp_wid, pos, step int, kind string, fast_pack bool) (cfs_postB []float64) {
 	slot1_fl := make([]float64, len(slot1))
 	slot2_fl := make([]float64, len(slot1))
 	for i := range slot1 {
@@ -754,11 +793,19 @@ func debugStoC(cont *context, slot1, slot2 []complex128, in_wid, kp_wid, pos int
 		slot2_fl[i] = real(slot2[i])
 	}
 
+	raw_in_wid_odd := true
+	if kp_wid%2 == 0 { // valid only for resnet case (precise result: raw_in_wid is odd or not)
+		raw_in_wid_odd = false
+	}
+
 	var tmp1, tmp2 []float64
 	switch kind {
 	case "Conv":
 		tmp1 = keep_vec(slot1_fl, in_wid, kp_wid, 0)
 		tmp2 = keep_vec(slot2_fl, in_wid, kp_wid, 1)
+	case "StrConv_prep", "Conv_inside":
+		tmp1 = keep_vec_stride(slot1_fl, in_wid, kp_wid, step, 0, raw_in_wid_odd)
+		tmp2 = keep_vec_stride(slot2_fl, in_wid, kp_wid, step, 1, raw_in_wid_odd)
 	case "StrConv", "StrConv_fast", "StrConv_odd":
 		if fast_pack {
 			tmp1 = comprs_full_fast(slot1_fl, in_wid, kp_wid, pos, 0)

@@ -20,7 +20,7 @@ const log_c_scale = 30
 const log_in_scale = 30
 const log_out_scale = 30
 
-const pow = 5 // making sure that ReLu can cover values in [-2^pow, 2^pow].
+const pow = 3 // making sure that ReLu can cover values in [-2^pow, 2^pow].
 
 type context struct {
 	logN    int
@@ -242,6 +242,22 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 				}
 			}
 		}
+	case "StrConv_prep": // we assume manual padding using kp_wid
+		if boot {
+			iter = 2  // we assume full padding, i.e., up and low is both nonzero
+			step := 2 // will be 4 in the 3rd block
+			for i, elt := range cont.in_wids {
+				cont.ext_idx[elt] = make([][]int, iter)
+				raw_in_wid_odd := true
+				if (elt-ker_wid/2)%2 == 0 {
+					raw_in_wid_odd = false
+				}
+
+				for ul := 0; ul < iter; ul++ {
+					cont.ext_idx[elt][ul] = gen_keep_vec_stride(cont.N/2, elt, cont.kp_wids[i], step, ul, raw_in_wid_odd)
+				}
+			}
+		}
 	case "StrConv":
 		if boot {
 			iter = 2 // we assume full padding, i.e., up and low is both nonzero
@@ -305,6 +321,19 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 						rotations = append(rotations, k)
 					}
 				}
+			}
+		}
+	case "Resnet_crop_fast": // Generate ext_idx for extracting valid values from conv with "same" padding
+		iter = 2 // since we use full padding,
+		for i := range cont.in_wids {
+			step := 1 << i
+			raw_in_wid_odd := true
+			if cont.kp_wids[i]%2 == 0 {
+				raw_in_wid_odd = false
+			}
+			cont.ext_idx[step] = make([][]int, iter)
+			for ul := 0; ul < iter; ul++ {
+				cont.ext_idx[step][ul] = gen_keep_vec_stride(cont.N/2, cont.in_wids[0], cont.kp_wids[i], step, ul, raw_in_wid_odd)
 			}
 		}
 	case "Resnet_crop": // Generate ext_idx for extracting valid values from conv with "same" padding
@@ -636,11 +665,16 @@ func main() {
 	// testConv_noBoot("Conv", true)
 	// testConv_BNRelu("Conv", false)
 	// testConv_BNRelu("StrConv_odd", true)
+	// testConv_BNRelu("StrConv_prep", true)
+
+	testResNet_crop_fast()
+
+	// testConv_BNRelu("Conv_inside", true)
 
 	// testConv_BNRelu("Conv", false)
 
 	// testReduceMean()
-	testResNet_crop()
+	// testResNet_crop()
 
 	// st, _ := strconv.Atoi(os.Args[1])
 	// end, _ := strconv.Atoi(os.Args[2])
@@ -853,6 +887,35 @@ func prt_mat_norm(vec []float64, batch, norm, show int, half bool) {
 		if k*k > mat_size {
 			k = 1
 			j++
+		}
+	}
+}
+
+// vec = arrgvec with batch batches, each batch is sqr-sized
+// print (i,j)-th position in [batches], only shows (show, show) entries show = 0 : print all
+// input is strided with steps, read from start
+func prt_mat_norm_step(vec []float64, batch, norm, step, start, show int, half bool) {
+	mat_size := len(vec) / batch
+	row := int(math.Sqrt(float64(mat_size)))
+	if half {
+		row = row / 2
+	}
+	tmp := make([]float64, batch/norm)
+	j, k := 1, 1
+	for i := 0; i < len(vec); i += batch {
+		if (show == 0) || (((j <= show*step) || ((j > row-show*step) && (j <= row))) && ((k <= show*step) || ((k > row-show*step) && (k <= row)))) {
+			if ((j-start)%step == 0) && ((k-start)%step == 0) {
+				fmt.Printf("(%d, %d): ", (j-start)/step+1, (k-start)/step+1)
+				for idx := range tmp {
+					tmp[idx] = vec[i+norm*idx]
+				}
+				prt_vec(tmp)
+			}
+		}
+		k += 1
+		if k*k > mat_size {
+			k = 1
+			j += 1
 		}
 	}
 }

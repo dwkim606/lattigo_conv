@@ -383,13 +383,13 @@ def plain_resnet_bench():
 
 def plain_resnet_crop_bench():
     init_batch = 4
-    batch = 8
+    batch = 4
     ker_width = 3
     input_width = 32 - ker_width//2
     vec_size = 3*input_width**2
 
     pad_list = {3: [1,1,1], 5: [2,1,1], 7: [3,2,2]}
-    bn_a = [0.2, 0.2, 0.1]
+    bn_a = [0.2, 0.2, 0.2]
     pad_size = pad_list[ker_width]
 
     num_bl1 = 2
@@ -558,7 +558,9 @@ def conv_bnReLU_BL_bench(trans, strides, relu):
     input_width = 13
     vec_size = batch*input_width**2
     ker_width = 7
-    bn_a = 1.0
+    bn_a = 0.1
+
+    pad_size = [1, 1, 2] 
 
     ker_size = ker_width**2 
     if trans:
@@ -570,7 +572,7 @@ def conv_bnReLU_BL_bench(trans, strides, relu):
     ker_len = batch * out_batch * ker_size
 
     ## Correctness Check: Compare with TF NN CONV2D
-    raw_input = [0.1 for i in range(vec_size)]  # #[1.0*i for i in range(vec_size)] 
+    raw_input = [1.0*i/vec_size for i in range(vec_size)]  # #[1.0*i for i in range(vec_size)] 
     ker = [1.0*i/ker_len for i in range(ker_len)] #  #[1.0 for i in range(batch * out_batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
 
     print("input width:", input_width)
@@ -592,8 +594,11 @@ def conv_bnReLU_BL_bench(trans, strides, relu):
     
     if relu:
         conv = tf.nn.relu(conv)
-    
+    print("\n kernel: \n", ten_k, "\n")
     print("\n result: \n", conv, "\n")
+
+    # conv = tf.nn.conv2d(Cropping2D(cropping=((0,pad_size[ker_width//2-1]), (0,pad_size[ker_width//2-1])))(conv), ten_k, strides = [1,1,1,1], padding = "SAME")*bn_a
+    # print("\n result final: \n", conv, "\n")
 
 def trans_conv_bnReLU_BL_bench():
     input_width = 2
@@ -1322,8 +1327,10 @@ def get_seconds(time_str):
 
 # separate_data(300)
 # trans_conv_bnReLU_BL_bench()
-# conv_bnReLU_BL_bench(False)
+# conv_bnReLU_BL_bench(False, True, True)
+# exit(1)
 # plain_resnet_bench()
+
 plain_resnet_crop_bench()
 exit(1)
 # gen_plain_predictions()
