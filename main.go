@@ -20,7 +20,7 @@ const log_c_scale = 30
 const log_in_scale = 30
 const log_out_scale = 30
 
-const pow = 3 // making sure that ReLu can cover values in [-2^pow, 2^pow].
+const pow = 6 // making sure that ReLu can cover values in [-2^pow, 2^pow].
 
 type context struct {
 	logN    int
@@ -246,17 +246,16 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 		if boot {
 			iter = 2  // we assume full padding, i.e., up and low is both nonzero
 			step := 2 // will be 4 in the 3rd block
-			for i, elt := range cont.in_wids {
-				cont.ext_idx[elt] = make([][]int, iter)
-				raw_in_wid_odd := true
-				if (elt-ker_wid/2)%2 == 0 {
-					raw_in_wid_odd = false
-				}
 
-				for ul := 0; ul < iter; ul++ {
-					cont.ext_idx[elt][ul] = gen_keep_vec_stride(cont.N/2, elt, cont.kp_wids[i], step, ul, raw_in_wid_odd)
-				}
+			cont.ext_idx[step] = make([][]int, iter)
+			raw_in_wid_odd := true
+			if (cont.in_wids[0]-ker_wid/2)%2 == 0 {
+				raw_in_wid_odd = false
 			}
+			for ul := 0; ul < iter; ul++ {
+				cont.ext_idx[step][ul] = gen_keep_vec_stride(cont.N/2, cont.in_wids[0], cont.kp_wids[0], step, ul, raw_in_wid_odd)
+			}
+
 		}
 	case "StrConv":
 		if boot {
@@ -335,6 +334,47 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 			for ul := 0; ul < iter; ul++ {
 				cont.ext_idx[step][ul] = gen_keep_vec_stride(cont.N/2, cont.in_wids[0], cont.kp_wids[i], step, ul, raw_in_wid_odd)
 			}
+		}
+	case "Resnet_crop_fast_wide": // Generate ext_idx for extracting valid values from conv with "same" padding
+		iter = 2 // since we use full padding,
+		for i := 1; i <= 2; i++ {
+			step := 1 << (i - 1)
+			raw_in_wid_odd := true
+			if cont.kp_wids[i]%2 == 0 {
+				raw_in_wid_odd = false
+			}
+			cont.ext_idx[step] = make([][]int, iter)
+			for ul := 0; ul < iter; ul++ {
+				cont.ext_idx[step][ul] = gen_keep_vec_stride(cont.N/2, cont.in_wids[1], cont.kp_wids[i], step, ul, raw_in_wid_odd)
+			}
+		}
+
+		// for first block (normal conv)
+		elt := cont.in_wids[0]
+		cont.ext_idx[elt] = make([][]int, iter)
+		for ul := 0; ul < iter; ul++ {
+			cont.ext_idx[elt][ul] = gen_keep_vec(cont.N/2, elt, cont.kp_wids[0], ul)
+		}
+		cont.r_idx[elt] = make([]map[int][]int, 1)
+		cont.r_idx_l[elt] = make([]map[int][]int, 1)
+		cont.m_idx[elt] = make([]map[int][]int, 1)
+		cont.m_idx_l[elt] = make([]map[int][]int, 1)
+
+		// for first block (stride)
+		pos := 0
+		cont.m_idx[elt][pos], cont.r_idx[elt][pos] = gen_comprs_fast(cont.N/2, elt, 2*cont.kp_wids[1], pos, 0)
+		cont.m_idx_l[elt][pos], cont.r_idx_l[elt][pos] = gen_comprs_fast(cont.N/2, elt, 2*cont.kp_wids[1], pos, 1)
+		for k := range cont.r_idx[elt][pos] {
+			rotations = append(rotations, k)
+		}
+		for k := range cont.r_idx_l[elt][pos] {
+			rotations = append(rotations, k)
+		}
+		for k := range cont.m_idx[elt][pos] {
+			rotations = append(rotations, k)
+		}
+		for k := range cont.m_idx_l[elt][pos] {
+			rotations = append(rotations, k)
 		}
 	case "Resnet_crop": // Generate ext_idx for extracting valid values from conv with "same" padding
 		iter = 2 // since we use full padding,
@@ -667,19 +707,23 @@ func main() {
 	// testConv_BNRelu("StrConv_odd", true)
 	// testConv_BNRelu("StrConv_prep", true)
 
-	testResNet_crop_fast()
+	// testResNet_crop_fast_wide()
+	// testResNet_crop_fast()
 
-	// testConv_BNRelu("Conv_inside", true)
+	// testConv_BNRelu("StrConv_prep", true)
+	// testResNet_crop_fast()
 
 	// testConv_BNRelu("Conv", false)
 
 	// testReduceMean()
 	// testResNet_crop()
 
-	// st, _ := strconv.Atoi(os.Args[1])
-	// end, _ := strconv.Atoi(os.Args[2])
-	// ker_wid, _ := strconv.Atoi(os.Args[3])
+	st, _ := strconv.Atoi(os.Args[1])
+	end, _ := strconv.Atoi(os.Args[2])
+	ker_wid, _ := strconv.Atoi(os.Args[3])
+	// testResNet_crop_fast_wide_in(st, end, ker_wid)
 	// testResNet_crop_in(st, end, ker_wid, true)
+	testResNet_crop_fast_in(st, end, ker_wid)
 
 	// testResNet()
 	// testDCGAN()

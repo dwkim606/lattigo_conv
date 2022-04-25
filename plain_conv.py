@@ -382,19 +382,19 @@ def plain_resnet_bench():
     print("after 3rd block\n", conv, "\n")      
 
 def plain_resnet_crop_bench():
-    init_batch = 4
-    batch = 4
-    ker_width = 3
+    init_batch = 16
+    batch = 16   
+    ker_width = 5
     input_width = 32 - ker_width//2
     vec_size = 3*input_width**2
 
     pad_list = {3: [1,1,1], 5: [2,1,1], 7: [3,2,2]}
-    bn_a = [0.2, 0.2, 0.2]
+    bn_a = [0.02, 0.05, 0.02]
     pad_size = pad_list[ker_width]
 
-    num_bl1 = 2
-    num_bl2 = 2
-    num_bl3 = 2
+    num_bl1 = 3
+    num_bl2 = 3
+    num_bl3 = 3
 
     batch2 = batch*2
     batch3 = batch2*2
@@ -555,9 +555,9 @@ def conv_bnReLU_BL_bench_input(ker_width, case_num, test_num):
 
 def conv_bnReLU_BL_bench(trans, strides, relu):
     batch = 4
-    input_width = 13
+    input_width = 14
     vec_size = batch*input_width**2
-    ker_width = 7
+    ker_width = 5
     bn_a = 0.1
 
     pad_size = [1, 1, 2] 
@@ -750,6 +750,7 @@ def plain_resnet_crop(input_image, ker_name, wide):
             ten_a = tf.reshape(tf.constant(bn_a, tf.float32), [1, in_wid[blc]-bn_pad_size, in_wid[blc]-bn_pad_size, batch[blc]])
             ten_b = tf.reshape(tf.constant(bn_b, tf.float32), [1, in_wid[blc]-bn_pad_size, in_wid[blc]-bn_pad_size, batch[blc]])
             conv = ten_a * conv + ten_b
+            print(i, blc, conv)
             elements_gt = tf.math.greater(tf.reduce_max(tf.math.abs(conv), [1,2,3]),32.0)
             num_elements_gt = tf.math.reduce_sum(tf.cast(elements_gt, tf.int32))
             print("bigger than 32:", num_elements_gt)
@@ -1109,8 +1110,8 @@ def separate_data(num_outs):
         np.savetxt('test_data/test_image_'+str(i)+'.csv',np.reshape(tf_images[i,:,:,:], [-1]), fmt='%.18e', delimiter=',')
 
 def gen_plain_predictions():
-    ker_name = 'ker7_'
-    num_samples = 1000 # or 1000
+    ker_name = 'ker5_'
+    num_samples = 100 # or 1000
     if num_samples == 10000:
         tf_labels = tf.constant(np.loadtxt('Resnet_plain_data/test_labels.csv'), tf.int64)
         tf_images = tf.reshape(tf.constant(np.loadtxt('Resnet_plain_data/test_images.csv'), tf.float32), [num_samples, 32, 32, 3])
@@ -1122,16 +1123,16 @@ def gen_plain_predictions():
     # for i in range(num_samples):
     #     np.savetxt('test_data/test_image_'+str(i)+'.csv',np.reshape(tf_images[i,:,:,:], [-1]), fmt='%.18e', delimiter=',')
 
-    # tf_images = tf_images[:200,:,:,:]
+    # tf_images = tf.reshape(tf_images[0,:,:,:], [1,32,32,3])
     # tf_labels = tf_labels[:200]
 
-    wide = True
+    wide = False
     predictions = plain_resnet_crop(tf_images, ker_name, wide)
     # predictions = plain_resnet(tf_images, ker_name)
     # tf_image = tf_images[0,:,:,:]
     # predictions = plain_fast_resnet(tf_images, ker_name)
     # exit(1)
-    save = True
+    save = False
     if save:
         if wide:
             np.savetxt('Resnet_plain_data/plain_prediction_crop_wide_'+ker_name+str(num_samples)+'.csv',np.reshape(predictions, [-1]), fmt='%.18e', delimiter=',')
@@ -1273,6 +1274,9 @@ def get_seconds(time_str):
 #### Main Start #### 
 
 
+# gen_plain_predictions()
+# exit(1)
+
 # ## reading timing result from *.out
 # result_list = read_out_analysis_time()
 # for res in result_list:
@@ -1331,8 +1335,8 @@ def get_seconds(time_str):
 # exit(1)
 # plain_resnet_bench()
 
-plain_resnet_crop_bench()
-exit(1)
+# plain_resnet_crop_bench()
+# exit(1)
 # gen_plain_predictions()
 
 # post_process_Imgnet(100, 'ker3', False)
@@ -1385,7 +1389,11 @@ exit(1)
 # input_image = tf.reshape(tf.constant(np.array(input_image), tf.float32), [1, 224, 224, 3])
 # plain_imagenet(input_image, 'ker5_')
 
-post_process_crop(100, 'ker7', True, False)
+# plain_resnet_crop_bench()
+# exit(1)
+
+post_process_crop(10, 'ker7', True, False)
+
 # post_process(100, 'ker7_', False)
 # exit(1)
 # num_samples = 1000
