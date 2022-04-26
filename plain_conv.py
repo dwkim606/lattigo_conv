@@ -382,19 +382,19 @@ def plain_resnet_bench():
     print("after 3rd block\n", conv, "\n")      
 
 def plain_resnet_crop_bench():
-    init_batch = 16
+    init_batch = 4
     batch = 16   
-    ker_width = 5
+    ker_width = 3
     input_width = 32 - ker_width//2
     vec_size = 3*input_width**2
 
     pad_list = {3: [1,1,1], 5: [2,1,1], 7: [3,2,2]}
-    bn_a = [0.02, 0.05, 0.02]
+    bn_a = [0.2, 0.2, 0.1]
     pad_size = pad_list[ker_width]
 
-    num_bl1 = 3
-    num_bl2 = 3
-    num_bl3 = 3
+    num_bl1 = 2
+    num_bl2 = 1
+    num_bl3 = 1
 
     batch2 = batch*2
     batch3 = batch2*2
@@ -695,6 +695,101 @@ def plain_resnet(input_image, ker_name):
     # conv = tf.argmax(conv, 1)
     return conv
 
+def plain_resnet_crop_new(input_image, ker, depth, wide, num_iter):
+    in_dir = 'Resnet_weights/weights_crop_ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wide)+'/'
+
+    in_wid = [32, 16, 8]    
+    init_batch = 16
+    batch = [16*wide, 32*wide, 64*wide]
+    
+    blc_list = {20: [7,6,6], 14: [5,4,4], 8: [3,2,2]} # depend on depth
+    pad_list = {3: [1,1,1], 5: [2,1,1], 7: [3,2,2]} # depend on ker
+    ker_wid = ker
+    ker_size = ker_wid**2
+    blcs = blc_list[depth]
+    pad_size = pad_list[ker]
+    bn_pad_size = pad_size[0]
+
+    conv = input_image
+    num = 0
+    for blc in range(3):
+        for i in range(blcs[blc]):
+            if i == 0:
+                if blc == 0:
+                    ten_k = tf.reshape(tf.constant(np.loadtxt(in_dir+'w'+str(num)+'-conv.csv'), tf.float32), [ker_wid, ker_wid, 3, init_batch])
+                    conv = Cropping2D(cropping=((0,pad_size[blc]), (0,pad_size[blc])))(conv)
+                    conv = tf.nn.conv2d(conv, ten_k, strides = [1,1,1,1], padding = "SAME")
+                else:
+                    ten_k = tf.reshape(tf.constant(np.loadtxt(in_dir+'w'+str(num)+'-conv.csv'), tf.float32), [ker_wid, ker_wid, batch[blc-1], batch[blc]])
+                    conv = tf.nn.conv2d(conv, ten_k, strides = [1,2,2,1], padding = "SAME")
+                    conv = Cropping2D(cropping=((0,pad_size[blc]), (0,pad_size[blc])))(conv)
+            elif (i == 1) and (blc == 0):
+                ten_k = tf.reshape(tf.constant(np.loadtxt(in_dir+'w'+str(num)+'-conv.csv'), tf.float32), [ker_wid, ker_wid, init_batch, batch[blc]])
+                conv = tf.nn.conv2d(conv, ten_k, strides = [1,1,1,1], padding = "SAME")
+            else:
+                ten_k = tf.reshape(tf.constant(np.loadtxt(in_dir+'w'+str(num)+'-conv.csv'), tf.float32), [ker_wid, ker_wid, batch[blc], batch[blc]])
+                conv = tf.nn.conv2d(conv, ten_k, strides = [1,1,1,1], padding = "SAME")
+            
+            bn_a = [[np.loadtxt(in_dir+'w'+str(num)+'-a.csv') for i in range(in_wid[blc]-bn_pad_size)] for j in range(in_wid[blc]-bn_pad_size)]
+            bn_b = [[np.loadtxt(in_dir+'w'+str(num)+'-b.csv') for i in range(in_wid[blc]-bn_pad_size)] for j in range(in_wid[blc]-bn_pad_size)]
+            if (blc == 0) and (i == 0):
+                ten_a = tf.reshape(tf.constant(bn_a, tf.float32), [1, in_wid[blc]-bn_pad_size, in_wid[blc]-bn_pad_size, init_batch])
+                ten_b = tf.reshape(tf.constant(bn_b, tf.float32), [1, in_wid[blc]-bn_pad_size, in_wid[blc]-bn_pad_size, init_batch])    
+            else:
+                ten_a = tf.reshape(tf.constant(bn_a, tf.float32), [1, in_wid[blc]-bn_pad_size, in_wid[blc]-bn_pad_size, batch[blc]])
+                ten_b = tf.reshape(tf.constant(bn_b, tf.float32), [1, in_wid[blc]-bn_pad_size, in_wid[blc]-bn_pad_size, batch[blc]])
+            conv = ten_a * conv + ten_b
+            elements_gt = tf.math.greater(tf.reduce_max(tf.math.abs(conv), [1,2,3]),32.0)
+            num_elements_gt = tf.math.reduce_sum(tf.cast(elements_gt, tf.int32))
+            print("bigger than 32:", num_elements_gt)
+            print("max:", tf.reduce_max(conv, [0,1,2,3]))
+            conv = tf.nn.relu(conv)
+            # print(i, blc, conv)
+            # if i == 0:
+            #     print(blc," to ", blc+1," block. ")
+            #     # print(conv)
+            # else:
+            #     print(blc+1,"-th block, ", i,"-th layer")
+            #     # print(conv)
+            num += 1
+            # print(i+1,"layer done\n")
+        # print("after", blc_iter+1, "-th block\n", conv, "\n")
+
+    # conv = conv * ten_pad # zeroizing the relus(ten_b) part!!
+    ten_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fckernel.csv'), tf.float32), [1, 1, batch[2], 10])
+    bias_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fcbias.csv'), tf.float32), [10])
+    conv = tf.reduce_mean(conv, [1,2], keepdims = True)
+    conv = tf.nn.conv2d(conv, ten_final, strides = [1,1,1,1], padding = "SAME")
+    conv = conv + bias_final
+
+    conv = tf.squeeze(conv, axis=[1,2])
+    # print("result", conv)
+    # conv = tf.argmax(conv, 1)
+    return conv
+
+def gen_plain_predictions_new(ker, depth, wide, num_iter):
+    num_samples = 100 # or 1000
+    if num_samples == 10000:
+        tf_labels = tf.constant(np.loadtxt('Resnet_plain_data/test_labels.csv'), tf.int64)
+        tf_images = tf.reshape(tf.constant(np.loadtxt('Resnet_plain_data/test_images.csv'), tf.float32), [num_samples, 32, 32, 3])
+    else:
+        tf_labels = tf.constant(np.loadtxt('Resnet_plain_data/test_labels_'+str(num_samples)+'.csv'), tf.int64)
+        tf_images = tf.reshape(tf.constant(np.loadtxt('Resnet_plain_data/test_images_'+str(num_samples)+'.csv'), tf.float32), [num_samples, 32, 32, 3])
+
+    # tf_images = tf.reshape(tf_images[0,:,:,:], [1,32,32,3])
+    # tf_labels = tf_labels[:200]
+
+    predictions = plain_resnet_crop_new(tf_images, ker, depth, wide, num_iter)
+    # predictions = plain_fast_resnet(tf_images, ker_name)
+
+    save = True
+    if save:
+        np.savetxt('Resnet_plain_data/plain_prediction_crop_ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wide)+'_'+str(num_samples)+'.csv',np.reshape(predictions, [-1]), fmt='%.18e', delimiter=',')
+        
+    print("num samples: ", len(tf_labels), "precision: ", tf.reduce_mean(tf.cast(tf.equal(tf.argmax(predictions, 1), tf_labels), 'float32')))
+
+
+
 def plain_resnet_crop(input_image, ker_name, wide):
     # ker_name = ker3_
     in_dir = 'weight_'+ker_name+'crop_h5/'
@@ -729,7 +824,7 @@ def plain_resnet_crop(input_image, ker_name, wide):
     # raw_input = [0.1*i/3000.0 for i in range(32*32*3)]
     # conv = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, in_wid[0], in_wid[0], 3])
     conv = input_image
-
+    print("input", conv)
     num = 0
     for blc in range(3):
         for i in range(blcs[blc]):
@@ -750,12 +845,12 @@ def plain_resnet_crop(input_image, ker_name, wide):
             ten_a = tf.reshape(tf.constant(bn_a, tf.float32), [1, in_wid[blc]-bn_pad_size, in_wid[blc]-bn_pad_size, batch[blc]])
             ten_b = tf.reshape(tf.constant(bn_b, tf.float32), [1, in_wid[blc]-bn_pad_size, in_wid[blc]-bn_pad_size, batch[blc]])
             conv = ten_a * conv + ten_b
-            print(i, blc, conv)
             elements_gt = tf.math.greater(tf.reduce_max(tf.math.abs(conv), [1,2,3]),32.0)
             num_elements_gt = tf.math.reduce_sum(tf.cast(elements_gt, tf.int32))
             print("bigger than 32:", num_elements_gt)
             print("max:", tf.reduce_max(conv, [0,1,2,3]))
             conv = tf.nn.relu(conv)
+            # print(i, blc, conv)
             # if i == 0:
             #     print(blc," to ", blc+1," block. ")
             #     # print(conv)
@@ -774,6 +869,7 @@ def plain_resnet_crop(input_image, ker_name, wide):
     conv = conv + bias_final
 
     conv = tf.squeeze(conv, axis=[1,2])
+    # print("result", conv)
     # conv = tf.argmax(conv, 1)
     return conv
 
@@ -954,13 +1050,14 @@ def post_process_crop(iter_num, ker_name, wide, base_line):
     # base_line = False
     
     num_samples = 1000
-    pred = np.reshape(np.loadtxt('Resnet_plain_data/plain_prediction_crop_'+ker_name+'_'+str(num_samples)+'.csv'), [num_samples, 10])    
     if wide:
         pred = np.reshape(np.loadtxt('Resnet_plain_data/plain_prediction_crop_wide_'+ker_name+'_'+str(num_samples)+'.csv'), [num_samples, 10])    
+    else:
+        pred = np.reshape(np.loadtxt('Resnet_plain_data/plain_prediction_crop_'+ker_name+'_'+str(num_samples)+'.csv'), [num_samples, 10])    
     true_pred = np.reshape(np.loadtxt('Resnet_plain_data/test_labels_'+str(num_samples)+'.csv'), [num_samples])    
     enc_result_dir = 'result_'+ker_name+'_crop_h5/'
     if wide:
-        enc_result_dir = 'result_'+ker_name+'_wide_crop_h5/'
+        enc_result_dir = 'result_'+ker_name+'_crop_wide_h5/'
     if base_line:
         enc_result_dir = enc_result_dir + "BL"
 
@@ -1110,7 +1207,7 @@ def separate_data(num_outs):
         np.savetxt('test_data/test_image_'+str(i)+'.csv',np.reshape(tf_images[i,:,:,:], [-1]), fmt='%.18e', delimiter=',')
 
 def gen_plain_predictions():
-    ker_name = 'ker5_'
+    ker_name = 'ker3_'
     num_samples = 100 # or 1000
     if num_samples == 10000:
         tf_labels = tf.constant(np.loadtxt('Resnet_plain_data/test_labels.csv'), tf.int64)
@@ -1126,7 +1223,7 @@ def gen_plain_predictions():
     # tf_images = tf.reshape(tf_images[0,:,:,:], [1,32,32,3])
     # tf_labels = tf_labels[:200]
 
-    wide = False
+    wide = True
     predictions = plain_resnet_crop(tf_images, ker_name, wide)
     # predictions = plain_resnet(tf_images, ker_name)
     # tf_image = tf_images[0,:,:,:]
@@ -1273,7 +1370,7 @@ def get_seconds(time_str):
 
 #### Main Start #### 
 
-
+# gen_plain_predictions_new(3, 20, 3, 2)
 # gen_plain_predictions()
 # exit(1)
 
@@ -1345,7 +1442,6 @@ def get_seconds(time_str):
 # plain_imagenet_bench()
 
 
-# gen_plain_predictions()
 
 # # Imagnet test, take mid_input = np.loadtxt('Imagenet/ker3_ct_in/ker3_ct_in'+str(i)+'.csv')
 # total = 0
@@ -1392,7 +1488,7 @@ def get_seconds(time_str):
 # plain_resnet_crop_bench()
 # exit(1)
 
-post_process_crop(10, 'ker7', True, False)
+post_process_crop(10, 'ker5', False, False)
 
 # post_process(100, 'ker7_', False)
 # exit(1)

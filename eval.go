@@ -34,7 +34,7 @@ func set_Variables(batch, raw_in_wid, in_wid, ker_wid int, kind string) (kp_wid,
 			fmt.Println("max raw_in_wid: ", max_kp_wid)
 			panic("too large raw_in_wid.")
 		}
-	case "StrConv_prep":
+	case "StrConv_inside":
 		trans = false
 		kp_wid = (in_wid/2 - ker_wid/2)
 		out_batch = batch
@@ -625,7 +625,7 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	switch kind {
 	case "Conv_inside":
 		inside = true
-	case "StrConv_prep":
+	case "StrConv_inside":
 		in_step = step / 2
 		if step%2 != 0 {
 			panic("step can not be divided by 2 (for strided conv)")
@@ -638,6 +638,9 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 		odd = true
 	case "TransConv":
 		trans = true
+	case "Conv":
+	default:
+		panic("No kind!")
 	}
 
 	if odd { // multiply x^{offset} before conv to move input to appropriate position.
@@ -803,7 +806,7 @@ func debugStoC(cont *context, slot1, slot2 []complex128, in_wid, kp_wid, pos, st
 	case "Conv":
 		tmp1 = keep_vec(slot1_fl, in_wid, kp_wid, 0)
 		tmp2 = keep_vec(slot2_fl, in_wid, kp_wid, 1)
-	case "StrConv_prep", "Conv_inside":
+	case "StrConv_inside", "Conv_inside":
 		tmp1 = keep_vec_stride(slot1_fl, in_wid, kp_wid, step, 0, raw_in_wid_odd)
 		tmp2 = keep_vec_stride(slot2_fl, in_wid, kp_wid, step, 1, raw_in_wid_odd)
 	case "StrConv", "StrConv_fast", "StrConv_odd":
@@ -817,6 +820,8 @@ func debugStoC(cont *context, slot1, slot2 []complex128, in_wid, kp_wid, pos, st
 	case "TransConv":
 		tmp1 = extend_full(slot1_fl, in_wid, kp_wid, 0, 0)
 		tmp2 = extend_full(slot2_fl, in_wid, kp_wid, 0, 1)
+	default:
+		panic("No kind!")
 	}
 
 	cfs_postB1 := make([]float64, len(slot1))
