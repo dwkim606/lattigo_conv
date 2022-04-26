@@ -31,11 +31,11 @@ def name_change(in_dir):
     for blc in blocks:
         for unit in units:
             for sub in subs:
-                for i in range(len(kinds)):
-                    if os.path.exists(os.path.join(in_dir,initial+str(blc)+mid+str(unit)+end+str(sub)+'-'+kinds[i]+'.csv')):
+                if os.path.exists(os.path.join(in_dir,initial+str(blc)+mid+str(unit)+end+str(sub)+'-'+kinds[0]+'.csv')):
+                    for i in range(len(kinds)):
                         os.rename(os.path.join(in_dir,initial+str(blc)+mid+str(unit)+end+str(sub)+'-'+kinds[i]+'.csv'), os.path.join(in_dir,f_initial+f_mid+str(num)+'-'+f_kinds[i]+'.csv'))
                         conversion = True
-                num += 1
+                    num += 1
     if not conversion:
         raise NameError('Err: No conversion for bn.\n')
         # print("No conversion for bn.\n")
@@ -91,24 +91,22 @@ def name_change(in_dir):
 # name_change()
 def bn_prep(in_dir):
     num = 0
-    for blc in blocks:
-        for unit in units:
-            for sub in subs:
-                beta = np.loadtxt(os.path.join(in_dir,f_initial+f_mid+str(num)+'-beta.csv'))
-                gamma = np.loadtxt(os.path.join(in_dir,f_initial+f_mid+str(num)+'-gamma.csv'))
-                mean = np.loadtxt(os.path.join(in_dir,f_initial+f_mid+str(num)+'-mean.csv'))
-                var = np.loadtxt(os.path.join(in_dir,f_initial+f_mid+str(num)+'-var.csv'))
+    while os.path.exists(os.path.join(in_dir,f_initial+f_mid+str(num)+'-beta.csv')):
+        beta = np.loadtxt(os.path.join(in_dir,f_initial+f_mid+str(num)+'-beta.csv'))
+        gamma = np.loadtxt(os.path.join(in_dir,f_initial+f_mid+str(num)+'-gamma.csv'))
+        mean = np.loadtxt(os.path.join(in_dir,f_initial+f_mid+str(num)+'-mean.csv'))
+        var = np.loadtxt(os.path.join(in_dir,f_initial+f_mid+str(num)+'-var.csv'))
 
-                bn_a = gamma / np.sqrt(var + 0.001)
-                bn_b = beta - mean * gamma / np.sqrt(var + 0.001) 
-                
-                np.savetxt(os.path.join(in_dir,f_initial+f_mid+str(num)+'-a.csv'), bn_a, fmt='%.18e', delimiter=',')
-                np.savetxt(os.path.join(in_dir,f_initial+f_mid+str(num)+'-b.csv'), bn_b, fmt='%.18e', delimiter=',')
-                os.remove(os.path.join(in_dir,f_initial+f_mid+str(num)+'-beta.csv'))
-                os.remove(os.path.join(in_dir,f_initial+f_mid+str(num)+'-gamma.csv'))
-                os.remove(os.path.join(in_dir,f_initial+f_mid+str(num)+'-mean.csv'))
-                os.remove(os.path.join(in_dir,f_initial+f_mid+str(num)+'-var.csv'))
-                num += 1
+        bn_a = gamma / np.sqrt(var + 0.001)
+        bn_b = beta - mean * gamma / np.sqrt(var + 0.001) 
+        
+        np.savetxt(os.path.join(in_dir,f_initial+f_mid+str(num)+'-a.csv'), bn_a, fmt='%.18e', delimiter=',')
+        np.savetxt(os.path.join(in_dir,f_initial+f_mid+str(num)+'-b.csv'), bn_b, fmt='%.18e', delimiter=',')
+        os.remove(os.path.join(in_dir,f_initial+f_mid+str(num)+'-beta.csv'))
+        os.remove(os.path.join(in_dir,f_initial+f_mid+str(num)+'-gamma.csv'))
+        os.remove(os.path.join(in_dir,f_initial+f_mid+str(num)+'-mean.csv'))
+        os.remove(os.path.join(in_dir,f_initial+f_mid+str(num)+'-var.csv'))
+        num += 1
 
     beta = np.loadtxt(os.path.join(in_dir,'final-beta.csv'))
     gamma = np.loadtxt(os.path.join(in_dir,'final-gamma.csv'))

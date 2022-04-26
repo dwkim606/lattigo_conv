@@ -430,7 +430,7 @@ func evalRMFC_BL_old(cont *context, ct_input *ckks.Ciphertext, ker_fc, bias []fl
 // in_wid must be Po2 (also include padding),
 // include kernel preparation
 // norm = 2 : in&out batches are (1,0,2,0,3,0,...)
-func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob, norm int, out_scale float64, printResult, trans bool) (ct_res *ckks.Ciphertext) {
+func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, in_wid, ker_wid, real_ib, real_ob, norm int, out_scale float64, trans bool) (ct_res *ckks.Ciphertext) {
 	max_batch := cont.N / (in_wid * in_wid)
 
 	// fmt.Println()
@@ -542,7 +542,7 @@ func evalConv_BN_sep(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, ker_wid, real_ib, real_ob, norm, pack_pos, step int, padding, stride, printResult bool) (ct_res *ckks.Ciphertext) {
 	trans := false
 	kp_wid := in_wid / 2 // - ((ker_wid - 1) / 2)
-	ct_conv := evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), printResult, trans)
+	ct_conv := evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), trans)
 	ct_conv.Scale = ct_conv.Scale * math.Pow(2, pow)
 	cfs_preB := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
 	fmt.Println("Bootstrapping... Ours (until CtoS):")
@@ -614,7 +614,7 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 // pack_pos: position to pack (0,1,2,3): only for strided case
 // real_ib, real_ob: real number of batches (less or equal than max_batch)
 // step: step of the output
-func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, kp_wid, ker_wid, real_ib, real_ob, norm, pack_pos, step, iter int, kind string, fast_pack, printResult bool) (ct_res *ckks.Ciphertext) {
+func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha float64, in_wid, kp_wid, ker_wid, real_ib, real_ob, norm, pack_pos, step, iter int, kind string, fast_pack, debug bool) (ct_res *ckks.Ciphertext) {
 	// iter := 2 // for full packing (contrary to half packing)
 	var trans, stride, odd, inside bool
 	odd = false
@@ -651,7 +651,7 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 			offset = cont.N / (in_wid * in_wid) * (in_wid + 1)
 			// offset = real_ib * norm * (in_wid + 1)
 		}
-		fmt.Println("offset: ", offset)
+		// fmt.Println("offset: ", offset)
 		xi := make([]float64, cont.N)
 		xi[offset] = 1.0
 		xi_plain := ckks.NewPlaintext(cont.params, cont.ECD_LV, 1.0)
@@ -674,9 +674,9 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 				}
 			}
 		}
-		ct_conv = evalConv_BN(cont, ct_input, new_ker_in, bn_a, bn_b, in_wid, new_ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), printResult, trans)
+		ct_conv = evalConv_BN(cont, ct_input, new_ker_in, bn_a, bn_b, in_wid, new_ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), trans)
 	} else {
-		ct_conv = evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), printResult, trans)
+		ct_conv = evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), trans)
 	}
 
 	ct_conv.Scale = ct_conv.Scale * math.Pow(2, pow)
@@ -689,9 +689,12 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	fmt.Println("after Boot (CtoS): LV = ", ct_boots[0].Level(), " Scale = ", math.Log2(ct_boots[0].Scale))
 
 	// Only for checking the correctness (for CtoS)
-	slot1, slot2 := debugCtoS(cont, cfs_preB)
-	slot1 = printDebug(cont.params, ct_boots[0], slot1, cont.decryptor, cont.encoder) // Compare before & after CtoS
-	slot2 = printDebug(cont.params, ct_boots[1], slot2, cont.decryptor, cont.encoder) // Compare before & after CtoS
+	var slot1, slot2 []complex128
+	if debug {
+		slot1, slot2 = debugCtoS(cont, cfs_preB)
+		slot1 = printDebug(cont.params, ct_boots[0], slot1, cont.decryptor, cont.encoder) // Compare before & after CtoS
+		slot2 = printDebug(cont.params, ct_boots[1], slot2, cont.decryptor, cont.encoder) // Compare before & after CtoS
+	}
 
 	start = time.Now()
 	for ul := 0; ul < iter; ul++ { // up & low parts
@@ -702,10 +705,13 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	fmt.Println("after Relu: ", math.Log2(ct_boots[0].Scale), "lv: ", ct_boots[0].Level())
 
 	// Only for checking the correctness (for ReLU)
-	relu1, relu2 := debugReLU(cont, slot1, slot2, alpha)
-	relu1 = printDebug(cont.params, ct_boots[0], relu1, cont.decryptor, cont.encoder)
-	relu2 = printDebug(cont.params, ct_boots[1], relu2, cont.decryptor, cont.encoder)
-	cfs_postB := debugStoC(cont, relu1, relu2, in_wid, kp_wid, pack_pos, step, kind, fast_pack)
+	var cfs_postB []float64
+	if debug {
+		relu1, relu2 := debugReLU(cont, slot1, slot2, alpha)
+		relu1 = printDebug(cont.params, ct_boots[0], relu1, cont.decryptor, cont.encoder)
+		relu2 = printDebug(cont.params, ct_boots[1], relu2, cont.decryptor, cont.encoder)
+		cfs_postB = debugStoC(cont, relu1, relu2, in_wid, kp_wid, pack_pos, step, kind, fast_pack)
+	}
 
 	start = time.Now()
 	ct_keep := make([]*ckks.Ciphertext, iter) // for extend (rotation) of ctxt_in
@@ -745,8 +751,8 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	fmt.Printf("Boot (StoC) Done in %s \n", time.Since(start))
 	fmt.Printf("Boot out: ")
 	// Only for checking the correctness (for StoC)
-	printDebugCfs(cont.params, ct_res, cfs_postB, cont.decryptor, cont.encoder)
-	if printResult {
+	if debug {
+		printDebugCfs(cont.params, ct_res, cfs_postB, cont.decryptor, cont.encoder)
 		max_batch := cont.N / (in_wid * in_wid)
 		res_tmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_res))
 		if inside {

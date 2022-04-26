@@ -50,18 +50,22 @@ def read_ResNet(filename, out_dir):
 
 #### Main Start #### 
 
+# read h5 files
+# convert into csv files and save into folder with the same name
+# rename it for plain python and lattigo
+
 weight_dir = "Resnet_weights/"
 for filename in os.listdir(weight_dir):
     if filename.endswith(".h5"):                        # only read h5 file
-        new_filename = filename.replace('nsk_','')      # remove 'nsk_'
-        foldername = new_filename.rsplit(".h5")[0]
+        foldername = filename.replace('nsk_','').rsplit('_iter')[0]
+        new_filename = foldername+".h5"
         out_folder_dir = os.path.join(weight_dir, foldername)
         try:
             os.mkdir(out_folder_dir)          # make folder with weight name
             os.replace(os.path.join(weight_dir, filename), os.path.join(out_folder_dir, new_filename))
             read_ResNet(os.path.join(out_folder_dir, new_filename), out_folder_dir)
-            wpb.name_change(out_folder_dir)
-            wpb.bn_prep(out_folder_dir)
+            wpb.name_change(out_folder_dir)     # change weights name
+            wpb.bn_prep(out_folder_dir)         # bn weights into a and b
         except OSError as error:
             print(error)
         except NameError as error:

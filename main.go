@@ -20,7 +20,7 @@ const log_c_scale = 30
 const log_in_scale = 30
 const log_out_scale = 30
 
-const pow = 5 // making sure that ReLu can cover values in [-2^pow, 2^pow].
+const pow = 6 // making sure that ReLu can cover values in [-2^pow, 2^pow].
 
 type context struct {
 	logN    int
@@ -766,10 +766,11 @@ func main() {
 	ker_wid, _ := strconv.Atoi(os.Args[3])
 	dep_case, _ := strconv.Atoi(os.Args[4])
 	wide_case, _ := strconv.Atoi(os.Args[5])
+	debug := false
 	if wide_case == 1 {
-		testResNet_crop_fast_in(st, end, ker_wid, dep_case)
+		testResNet_crop_fast_in(st, end, ker_wid, dep_case, debug)
 	} else {
-		testResNet_crop_fast_wide_in(st, end, ker_wid, dep_case, wide_case)
+		testResNet_crop_fast_wide_in(st, end, ker_wid, dep_case, wide_case, debug)
 	}
 
 	// testResNet_crop_fast_in(st, end, ker_wid, dep_case)

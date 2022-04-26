@@ -34,3 +34,5 @@ result_ker7_crop_h5
 result_ker7_wide_crop_h5
 result_ker3_crop_wide_h5
 Resnet_weights
+result_crop_*
+out
