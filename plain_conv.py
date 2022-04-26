@@ -383,18 +383,18 @@ def plain_resnet_bench():
 
 def plain_resnet_crop_bench():
     init_batch = 4
-    batch = 16   
+    batch = 12   
     ker_width = 3
-    input_width = 32 - ker_width//2
+    input_width = 16 - ker_width//2
     vec_size = 3*input_width**2
 
     pad_list = {3: [1,1,1], 5: [2,1,1], 7: [3,2,2]}
-    bn_a = [0.2, 0.2, 0.1]
+    bn_a = [0.1, 0.1, 0.1]
     pad_size = pad_list[ker_width]
 
     num_bl1 = 2
-    num_bl2 = 1
-    num_bl3 = 1
+    num_bl2 = 2
+    num_bl3 = 2
 
     batch2 = batch*2
     batch3 = batch2*2
@@ -410,9 +410,9 @@ def plain_resnet_crop_bench():
     ker0 = [(0.25 * i)/(3 * init_batch * ker_size) for i in range(3 * init_batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
     ker01 = [(0.25 * i)/(init_batch * batch * ker_size) for i in range(init_batch * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
     ker =  [(0.25 * i)/(batch * batch * ker_size) for i in range(batch * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
-    ker12 = [(0.25 * i)/(batch * batch2 * ker_size) for i in range(batch * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker12 = [(0.25*i)/(batch*batch2*ker_size)for i in range(batch * batch2 * ker_size)]  #[(1000.0 * 1)/(batch * batch2 * ker_size) for i in range(batch * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
     ker2 = [(0.25 * i)/(batch2 * batch2 * ker_size) for i in range(batch2 * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
-    ker23 = [(0.25 * 100)/(batch2 * batch3 * ker_size) for i in range(batch2 * batch3 * ker_size)]  # (0.5 * i)/(batch2 * batch3 * ker_size) #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker23 = [(0.25 * i)/(batch2 * batch3 * ker_size) for i in range(batch2 * batch3 * ker_size)]  # (0.5 * i)/(batch2 * batch3 * ker_size) #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
     ker3 = [(0.25 * i)/(batch3 * batch3 * ker_size) for i in range(batch3 * batch3 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
     fc_a = [0.1*i for i in range(batch3*10)]
     fc_b = [0.0*i for i in range(10)]
@@ -1432,8 +1432,8 @@ def get_seconds(time_str):
 # exit(1)
 # plain_resnet_bench()
 
-# plain_resnet_crop_bench()
-# exit(1)
+plain_resnet_crop_bench()
+exit(1)
 # gen_plain_predictions()
 
 # post_process_Imgnet(100, 'ker3', False)

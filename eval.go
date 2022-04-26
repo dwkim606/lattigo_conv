@@ -648,7 +648,8 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 		if (in_wid-ker_wid/2)%2 == 0 {
 			offset = 0
 		} else {
-			offset = real_ib * norm * (in_wid + 1)
+			offset = cont.N / (in_wid * in_wid) * (in_wid + 1)
+			// offset = real_ib * norm * (in_wid + 1)
 		}
 		fmt.Println("offset: ", offset)
 		xi := make([]float64, cont.N)

@@ -1133,7 +1133,7 @@ func testResNet_crop_fast_in(st, end, ker_wid, dep_case int) {
 		res_tmp := cont.encoder.DecodeCoeffs(pl_input)
 		fmt.Printf("Decryption Done in %s \n", time.Since(new_start))
 		res_out := prt_mat_one_norm(res_tmp, max_batch[0], norm[2], ker_inf_wid/2+1, ker_inf_wid/2+1)
-		fmt.Print(res_out)
+		// fmt.Print(res_out)
 		fmt.Println("\n result: ", res_out[:fc_out])
 		writeTxt(out_dir+"class_result_"+ker_name+"_"+strconv.Itoa(iter)+".csv", res_out[:fc_out])
 
@@ -1180,7 +1180,7 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, dep_case, wide_case int) {
 		prt_start[2] = 2
 	}
 	if wide_case == 3 {
-		real_batch = []int{64, 128, 256}
+		real_batch = []int{48, 96, 192}
 		norm = []int{1, 2, 1}
 		kind = "Resnet_crop_fast_wide3"
 	} else if wide_case != 2 {
@@ -1394,7 +1394,7 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, dep_case, wide_case int) {
 		res_tmp := cont.encoder.DecodeCoeffs(pl_input)
 		fmt.Printf("Decryption Done in %s \n", time.Since(new_start))
 		res_out := prt_mat_one_norm(res_tmp, max_batch[1], norm[2], ker_inf_wid/2+1, ker_inf_wid/2+1)
-		fmt.Print(res_out)
+		// fmt.Print(res_out)
 		fmt.Println("\n result: ", res_out[:fc_out])
 		writeTxt(out_dir+"class_result_"+ker_name+"_"+strconv.Itoa(iter)+".csv", res_out[:fc_out])
 
@@ -3123,7 +3123,7 @@ func testResNet_crop_fast_wide() {
 	// Do not use rotation for strided conv (at 32), use StrConv_inside and Conv_inside instead
 
 	wide := 3
-	logN := 14
+	logN := 12
 	ker_wid := 3
 	init_batch := 4
 	real_batch := []int{8, 16, 32} // same as python
@@ -3137,20 +3137,20 @@ func testResNet_crop_fast_wide() {
 	}
 
 	if wide == 3 {
-		real_batch = []int{16, 32, 64}
+		real_batch = []int{12, 24, 48}
 		norm = []int{1, 2, 1}
 	}
 
-	in_wids := []int{32, 16, 8}
-	raw_in_wids := []int{32 - ker_wid/2, 16 - ker_wid/2, 8 - ker_wid/2} // same as python
+	in_wids := []int{16, 8, 4}
+	raw_in_wids := []int{16 - ker_wid/2, 8 - ker_wid/2, 4 - ker_wid/2} // same as python
 	alpha := 0.0
 	fc_out := 10
 	fast_pack := true
 
-	py_bn_a := []float64{0.2, 0.2, 0.1}
+	py_bn_a := []float64{0.1, 0.1, 0.1}
 	num_blc1 := 2
-	num_blc2 := 1
-	num_blc3 := 1
+	num_blc2 := 2
+	num_blc3 := 2
 
 	kind := "Resnet_crop_fast_wide2"
 	if wide == 3 {
@@ -3218,7 +3218,7 @@ func testResNet_crop_fast_wide() {
 	}
 	ker_in23 := make([]float64, real_batch[1]*real_batch[2]*ker_size)
 	for i := range ker_in23 {
-		ker_in23[i] = 0.25 * float64(100) / float64(len(ker_in23))
+		ker_in23[i] = 0.25 * float64(i) / float64(len(ker_in23))
 	}
 	ker_in23_new := make([]float64, 2*real_batch[1]*real_batch[2]*ker_size)
 	for k := 0; k < ker_size; k++ {
