@@ -119,10 +119,10 @@ def final_post_process(iter_num, crop, ker, depth, wid):
 
     if crop:
         plain_pred_file = 'Resnet_plain_data/plain_prediction_crop_ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)+'_'+str(max_num_samples)+'.csv'
-        enc_result_dir = 'result_crop_ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)+'/'
+        enc_result_dir = 'Resnet_enc_results/result_crop_ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)+'/'
     else:
         plain_pred_file = 'Resnet_plain_data/plain_prediction_ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)+'_'+str(max_num_samples)+'.csv'
-        enc_result_dir = 'result_ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)+'/'
+        enc_result_dir = 'Resnet_enc_results/result_ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)+'/'
 
     plain_pred = np.reshape(np.loadtxt(plain_pred_file), [max_num_samples, 10])    
     true_pred = np.reshape(np.loadtxt('Resnet_plain_data/test_labels_'+str(max_num_samples)+'.csv'), [max_num_samples])    
@@ -201,6 +201,7 @@ def read_out_analysis_time(prefix, os_path):
                     if prefix == "(until CtoS):":
                         time_str = next(read_obj,'').strip("Done in")
                     else:
+                        # time_str = line.strip("Boot out: ").strip(prefix)
                         time_str = line.strip(prefix)
                     
                     if new_iter:
@@ -285,6 +286,7 @@ def get_seconds(time_str):
         except:
             m = 0
             s, _ = time_str.split('s')
+            
         
     return float(m)*60 + float(s) + float(ms)*0.001
 
@@ -297,22 +299,29 @@ crop = True
 ker = 5
 depth = 8 
 wide = 3
-final_gen_plain_predictions(crop, ker, depth, wide)
-exit(1)
-final_post_process(10, crop, ker, depth, wide)    
+# final_gen_plain_predictions(crop, ker, depth, wide)
+# final_post_process(10, crop, ker, depth, wide)    
 
 ## read output timing ##
 
-# prefix = "Total done in "
-# prefix = "Conv (with BN) Done in" 
-# prefix = "(until CtoS):"
-# prefix = "Eval: Eval: ReLU Done in"
-# prefix = "Boot (StoC) Done in "
-# prefix = "Final (reduce_mean & FC):"
-os_path = 'out/out_cr_k5_d1_w2.txt'
 
-for prefix in "Total done in ", "Conv (with BN) Done in" , "(until CtoS):", "Eval: Eval: ReLU Done in", "Boot (StoC) Done in ", "Final (reduce_mean & FC):":
+# prefix = "Final (reduce_mean & FC):"
+
+prefix_choices = [
+"Total done in ", 
+"Conv (with BN) Done in",
+"(until CtoS):",
+"Eval: Eval: ReLU Done in",
+"Boot (StoC) Done in ",
+"Plaintext (kernel) preparation, Done in",
+"for odd stride, offset time"]
+
+# os_path = 'out/out_cr_k'+str(ker)+'_d'+str(depth)+'_w'+str(wide)+'.txt'
+os_path = 'out/out_cr_k5_d8_w3.txt'
+
+for prefix in prefix_choices:
     result_count, result_list = read_out_analysis_time(prefix, os_path)
     for res in result_list:
         print(round(res, prec), end=', ')
-    print("\n\n", prefix, result_count, "each", " total iters: ", len(result_list), "mean: ", round(mean(result_list), prec), "std: ", round(stdev(result_list), prec), "min/max: ", min(result_list), "/", max(result_list), "\n\n")
+    print("\n\n", prefix, result_count, "each", " total iters: ", len(result_list), "\n\n")
+    # print("\n\n", prefix, result_count, "each", " total iters: ", len(result_list), "mean: ", round(mean(result_list), prec), "std: ", round(stdev(result_list), prec), "min/max: ", min(result_list), "/", max(result_list), "\n\n")

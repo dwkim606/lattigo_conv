@@ -83,7 +83,7 @@ func testConv_noBoot_BL(in_kind string, printResult bool) {
 	if printResult {
 		prt_mat_BL(input_rs, in_batch, 0)
 	}
-	start = time.Now()
+	start := time.Now()
 	ct_input := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input_rs, log_slots))
 	fmt.Printf("Encryption done in %s \n", time.Since(start))
 
@@ -223,7 +223,7 @@ func testConv_noBoot_BL_in(real_batch, in_wid, ker_wid int, boot bool) {
 		// fmt.Println()
 		input1_rs := reshape_input_BL(pad_input1, in_wid)
 		input2_rs := reshape_input_BL(pad_input2, in_wid)
-		start = time.Now()
+		start := time.Now()
 		ct_input1 := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input1_rs, cont.logN-1))
 		ct_input2 := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input2_rs, cont.logN-1))
 		fmt.Printf("Encryption done in %s \n", time.Since(start))
@@ -361,7 +361,7 @@ func testConv_BNRelu_BL(in_kind string, printResult bool) {
 	if printResult {
 		prt_mat_BL(input_rs, in_batch, 0)
 	}
-	start = time.Now()
+	start := time.Now()
 	ct_input := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input_rs, log_slots))
 	fmt.Printf("Encryption done in %s \n", time.Since(start))
 
@@ -501,7 +501,7 @@ func testResNet_BL() {
 	fmt.Println()
 	input_rs := reshape_input_BL(input, in_wids[0])
 	// prt_mat_BL(input_rs, max_batch[0], 0)
-	start = time.Now()
+	start := time.Now()
 	ct_input := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input_rs, cont.logN-1))
 	fmt.Printf("Encryption done in %s \n", time.Since(start))
 
@@ -680,7 +680,7 @@ func testResNet_in_BL(st, end int) {
 		fmt.Println("===============  ENCRYPTION  ===============")
 		fmt.Println()
 		input_rs := reshape_input_BL(input, in_wids[0])
-		start = time.Now()
+		start := time.Now()
 		ct_input := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input_rs, cont.logN-1))
 		fmt.Printf("Encryption done in %s \n", time.Since(start))
 
@@ -901,7 +901,7 @@ func testReduceMean_BL() {
 	fmt.Println()
 	input_rs := reshape_input_BL(input, in_wids[2])
 	prt_mat_BL(input_rs, max_batch[2], 0)
-	start = time.Now()
+	start := time.Now()
 	ct_input := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input_rs, cont.logN-1))
 	fmt.Printf("Encryption done in %s \n", time.Since(start))
 
@@ -1077,7 +1077,7 @@ func testImageNet_BL() {
 	fmt.Println()
 	input_rs1 := reshape_input_BL(input_1, in_wids[0])
 	input_rs2 := reshape_input_BL(input_2, in_wids[0])
-	start = time.Now()
+	start := time.Now()
 	ct_input1 := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input_rs1, cont.logN-1))
 	ct_input2 := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input_rs2, cont.logN-1))
 	fmt.Printf("Encryption done in %s \n", time.Since(start))
@@ -1287,7 +1287,7 @@ func testConv_BNRelu_BL_same() {
 		prt_mat_BL(input1_rs, real_batch[0]/2, 4)
 		prt_mat_BL(input2_rs, real_batch[0]/2, 4)
 	}
-	start = time.Now()
+	start := time.Now()
 	ct_input1 := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input1_rs, cont.logN-1))
 	ct_input2 := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input2_rs, cont.logN-1))
 	fmt.Printf("Encryption done in %s \n", time.Since(start))
@@ -1461,7 +1461,7 @@ func testImageNet_BL_final() {
 		prt_mat_BL(input1_rs, real_batch[0]/2, 4)
 		prt_mat_BL(input2_rs, real_batch[0]/2, 4)
 	}
-	start = time.Now()
+	start := time.Now()
 	ct_input1 := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input1_rs, cont.logN-1))
 	ct_input2 := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input2_rs, cont.logN-1))
 	fmt.Printf("Encryption done in %s \n", time.Since(start))
@@ -1677,7 +1677,7 @@ func testImageNet_BL_final_in(st, end int) {
 			prt_mat_BL(input1_rs, real_batch[0]/2, 4)
 			prt_mat_BL(input2_rs, real_batch[0]/2, 4)
 		}
-		start = time.Now()
+		start := time.Now()
 		ct_input1 := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input1_rs, cont.logN-1))
 		ct_input2 := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input2_rs, cont.logN-1))
 		fmt.Printf("Encryption done in %s \n", time.Since(start))
@@ -1813,7 +1813,7 @@ func basic() {
 
 	fmt.Printf("hex: %s \n", strconv.FormatUint(params.Q()[1], 16))
 
-	start = time.Now()
+	start := time.Now()
 
 	kgen := ckks.NewKeyGenerator(params)
 	sk := kgen.GenSecretKey()

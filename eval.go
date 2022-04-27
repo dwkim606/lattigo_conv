@@ -82,7 +82,7 @@ func evalConv_BN_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b
 	// fmt.Println()
 	// fmt.Println("===============  (KER) PREPARATION  ===============")
 	// fmt.Println()
-	start = time.Now()
+	start := time.Now()
 	max_ker_rs := reshape_ker_BL(ker_in, bn_a, ker_wid, real_ib, real_ob, max_batch, pos, norm, trans)
 	scale_exp := cont.params.Scale() * cont.params.Scale()
 	if trans {
@@ -141,7 +141,7 @@ func evalConv_BN_BL_test(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	// fmt.Println()
 	// fmt.Println("===============  (KER) PREPARATION  ===============")
 	// fmt.Println()
-	start = time.Now()
+	start := time.Now()
 	max_ker_rs := reshape_ker_BL(ker_in, bn_a, ker_wid, real_ib, real_ob, max_batch, pos, norm, trans)
 	scale_exp := cont.params.Scale() * cont.params.Scale()
 	if trans {
@@ -200,7 +200,7 @@ func evalConv_BNRelu_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, 
 	eval_time := time.Duration(0)
 	if trans {
 		for pos := 0; pos < 4; pos++ {
-			start = time.Now()
+			start := time.Now()
 			ct_input_rot = evalRot_BL(cont, ct_input, in_wid, pos, trans)
 			rot_time += time.Since(start)
 			start = time.Now()
@@ -217,7 +217,7 @@ func evalConv_BNRelu_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, 
 	} else {
 		ct_conv = evalConv_BN_BL(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, 0, norm, pad, trans, printResult)
 		if strides {
-			start = time.Now()
+			start := time.Now()
 			ct_conv = evalRot_BL(cont, ct_conv, in_wid, 0, trans)
 			fmt.Printf("Rotation (for strided Conv) Done in %s \n", time.Since(start))
 		}
@@ -254,7 +254,7 @@ func evalConv_BNRelu_BL(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, 
 		vals_relu[i] = complex((math.Max(0, real(elt))+math.Min(0, real(elt)*alpha))*math.Pow(2, pow), 0)
 	}
 
-	start = time.Now()
+	start := time.Now()
 	pl_scale := ckks.NewPlaintext(cont.params, ct_boot.Level(), math.Pow(2, 30)*float64(cont.params.Q()[14])*float64(cont.params.Q()[13])/ct_boot.Scale)
 	val_scale := make([]complex128, cont.N/2)
 	for i := range val_scale {
@@ -389,7 +389,7 @@ func evalRMFC_BL_old(cont *context, ct_input *ckks.Ciphertext, ker_fc, bias []fl
 	fmt.Println()
 	fmt.Println("===============  DECRYPTION  ===============")
 	fmt.Println()
-	start = time.Now()
+	start := time.Now()
 	vals_tmp := cont.encoder.Decode(cont.decryptor.DecryptNew(ct_avg), cont.logN-1)
 	fmt.Printf("Decryption Done in %s \n", time.Since(start))
 	fmt.Print("Result: \n")
@@ -436,9 +436,9 @@ func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []
 	// fmt.Println()
 	// fmt.Println("===============  (KER) PREPARATION  ===============")
 	// fmt.Println()
-	start = time.Now()
+	start := time.Now()
 	pl_ker := prep_Ker(cont.params, cont.encoder, ker_in, bn_a, in_wid, ker_wid, real_ib, real_ob, norm, cont.ECD_LV, 0, trans)
-	fmt.Printf("for prep_ker %s \n", time.Since(start))
+	// fmt.Printf("for prep_ker %s \n", time.Since(start))
 	b_coeffs := make([]float64, cont.N)
 	for i := range bn_b {
 		for j := 0; j < in_wid*in_wid; j++ {
@@ -483,7 +483,7 @@ func evalConv_BN_sep(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 	fmt.Println()
 	fmt.Println("===============  (KER) PREPARATION  ===============")
 	fmt.Println()
-	start = time.Now()
+	start := time.Now()
 	pl_ker := prep_Ker(cont.params, cont.encoder, ker_in, bn_a, in_wid, ker_wid, real_ib, real_ob, norm, cont.ECD_LV, 0, trans)
 	b_coeffs := make([]float64, cont.N)
 	for i := range bn_b {
@@ -501,7 +501,7 @@ func evalConv_BN_sep(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 	fmt.Println("===============  EVALUATION  ===============")
 	fmt.Println()
 
-	start := time.Now()
+	start = time.Now()
 	ctxt_out := make([]*ckks.Ciphertext, max_batch)
 	for i := 0; i < max_batch; i++ {
 		if (i%norm == 0) && (i/norm < 16) {
@@ -546,7 +546,7 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 	ct_conv.Scale = ct_conv.Scale * math.Pow(2, pow)
 	cfs_preB := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
 	fmt.Println("Bootstrapping... Ours (until CtoS):")
-	start = time.Now()
+	start := time.Now()
 	// fmt.Println("ct_conv scale: ", math.Log2(ct_conv.Scale))
 	ct_boots := make([]*ckks.Ciphertext, 2)
 	ct_boots[0], ct_boots[1], _ = cont.btp.BootstrappConv_CtoS(ct_conv)
@@ -602,7 +602,7 @@ func evalConv_BNRelu(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_
 	cont.evaluator.Rescale(ct_res, cont.params.Scale(), ct_res)
 
 	fmt.Printf("Boot (StoC) Done in %s \n", time.Since(start))
-	fmt.Printf("Boot out: ")
+	fmt.Println("Boot out: ")
 	printDebugCfs(cont.params, ct_res, cfs_postB, cont.decryptor, cont.encoder)
 
 	return ct_res
@@ -644,6 +644,7 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	}
 
 	if odd { // multiply x^{offset} before conv to move input to appropriate position.
+		odd_time := time.Now()
 		var offset int // offset depends on the real_wid = in_wid-ker_wid/2 is even or not
 		if (in_wid-ker_wid/2)%2 == 0 {
 			offset = 0
@@ -658,6 +659,7 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 		cont.encoder.EncodeCoeffs(xi, xi_plain)
 		cont.encoder.ToNTT(xi_plain)
 		ct_input = cont.evaluator.MulNew(ct_input, xi_plain)
+		fmt.Printf("for odd stride, offset time %s \n", time.Since(odd_time))
 	}
 
 	var ct_conv *ckks.Ciphertext
@@ -680,16 +682,20 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	}
 
 	ct_conv.Scale = ct_conv.Scale * math.Pow(2, pow)
-	cfs_preB := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
-	fmt.Println("Bootstrapping... Ours (until CtoS):")
-	start = time.Now()
-	ct_boots := make([]*ckks.Ciphertext, 2)
-	ct_boots[0], ct_boots[1], _ = cont.btp.BootstrappConv_CtoS(ct_conv)
-	fmt.Printf("Done in %s \n", time.Since(start))
-	fmt.Println("after Boot (CtoS): LV = ", ct_boots[0].Level(), " Scale = ", math.Log2(ct_boots[0].Scale))
 
 	// Only for checking the correctness (for CtoS)
 	var slot1, slot2 []complex128
+	var cfs_preB []float64
+	if debug {
+		cfs_preB = cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
+	}
+	fmt.Println("Bootstrapping... Ours (until CtoS):")
+	start := time.Now()
+	ct_boots := make([]*ckks.Ciphertext, 2)
+	ct_boots[0], ct_boots[1], _ = cont.btp.BootstrappConv_CtoS(ct_conv)
+	fmt.Printf("Done in %s \n", time.Since(start))
+	// fmt.Println("after Boot (CtoS): LV = ", ct_boots[0].Level(), " Scale = ", math.Log2(ct_boots[0].Scale))
+
 	if debug {
 		slot1, slot2 = debugCtoS(cont, cfs_preB)
 		slot1 = printDebug(cont.params, ct_boots[0], slot1, cont.decryptor, cont.encoder) // Compare before & after CtoS
@@ -702,18 +708,18 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 		cont.evaluator.MulByPow2(ct_boots[ul], pow, ct_boots[ul])
 	}
 	fmt.Printf("ReLU Done in %s \n", time.Since(start))
-	fmt.Println("after Relu: ", math.Log2(ct_boots[0].Scale), "lv: ", ct_boots[0].Level())
+	start = time.Now()
 
 	// Only for checking the correctness (for ReLU)
 	var cfs_postB []float64
 	if debug {
+		fmt.Println("after Relu: ", math.Log2(ct_boots[0].Scale), "lv: ", ct_boots[0].Level())
 		relu1, relu2 := debugReLU(cont, slot1, slot2, alpha)
 		relu1 = printDebug(cont.params, ct_boots[0], relu1, cont.decryptor, cont.encoder)
 		relu2 = printDebug(cont.params, ct_boots[1], relu2, cont.decryptor, cont.encoder)
 		cfs_postB = debugStoC(cont, relu1, relu2, in_wid, kp_wid, pack_pos, step, kind, fast_pack)
 	}
 
-	start = time.Now()
 	ct_keep := make([]*ckks.Ciphertext, iter) // for extend (rotation) of ctxt_in
 	for ul := 0; ul < iter; ul++ {
 		if trans {
@@ -747,11 +753,11 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	}
 
 	cont.evaluator.Rescale(ct_res, cont.params.Scale(), ct_res)
-
 	fmt.Printf("Boot (StoC) Done in %s \n", time.Since(start))
-	fmt.Printf("Boot out: ")
+
 	// Only for checking the correctness (for StoC)
 	if debug {
+		fmt.Println("Boot out: ")
 		printDebugCfs(cont.params, ct_res, cfs_postB, cont.decryptor, cont.encoder)
 		max_batch := cont.N / (in_wid * in_wid)
 		res_tmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_res))

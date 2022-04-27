@@ -522,7 +522,6 @@ func evalReLU(params ckks.Parameters, evaluator ckks.Evaluator, ctxt_in *ckks.Ci
 	coeffsReLU3 := ckks.NewPoly(coeffs_tmp3)
 
 	fmt.Printf("Eval: ")
-	start = time.Now()
 	ctxt_sign, err := evaluator.EvaluatePoly(ctxt_in, coeffsReLU, params.Scale())
 	if err != nil {
 		panic(err)
@@ -747,9 +746,9 @@ func conv_then_pack(params ckks.Parameters, pack_evaluator ckks.Evaluator, ctxt_
 		// pack_evaluator.Rescale(ctxt_out[i], float64(1<<10), ctxt_out[i])
 	}
 	mt := time.Since(start)
-	fmt.Println("mult time: ", mt)
+	fmt.Println("\t mult time: ", mt)
 	ctxt_result := pack_ctxts(pack_evaluator, ctxt_out, max_ob, max_ob/norm, plain_idx, params)
-	fmt.Println("Pack time: ", time.Since(start)-mt)
+	fmt.Println("\t Pack time: ", time.Since(start)-mt)
 
 	// fmt.Println("Result Scale: ", math.Log2(ctxt_result.Scale))
 	// fmt.Println("Result LV: ", ctxt_result.Level())

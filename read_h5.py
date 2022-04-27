@@ -48,6 +48,17 @@ def read_ResNet(filename, out_dir):
                     data = h5f[keys0][keys1][keys2][keys3]
                     np.savetxt(os.path.join(out_dir,'w-'+str(keys0)+'-'+str(keys1)+'-'+str(keys2)+'-'+str(keys3)+'.csv'), np.reshape(data, [-1]), fmt=cvsfmt, delimiter=',')
 
+def gen_enc_result_folders():
+    weight_dir = "Resnet_weights/"
+    out_dir = "Resnet_enc_results/"
+    for filename in os.listdir(weight_dir):
+        new_filename = "results"+filename.lstrip("weights")
+        try:
+            os.mkdir(os.path.join(out_dir, new_filename))        
+        except OSError as error:
+            print(error)
+
+
 #### Main Start #### 
 
 # read h5 files
@@ -71,6 +82,7 @@ for filename in os.listdir(weight_dir):
         except NameError as error:
             print(error, filename)
 
+gen_enc_result_folders()
 
 
 

@@ -13,7 +13,6 @@ import (
 	"github.com/ldsec/lattigo/v2/rlwe"
 )
 
-var start time.Time
 var err error
 
 const log_c_scale = 30
@@ -764,13 +763,13 @@ func main() {
 	st, _ := strconv.Atoi(os.Args[1])
 	end, _ := strconv.Atoi(os.Args[2])
 	ker_wid, _ := strconv.Atoi(os.Args[3])
-	dep_case, _ := strconv.Atoi(os.Args[4])
+	depth, _ := strconv.Atoi(os.Args[4])
 	wide_case, _ := strconv.Atoi(os.Args[5])
 	debug := false
 	if wide_case == 1 {
-		testResNet_crop_fast_in(st, end, ker_wid, dep_case, debug)
+		testResNet_crop_fast_in(st, end, ker_wid, depth, debug)
 	} else {
-		testResNet_crop_fast_wide_in(st, end, ker_wid, dep_case, wide_case, debug)
+		testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case, debug)
 	}
 
 	// testResNet_crop_fast_in(st, end, ker_wid, dep_case)
