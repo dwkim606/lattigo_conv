@@ -745,7 +745,7 @@ func main() {
 	// }
 
 	// testConv_noBoot("Conv", true)
-	// testConv_BNRelu("Conv", false)
+	testConv_BNRelu("Conv", false)
 	// testConv_BNRelu("StrConv_odd", true)
 	// testConv_BNRelu("StrConv_inside", true)
 
@@ -760,17 +760,17 @@ func main() {
 	// testReduceMean()
 	// testResNet_crop()
 
-	st, _ := strconv.Atoi(os.Args[1])
-	end, _ := strconv.Atoi(os.Args[2])
-	ker_wid, _ := strconv.Atoi(os.Args[3])
-	depth, _ := strconv.Atoi(os.Args[4])
-	wide_case, _ := strconv.Atoi(os.Args[5])
-	debug := false
-	if wide_case == 1 {
-		testResNet_crop_fast_in(st, end, ker_wid, depth, debug)
-	} else {
-		testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case, debug)
-	}
+	// st, _ := strconv.Atoi(os.Args[1])
+	// end, _ := strconv.Atoi(os.Args[2])
+	// ker_wid, _ := strconv.Atoi(os.Args[3])
+	// depth, _ := strconv.Atoi(os.Args[4])
+	// wide_case, _ := strconv.Atoi(os.Args[5])
+	// debug := false
+	// if wide_case == 1 {
+	// 	testResNet_crop_fast_in(st, end, ker_wid, depth, debug)
+	// } else {
+	// 	testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case, debug)
+	// }
 
 	// testResNet_crop_fast_in(st, end, ker_wid, dep_case)
 	// testResNet_crop_in(st, end, ker_wid, true)

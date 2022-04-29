@@ -616,9 +616,9 @@ func testConv_noBoot_old(kind string, printResult bool) (ct_result *ckks.Ciphert
 // in_wid must be Po2
 // For trans, assume that input: full bached ciphertext, outputs 1/4 batched 1ctxt due to expansion
 func testConv_BNRelu(kind string, printResult bool) {
-	raw_in_batch := 4 // same as python
-	raw_in_wid := 14  // same as python
-	in_batch := 4     // needs to be divided by 4 (to pack the output of transConv)
+	raw_in_batch := 4  // same as python
+	raw_in_wid := 14   // same as python
+	in_batch := 64 * 4 // needs to be divided by 4 (to pack the output of transConv)
 	in_wid := 16
 	norm := in_batch / raw_in_batch
 	ker_wid := 5
@@ -672,7 +672,7 @@ func testConv_BNRelu(kind string, printResult bool) {
 		fast_pack = true
 	}
 	ct_result := evalConv_BNRelu_new(cont, ctxt_input, ker_in, bn_a, bn_b, alpha, in_wid, kp_wid, ker_wid, raw_in_batch, raw_out_batch, norm, pack_pos, step, 2, kind, fast_pack, printResult)
-	ct_result = evalConv_BNRelu_new(cont, ct_result, ker_in, bn_a, bn_b, alpha, in_wid, kp_wid, ker_wid, raw_in_batch, raw_out_batch, norm, pack_pos, step, 2, "Conv_inside", fast_pack, printResult)
+	// ct_result = evalConv_BNRelu_new(cont, ct_result, ker_in, bn_a, bn_b, alpha, in_wid, kp_wid, ker_wid, raw_in_batch, raw_out_batch, norm, pack_pos, step, 2, "Conv_inside", fast_pack, printResult)
 
 	fmt.Println()
 	fmt.Println("===============  DECRYPTION  ===============")
@@ -1201,8 +1201,6 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug 
 		ct_input := cont.encryptor.EncryptNew(pl_input)
 		fmt.Printf("Encryption done in %s \n", time.Since(enc_start))
 		enc_start = time.Now()
-
-		fmt.Printf("Prepare weights done in %s \n", time.Since(enc_start))
 
 		timings := make([]float64, 6)
 		begin_start := time.Now()
