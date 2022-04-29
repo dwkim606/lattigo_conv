@@ -964,7 +964,7 @@ func testResNet_crop_fast_in(st, end, ker_wid, depth int, debug bool) {
 
 	for iter := st; iter < end; iter++ {
 		fmt.Println("Running ", iter, "-th iter... ker size: ", ker_wid)
-		image := readTxt("test_data/test_image_"+strconv.Itoa(iter)+".csv", in_wids[0]*in_wids[0]*3)
+		image := readTxt("Resnet_plain_data/crop_ker"+strconv.Itoa(ker_wid)+"_d"+strconv.Itoa(depth)+"_wid1/test_image_"+strconv.Itoa(iter)+".csv", in_wids[0]*in_wids[0]*3)
 		input := make([]float64, cont.N)
 		k := 0
 		for i := 0; i < in_wids[0]; i++ {
@@ -1175,7 +1175,7 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug 
 
 	for iter := st; iter < end; iter++ {
 		fmt.Println("Running ", iter, "-th iter... ker size: ", ker_wid)
-		image := readTxt("test_data/test_image_"+strconv.Itoa(iter)+".csv", in_wids[0]*in_wids[0]*3)
+		image := readTxt("Resnet_plain_data/crop_ker"+strconv.Itoa(ker_wid)+"_d"+strconv.Itoa(depth)+"_wid"+strconv.Itoa(wide_case)+"/test_image_"+strconv.Itoa(iter)+".csv", in_wids[0]*in_wids[0]*3)
 		input := make([]float64, cont.N)
 		k := 0
 		for i := 0; i < in_wids[0]; i++ {

@@ -8,14 +8,16 @@ def compare_results(iter_num, crop, ker, depth, wid):
     max_num_samples = 1000
 
     if crop:
-        plain_pred_file = 'Resnet_plain_data/plain_prediction_crop_ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)+'_'+str(max_num_samples)+'.csv'
+        plain_folder_dir = 'Resnet_plain_data/crop_ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)
         enc_result_dir = 'Resnet_enc_results/results_crop_ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)+'/'
     else:
-        plain_pred_file = 'Resnet_plain_data/plain_prediction_ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)+'_'+str(max_num_samples)+'.csv'
+        plain_folder_dir = 'Resnet_plain_data/ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)
         enc_result_dir = 'Resnet_enc_results/results_ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)+'/'
 
+    plain_pred_file = os.path.join(plain_folder_dir, 'plain_prediction_'+str(max_num_samples)+'.csv')
+    true_pred_file = os.path.join(plain_folder_dir, 'test_labels_'+str(max_num_samples)+'.csv')
     plain_pred = np.reshape(np.loadtxt(plain_pred_file), [max_num_samples, 10])    
-    true_pred = np.reshape(np.loadtxt('Resnet_plain_data/test_labels_'+str(max_num_samples)+'.csv'), [max_num_samples])    
+    true_pred = np.reshape(np.loadtxt(true_pred_file), [max_num_samples])    
 
     acc = 0
     true_acc = 0
