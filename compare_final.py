@@ -54,7 +54,7 @@ def compare_results(iter_num, crop, ker, depth, wid):
     print("Enc precision: ", true_acc, "/", total)
     print("plain vs enc accordance: ", acc, "/", total)
     print("among ", iter_num, " samples.")
-    print("missing: ", no_iters)
+    # print("missing: ", no_iters)
     print("\n wrong results: \n")
     for i, result in wrong_result.items():
         print(i, "-th iter.")
@@ -70,7 +70,7 @@ def compare_results(iter_num, crop, ker, depth, wid):
 ### main ###
 
 crop = True
-num_iter = 100
+num_iter = 1000
 ker = int(sys.argv[1])
 depth = int(sys.argv[2])
 wide = int(sys.argv[3])

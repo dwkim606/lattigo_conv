@@ -133,27 +133,27 @@ suffix = sys.argv[4]
 # prefix = "Final (reduce_mean & FC):", "for odd stride, offset time"
 
 prefix_choices = [
-"Total done in ", 
-"Conv (with BN) Done in",
-"(until CtoS):",
-"Eval: Eval: ReLU Done in",
-"Boot (StoC) Done in ",
-"Plaintext (kernel) preparation, Done in"]
+"Total done in "]
+#"Conv (with BN) Done in",
+#"(until CtoS):",
+#"Eval: Eval: ReLU Done in",
+#"Boot (StoC) Done in ",
+#"Plaintext (kernel) preparation, Done in"]
 
 # os_path = 'out/out_cr_k'+str(ker)+'_d'+str(depth)+'_w'+str(wide)+'.txt'
 # os_path = 'out/out_cr_k5_d8_w3.txt'
-os_path = 'out_kdw_'+str(ker)+'_'+str(depth)+'_'+str(wide)+'_'+suffix+'.txt'
-
+os_path = 'out_kdw_'+str(ker)+str(depth)+str(wide)+'_'+suffix+'.txt'
+print(os_path)
 
 for prefix in prefix_choices:
     result_count, result_list = read_out_analysis_time(prefix, os_path)
-        
+
     if (len(result_list)==1):
         print(prefix, result_count, "each", " total iters: ", len(result_list), "\n")
     else:
         print(prefix, result_count, "each", " total iters: ", len(result_list), "mean: ", round(mean(result_list), prec), "std: ", round(stdev(result_list), prec), "min/max: ", min(result_list), "/", max(result_list), "\n")
-    for res in result_list:
-        print(round(res, prec), end=', ')
+    #print(result_list)
+    #for res in result_list:
+        #print(round(res, prec), end=', ')
     print("\n")
-            
     

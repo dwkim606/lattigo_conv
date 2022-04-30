@@ -545,7 +545,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 			}
 		}
 	case "Imagenet_final_fast": // Generate ext_idx for extracting valid values from conv with "same" padding
-		iter = 2 // since we use half padding, i.e., lower part is all zero
+		iter = 2 // since we use full padding
 		for i, elt := range cont.in_wids {
 			cont.ext_idx[elt] = make([][]int, iter)
 			for ul := 0; ul < iter; ul++ {
@@ -558,8 +558,8 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 
 			if i == 0 {
 				for pos := 0; pos < 2; pos += 1 {
-					cont.r_idx[elt][pos] = gen_comprs_full(cont.N/2, elt, cont.kp_wids[i], pos, 0)
-					cont.r_idx_l[elt][pos] = gen_comprs_full(cont.N/2, elt, cont.kp_wids[i], pos, 1)
+					cont.r_idx[elt][pos] = gen_comprs_full(cont.N/2, elt, 2*cont.kp_wids[1], pos, 0)
+					cont.r_idx_l[elt][pos] = gen_comprs_full(cont.N/2, elt, 2*cont.kp_wids[1], pos, 1)
 					for k := range cont.r_idx[elt][pos] {
 						rotations = append(rotations, k)
 					}
@@ -698,10 +698,11 @@ func main() {
 	// fmt.Println("Now, fast version (norm = 1)")
 	// testImagenet_final_fast()
 
-	// st, _ := strconv.Atoi(os.Args[1])
-	// end, _ := strconv.Atoi(os.Args[2])
+	st, _ := strconv.Atoi(os.Args[1])
+	end, _ := strconv.Atoi(os.Args[2])
+	ker, _ := strconv.Atoi(os.Args[3])
 	// testImagenet_final_in(st, end)
-	// testImagenet_final_fast_in(st, end)
+	testImagenet_final_fast_in(st, end, ker)
 	// testImageNet_BL_final_in(st, end)
 	// testImagenet_in(st, end)
 	// testResNet_in_BL(st, end)
@@ -760,17 +761,18 @@ func main() {
 	// testReduceMean()
 	// testResNet_crop()
 
-	st, _ := strconv.Atoi(os.Args[1])
-	end, _ := strconv.Atoi(os.Args[2])
-	ker_wid, _ := strconv.Atoi(os.Args[3])
-	depth, _ := strconv.Atoi(os.Args[4])
-	wide_case, _ := strconv.Atoi(os.Args[5])
-	debug := false
-	if wide_case == 1 {
-		testResNet_crop_fast_in(st, end, ker_wid, depth, debug)
-	} else {
-		testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case, debug)
-	}
+	// // latest version for resnet crop cifar10
+	// st, _ := strconv.Atoi(os.Args[1])
+	// end, _ := strconv.Atoi(os.Args[2])
+	// ker_wid, _ := strconv.Atoi(os.Args[3])
+	// depth, _ := strconv.Atoi(os.Args[4])
+	// wide_case, _ := strconv.Atoi(os.Args[5])
+	// debug := false
+	// if wide_case == 1 {
+	// 	testResNet_crop_fast_in(st, end, ker_wid, depth, debug)
+	// } else {
+	// 	testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case, debug)
+	// }
 
 	// testResNet_crop_fast_in(st, end, ker_wid, dep_case)
 	// testResNet_crop_in(st, end, ker_wid, true)
