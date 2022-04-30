@@ -4,19 +4,16 @@ import os
 from statistics import mean, stdev
 
 # for resnet, compare plain with enc
-def compare_results(iter_num, crop, ker, depth, wid):    
+def compare_results(ker):    
     max_num_samples = 1000
+    num_classes = 1000
 
-    if crop:
-        plain_folder_dir = 'Resnet_plain_data/crop_ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)
-        enc_result_dir = 'Resnet_enc_results/results_crop_ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)+'/'
-    else:
-        plain_folder_dir = 'Resnet_plain_data/ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)
-        enc_result_dir = 'Resnet_enc_results/results_ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)+'/'
+    plain_folder_dir = 'ker'+str(ker)+'_data/'
+    enc_result_dir = 'ker'+str(ker)+'_enc_result/'
 
     plain_pred_file = os.path.join(plain_folder_dir, 'plain_prediction_'+str(max_num_samples)+'.csv')
     true_pred_file = os.path.join(plain_folder_dir, 'test_labels_'+str(max_num_samples)+'.csv')
-    plain_pred = np.reshape(np.loadtxt(plain_pred_file), [max_num_samples, 10])    
+    plain_pred = np.reshape(np.loadtxt(plain_pred_file), [max_num_samples, num_classes])    
     true_pred = np.reshape(np.loadtxt(true_pred_file), [max_num_samples])    
 
     acc = 0
@@ -25,17 +22,17 @@ def compare_results(iter_num, crop, ker, depth, wid):
     total = 0
     no_iters = []
     wrong_result = {}
-    os_path = enc_result_dir+'class_result_ker'+str(ker)+'_'
-
-    for iter in range(iter_num):
-        if os.path.exists(os_path+str(iter)+'.csv'):
-            read = np.loadtxt(os_path+str(iter)+'.csv')
+    
+    for iter in range(max_num_samples):
+        os_path = enc_result_dir+'enc_result_'+str(iter)+'.csv'
+        if os.path.exists(os_path):
+            read = np.loadtxt(os_path)
             total+=1
         else:
             no_iters.append(iter)
             continue
 
-        res_np = read[:10] #np.reshape(read, [-1])[:10]
+        res_np = read[:num_classes] #np.reshape(read, [-1])[:10]
         # print("enc: ", res_np, "argmax: ", np.argmax(res_np))
         # print("plain: ", plain_pred[iter], "argmax: ", np.argmax(plain_pred[iter]))
         if (np.argmax(res_np) == np.argmax(plain_pred[iter])):
@@ -53,7 +50,7 @@ def compare_results(iter_num, crop, ker, depth, wid):
     print("Plain precision: ", pl_true_acc, "/", total)
     print("Enc precision: ", true_acc, "/", total)
     print("plain vs enc accordance: ", acc, "/", total)
-    print("among ", iter_num, " samples.")
+    print("among ", total, " samples.")
     # print("missing: ", no_iters)
     print("\n wrong results: \n")
     for i, result in wrong_result.items():
@@ -69,13 +66,6 @@ def compare_results(iter_num, crop, ker, depth, wid):
 
 ### main ###
 
-np.set_printoptions(precision=4, threshold=12)
-
-crop = True
-num_iter = 1000
 ker = int(sys.argv[1])
-depth = int(sys.argv[2])
-wide = int(sys.argv[3])
-
-compare_results(num_iter, crop, ker, depth, wide)
+compare_results(ker)
 

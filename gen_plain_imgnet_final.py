@@ -103,7 +103,6 @@ def plain_imagenet_ct_in(ct_in, ker):
     return conv
 
 # output num_samples of images, true_labels, plain_labels on which given resnet model has the full precision 
-# generate folder named "ker3_d8_wid1" inside Resnet_plain_data, then test_labels_100, plain_prediction_100, test_image_0.csv, ..., .
 def gen_plain_predictions_imgnet(ker, target_prec):
     folder_dir = 'ker'+str(ker)+'_data/'
 
@@ -152,5 +151,5 @@ def gen_plain_predictions_imgnet(ker, target_prec):
 
 ker = int(sys.argv[1])
 target_prec = float(sys.argv[2])
-prep_imagenet(ker)
+#prep_imagenet(ker)
 gen_plain_predictions_imgnet(ker, target_prec)
