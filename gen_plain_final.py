@@ -8,7 +8,7 @@ from tensorflow.keras.layers import Cropping2D
 # from statistics import mean, stdev
 
 
-def final_plain_resnet(input_image, crop, ker, depth, wid):
+def plain_resnet(input_image, crop, ker, depth, wid):
     if crop:
         in_dir = 'Resnet_weights/weights_crop_ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)+'/'
     else:
@@ -61,7 +61,7 @@ def final_plain_resnet(input_image, crop, ker, depth, wid):
             # elements_gt = tf.math.greater(tf.reduce_max(tf.math.abs(conv), [1,2,3]),32.0)
             # num_elements_gt = tf.math.reduce_sum(tf.cast(elements_gt, tf.int32))
             # print("bigger than 32:", num_elements_gt)
-            print("layer:", num, "max:", tf.reduce_max(conv, [0,1,2,3]))
+            print("layer:", num, "max:", tf.reduce_max(tf.math.abs(conv), [0,1,2,3]))
             conv = tf.nn.relu(conv)
             # print(i, blc, conv)
             # if i == 0:
@@ -86,7 +86,7 @@ def final_plain_resnet(input_image, crop, ker, depth, wid):
 
 # output num_samples of images, true_labels, plain_labels on which given resnet model has the full precision 
 # generate folder named "ker3_d8_wid1" inside Resnet_plain_data, then test_labels_100, plain_prediction_100, test_image_0.csv, ..., .
-def final_gen_plain_predictions(crop, ker, depth, wid):
+def gen_plain_predictions(crop, ker, depth, wid):
     num_samples = 1000 # [100, 1000, 10000]
     tf_labels = tf.constant(np.loadtxt('Resnet_plain_data/test_labels.csv'), tf.int64)
     tf_images = tf.constant(np.loadtxt('Resnet_plain_data/test_images.csv'), tf.float32, [10000, 32, 32, 3])
@@ -94,7 +94,7 @@ def final_gen_plain_predictions(crop, ker, depth, wid):
     #     tf_labels = tf.constant(np.loadtxt('Resnet_plain_data/test_labels_'+str(num_samples)+'.csv'), tf.int64)
     #     tf_images = tf.constant(np.loadtxt('Resnet_plain_data/test_images_'+str(num_samples)+'.csv'), tf.float32, [num_samples, 32, 32, 3])
 
-    predictions = final_plain_resnet(tf_images, crop, ker, depth, wid)
+    predictions = plain_resnet(tf_images, crop, ker, depth, wid)
     full_prec = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(predictions, 1), tf_labels), 'float32')).numpy()
     print("full precision: ", full_prec)
     if num_samples == 1000:
@@ -122,7 +122,7 @@ def final_gen_plain_predictions(crop, ker, depth, wid):
 
     part_labels = tf.boolean_mask(tf_labels, idx_list)
     part_images = tf.boolean_mask(tf_images, idx_list)
-    part_predictions = final_plain_resnet(part_images, crop, ker, depth, wid)
+    part_predictions = plain_resnet(part_images, crop, ker, depth, wid)
 
     print("num samples: ", len(part_labels), "precision: ", tf.reduce_mean(tf.cast(tf.equal(tf.argmax(part_predictions, 1), part_labels), 'float32')))
 
@@ -149,4 +149,4 @@ ker = int(sys.argv[1])
 depth = int(sys.argv[2])
 wide = int(sys.argv[3])
 
-final_gen_plain_predictions(crop, ker, depth, wide)
+gen_plain_predictions(crop, ker, depth, wide)
