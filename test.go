@@ -12,6 +12,7 @@ import (
 
 func testDCGAN() {
 	alpha := 0.3
+	pow := 5.0
 	print := false
 	logN := 16
 	in_wids := []int{4, 8, 16, 32}
@@ -85,7 +86,7 @@ func testDCGAN() {
 		for i := range in_cfs_1_pBoot {
 			in_cfs_1_pBoot[i] = in_cfs[reverseBits(uint32(i), cont.params.LogSlots())] // first part of coeffs
 			in_cfs_2_pBoot[i] = in_cfs[reverseBits(uint32(i), cont.params.LogSlots())+uint32(cont.params.Slots())]
-			in_slots[i] = complex(in_cfs_1_pBoot[i]/math.Pow(2, float64(pow)), 0)
+			in_slots[i] = complex(in_cfs_1_pBoot[i]/math.Pow(2, pow), 0)
 		}
 		ext1_tmp := extend_full_nhf(in_cfs_1_pBoot, in_wids[1], 3, true, true)
 		ext2_tmp := extend_full_nhf(in_cfs_2_pBoot, in_wids[1], 3, true, true)
@@ -100,7 +101,7 @@ func testDCGAN() {
 		start = time.Now()
 		// evaluator.MultByConst(ctxt1, 1.000000001, ctxt1)
 		// evaluator.DropLevel(ctxt1, 10)
-		cont.evaluator.MulByPow2(ctxt1, pow, ctxt1)
+		cont.evaluator.MulByPow2(ctxt1, int(pow), ctxt1)
 		cont.evaluator.DropLevel(ctxt1, ctxt1.Level()-3)
 
 		// ctxt1 = evalReLU(cont.params, cont.evaluator, ctxt1, 1.0)
@@ -243,7 +244,7 @@ func testDCGAN() {
 		// evaluator.DropLevel(ctxt1, ctxt1.Level()-3)
 
 		ctxt1 = evalReLU(cont.params, cont.evaluator, ctxt1, alpha)
-		cont.evaluator.MulByPow2(ctxt1, pow, ctxt1)
+		cont.evaluator.MulByPow2(ctxt1, int(pow), ctxt1)
 		fmt.Printf("ReLU Done in %s \n", time.Since(start))
 
 		for i := range values_ReLU {
@@ -352,7 +353,7 @@ func testDCGAN() {
 		fmt.Println("avg valu: ", avg)
 
 		ctxt1 = evalReLU(cont.params, cont.evaluator, ctxt1, alpha)
-		cont.evaluator.MulByPow2(ctxt1, pow, ctxt1)
+		cont.evaluator.MulByPow2(ctxt1, int(pow), ctxt1)
 		fmt.Printf("ReLU Done in %s \n", time.Since(start))
 
 		for i := range values_ReLU {
@@ -486,6 +487,7 @@ func testConv_noBoot_in(in_batch, in_wid, ker_wid int, boot bool) {
 	raw_in_wid := in_wid - ker_wid/2 // same as python
 	norm := in_batch / raw_in_batch
 	test_dir := "test_conv_data/"
+	pow := 5.0
 
 	// set basic variables for above input variables
 	kp_wid, out_batch, logN, trans := set_Variables(in_batch, raw_in_wid, in_wid, ker_wid, kind)
@@ -516,7 +518,7 @@ func testConv_noBoot_in(in_batch, in_wid, ker_wid int, boot bool) {
 		// Kernel Prep & Conv (+BN) Evaluation
 		var ct_result *ckks.Ciphertext
 		if boot {
-			ct_result = evalConv_BNRelu_new(cont, ctxt_input, ker_in, bn_a, bn_b, 0.0, in_wid, kp_wid, ker_wid, raw_in_batch, raw_out_batch, norm, 0, 0, 2, kind, false, false)
+			ct_result = evalConv_BNRelu_new(cont, ctxt_input, ker_in, bn_a, bn_b, 0.0, pow, in_wid, kp_wid, ker_wid, raw_in_batch, raw_out_batch, norm, 0, 0, 2, kind, false, false)
 		} else {
 			ct_result = evalConv_BN(cont, ctxt_input, ker_in, bn_a, bn_b, in_wid, ker_wid, raw_in_batch, raw_out_batch, norm, float64(1<<30), trans)
 		}
@@ -623,6 +625,7 @@ func testConv_BNRelu(kind string, printResult bool) {
 	norm := in_batch / raw_in_batch
 	ker_wid := 5
 	alpha := 0.0 // for ReLU: 0.0 , leakyReLU : 0.3
+	pow := 5.0
 	pack_pos := 0
 	step := 2 // for blc 1->2 & blc2 : 4 for blc2->3, blc3
 
@@ -671,7 +674,7 @@ func testConv_BNRelu(kind string, printResult bool) {
 	if (kind == "StrConv_fast") || (kind == "StrConv_odd") || (kind == "StrConv_inside") || (kind == "Conv_inside") {
 		fast_pack = true
 	}
-	ct_result := evalConv_BNRelu_new(cont, ctxt_input, ker_in, bn_a, bn_b, alpha, in_wid, kp_wid, ker_wid, raw_in_batch, raw_out_batch, norm, pack_pos, step, 2, kind, fast_pack, printResult)
+	ct_result := evalConv_BNRelu_new(cont, ctxt_input, ker_in, bn_a, bn_b, alpha, pow, in_wid, kp_wid, ker_wid, raw_in_batch, raw_out_batch, norm, pack_pos, step, 2, kind, fast_pack, printResult)
 	// ct_result = evalConv_BNRelu_new(cont, ct_result, ker_in, bn_a, bn_b, alpha, in_wid, kp_wid, ker_wid, raw_in_batch, raw_out_batch, norm, pack_pos, step, 2, "Conv_inside", fast_pack, printResult)
 
 	fmt.Println()
@@ -736,6 +739,7 @@ func testResNet_in(st, end int) {
 		max_batch[i] = cont.N / (in_wids[i] * in_wids[i])
 	}
 	alpha := 0.0 // 0.3 => leakyrelu
+	pow := 5.0
 
 	for iter := st; iter < end; iter++ {
 		norm := 1
@@ -783,10 +787,10 @@ func testResNet_in(st, end int) {
 			bn_b := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-b.csv", real_batch[0])
 			if i == 1 {
 				ker_in := readTxt(weight_dir+"w0-conv.csv", 3*real_batch[0]*ker_size)
-				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], kp_wids[0], ker_wid, 3, real_batch[0], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
+				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], kp_wids[0], ker_wid, 3, real_batch[0], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
 			} else {
 				ker_in := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-conv.csv", real_batch[0]*real_batch[0]*ker_size)
-				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
+				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
 			}
 			fmt.Println("Block1, Layer ", i, "done!")
 		}
@@ -816,8 +820,8 @@ func testResNet_in(st, end int) {
 			bn_b2_0[i] = bn_b[2*i]
 			bn_b2_1[i] = bn_b[2*i+1]
 		}
-		ct_result1 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_0, bn_a2_0, bn_b2_0, alpha, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 0, 0, 1, "StrConv", fast_pack, false)
-		ct_result2 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_1, bn_a2_1, bn_b2_1, alpha, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 2, 0, 1, "StrConv", fast_pack, false)
+		ct_result1 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_0, bn_a2_0, bn_b2_0, alpha, pow, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 0, 0, 1, "StrConv", fast_pack, false)
+		ct_result2 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_1, bn_a2_1, bn_b2_1, alpha, pow, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 2, 0, 1, "StrConv", fast_pack, false)
 		ct_result := cont.evaluator.AddNew(ct_result1, ct_result2)
 		fmt.Println("Block1 to 2 done!")
 		max_bat := cont.N / (in_wids[1] * in_wids[1])
@@ -839,7 +843,7 @@ func testResNet_in(st, end int) {
 			bn_b2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+i)+"-b.csv", real_batch[1])
 			ker_in2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+i)+"-conv.csv", real_batch[1]*real_batch[1]*ker_size)
 
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
 			fmt.Println("Block2, Layer ", i, "done!")
 		}
 		timings[2] = time.Since(new_start).Seconds()
@@ -857,7 +861,7 @@ func testResNet_in(st, end int) {
 		}
 
 		norm = 1
-		ct_result = evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, in_wids[1], kp_wids[1], ker_wid, 2*real_batch[1], real_batch[2], norm, 0, 0, 1, "StrConv", fast_pack, prt_result)
+		ct_result = evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, pow, in_wids[1], kp_wids[1], ker_wid, 2*real_batch[1], real_batch[2], norm, 0, 0, 1, "StrConv", fast_pack, prt_result)
 		fmt.Println("Block2 to 3 done!")
 		max_bat = cont.N / (in_wids[2] * in_wids[2])
 		res_ttmp = cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_result))
@@ -877,7 +881,7 @@ func testResNet_in(st, end int) {
 			bn_b3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+num_blc2+i+1)+"-b.csv", real_batch[2])
 			ker_in3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+num_blc2+i+1)+"-conv.csv", real_batch[2]*real_batch[2]*ker_size)
 
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, in_wids[2], kp_wids[2], ker_wid, real_batch[2], real_batch[2], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, pow, in_wids[2], kp_wids[2], ker_wid, real_batch[2], real_batch[2], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
 			fmt.Println("Block3, Layer ", i, "done!")
 		}
 		timings[4] = time.Since(new_start).Seconds()
@@ -921,12 +925,18 @@ func testResNet_in(st, end int) {
 	}
 }
 
-func testResNet_crop_fast_in(st, end, ker_wid, depth int, debug bool) {
+func testResNet_crop_fast_in(st, end, ker_wid, depth int, debug, cf100 bool) {
 	// init_batch fixed to 16
 	ker_name := "ker" + strconv.Itoa(ker_wid)
 	weight_dir := "Resnet_weights/weights_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid1/"
 	out_dir := "Resnet_enc_results/results_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid1/"
 	fc_out := 10 // 100 for cifar100
+	pow := 7.0   // covers [-2^pow, 2^pow] values at ReLU evaluation
+	if cf100 {
+		weight_dir = "Resnet_weights/weights_cf100_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid1/"
+		out_dir = "Resnet_enc_results/results_cf100_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid1/"
+		fc_out = 100 // 100 for cifar100
+	}
 
 	var num_blcs [3]int
 	switch depth {
@@ -1004,7 +1014,7 @@ func testResNet_crop_fast_in(st, end, ker_wid, depth int, debug bool) {
 				ker_in_batch = real_batch[0]
 			}
 			ker_in := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-conv.csv", ker_in_batch*real_batch[0]*ker_size)
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], raw_in_wids[0], ker_wid, ker_in_batch, real_batch[0], norm[0], 0, step[0], 2, "Conv_inside", fast_pack, debug)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, ker_in_batch, real_batch[0], norm[0], 0, step[0], 2, "Conv_inside", fast_pack, debug)
 			fmt.Println("Block1, Layer ", i, "done!")
 		}
 		fmt.Println("Block1 done.")
@@ -1022,7 +1032,7 @@ func testResNet_crop_fast_in(st, end, ker_wid, depth int, debug bool) {
 		}
 		bn_a := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0])+"-a.csv", real_batch[1])
 		bn_b := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0])+"-b.csv", real_batch[1])
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in12_new, bn_a, bn_b, alpha, in_wids[0], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, step[1], 2, "StrConv_inside", fast_pack, debug)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in12_new, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, step[1], 2, "StrConv_inside", fast_pack, debug)
 		fmt.Println("Block1 to 2 done!")
 		if debug {
 			max_bat := cont.N / (in_wids[0] * in_wids[0])
@@ -1038,7 +1048,7 @@ func testResNet_crop_fast_in(st, end, ker_wid, depth int, debug bool) {
 			bn_b2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+i)+"-b.csv", real_batch[1])
 			ker_in2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+i)+"-conv.csv", real_batch[1]*real_batch[1]*ker_size)
 
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, in_wids[0], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, step[1], 2, "Conv_inside", fast_pack, debug)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[0], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, step[1], 2, "Conv_inside", fast_pack, debug)
 			fmt.Println("Block2, Layer ", i, "done!")
 		}
 		fmt.Println("Block2 done.")
@@ -1056,7 +1066,7 @@ func testResNet_crop_fast_in(st, end, ker_wid, depth int, debug bool) {
 				}
 			}
 		}
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, in_wids[0], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[2], 0, step[2], 2, "StrConv_inside", fast_pack, debug)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, pow, in_wids[0], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[2], 0, step[2], 2, "StrConv_inside", fast_pack, debug)
 		fmt.Println("Block2 to 3 done!")
 		if debug {
 			max_bat := cont.N / (in_wids[0] * in_wids[0])
@@ -1072,7 +1082,7 @@ func testResNet_crop_fast_in(st, end, ker_wid, depth int, debug bool) {
 			bn_b3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+i+1)+"-b.csv", real_batch[2])
 			ker_in3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+i+1)+"-conv.csv", real_batch[2]*real_batch[2]*ker_size)
 
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, in_wids[0], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[2], 0, step[2], 2, "Conv_inside", fast_pack, debug)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, pow, in_wids[0], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[2], 0, step[2], 2, "Conv_inside", fast_pack, debug)
 			fmt.Println("Block3, Layer ", i, "done!")
 		}
 		fmt.Println("Block3 done.")
@@ -1084,32 +1094,73 @@ func testResNet_crop_fast_in(st, end, ker_wid, depth int, debug bool) {
 			ker_inf_wid++
 		}
 		ker_inf := readTxt(weight_dir+"final-fckernel.csv", real_batch[2]*fc_out)
-		ker_inf_ := make([]float64, ker_inf_wid*ker_inf_wid*real_batch[2]*fc_out)
-		for i := range ker_inf {
-			for b := 0; b < ker_inf_wid*ker_inf_wid; b++ {
-				ker_inf_[i+b*real_batch[2]*fc_out] = ker_inf[i]
+		var ct_result, ct_result2 *ckks.Ciphertext
+		if cf100 {
+			ker_inf_1 := make([]float64, ker_inf_wid*ker_inf_wid*real_batch[2]*fc_out/2)
+			ker_inf_2 := make([]float64, ker_inf_wid*ker_inf_wid*real_batch[2]*fc_out/2)
+			for i := 0; i < fc_out/2; i++ {
+				for j := 0; j < real_batch[2]; j++ {
+					for b := 0; b < ker_inf_wid*ker_inf_wid; b++ {
+						ker_inf_1[j*fc_out/2+i+b*real_batch[2]*fc_out/2] = ker_inf[j*fc_out+i]
+						ker_inf_2[j*fc_out/2+i+b*real_batch[2]*fc_out/2] = ker_inf[j*fc_out+i+fc_out/2]
+					}
+				}
 			}
+			bn_af := make([]float64, fc_out/2)
+			for i := range bn_af {
+				bn_af[i] = 1.0 / float64(raw_in_wids[2]*raw_in_wids[2]) // for reduce mean on raw_in_wids[2]**2 elements
+			}
+			bn_bf := readTxt(weight_dir+"final-fcbias.csv", fc_out)
+			bn_bf_1 := make([]float64, fc_out/2)
+			bn_bf_2 := make([]float64, fc_out/2)
+			for i := range bn_bf_1 {
+				bn_bf_1[i] = bn_bf[i]
+				bn_bf_2[i] = bn_bf[i+fc_out/2]
+			}
+			ct_result = evalConv_BN(cont, ct_layer, ker_inf_1, bn_af, bn_bf_1, in_wids[0], ker_inf_wid, real_batch[2], fc_out/2, norm[2], float64(1<<30), false)
+			ct_result2 = evalConv_BN(cont, ct_layer, ker_inf_2, bn_af, bn_bf_2, in_wids[0], ker_inf_wid, real_batch[2], fc_out/2, norm[2], float64(1<<30), false)
+			fmt.Println("Final FC done.")
+			timings[5] = time.Since(start).Seconds()
+			start = time.Now()
+		} else {
+			ker_inf_ := make([]float64, ker_inf_wid*ker_inf_wid*real_batch[2]*fc_out)
+			for i := range ker_inf {
+				for b := 0; b < ker_inf_wid*ker_inf_wid; b++ {
+					ker_inf_[i+b*real_batch[2]*fc_out] = ker_inf[i]
+				}
+			}
+			bn_af := make([]float64, fc_out)
+			for i := range bn_af {
+				bn_af[i] = 1.0 / float64(raw_in_wids[2]*raw_in_wids[2]) // for reduce mean on raw_in_wids[2]**2 elements
+			}
+			bn_bf := readTxt(weight_dir+"final-fcbias.csv", fc_out)
+			ct_result = evalConv_BN(cont, ct_layer, ker_inf_, bn_af, bn_bf, in_wids[0], ker_inf_wid, real_batch[2], fc_out, norm[2], float64(1<<30), false)
+			fmt.Println("Final FC done.")
+			timings[5] = time.Since(start).Seconds()
+			start = time.Now()
 		}
-		bn_af := make([]float64, fc_out)
-		for i := range bn_af {
-			bn_af[i] = 1.0 / float64(raw_in_wids[2]*raw_in_wids[2]) // for reduce mean on raw_in_wids[2]**2 elements
-		}
-		bn_bf := readTxt(weight_dir+"final-fcbias.csv", fc_out)
-		ct_result := evalConv_BN(cont, ct_layer, ker_inf_, bn_af, bn_bf, in_wids[0], ker_inf_wid, real_batch[2], fc_out, norm[2], float64(1<<30), false)
-		fmt.Println("Final FC done.")
-		timings[5] = time.Since(start).Seconds()
-		start = time.Now()
 
 		fmt.Println()
 		fmt.Println("===============  DECRYPTION  ===============")
 		fmt.Println()
-		cont.decryptor.Decrypt(ct_result, pl_input)
-		res_tmp := cont.encoder.DecodeCoeffs(pl_input)
-		fmt.Printf("Decryption Done in %s \n", time.Since(start))
-		res_out := prt_mat_one_norm(res_tmp, max_batch[0], norm[2], ker_inf_wid/2+1, ker_inf_wid/2+1)
-		// fmt.Print(res_out)
-		fmt.Println("\n result: ", res_out[:fc_out])
-		writeTxt(out_dir+"class_result_"+ker_name+"_"+strconv.Itoa(iter)+".csv", res_out[:fc_out])
+		if cf100 {
+			cont.decryptor.Decrypt(ct_result, pl_input)
+			res_tmp1 := cont.encoder.DecodeCoeffs(pl_input)
+			cont.decryptor.Decrypt(ct_result2, pl_input)
+			res_tmp2 := cont.encoder.DecodeCoeffs(pl_input)
+			fmt.Printf("Decryption Done in %s \n", time.Since(start))
+			res_out := append(prt_mat_one_norm(res_tmp1, max_batch[0], norm[2], ker_inf_wid/2+1, ker_inf_wid/2+1)[:fc_out/2], prt_mat_one_norm(res_tmp2, max_batch[0], norm[2], ker_inf_wid/2+1, ker_inf_wid/2+1)[:fc_out/2]...)
+			fmt.Println("\n result: ", res_out)
+			writeTxt(out_dir+"class_result_"+ker_name+"_"+strconv.Itoa(iter)+".csv", res_out)
+		} else {
+			cont.decryptor.Decrypt(ct_result, pl_input)
+			res_tmp := cont.encoder.DecodeCoeffs(pl_input)
+			fmt.Printf("Decryption Done in %s \n", time.Since(start))
+			res_out := prt_mat_one_norm(res_tmp, max_batch[0], norm[2], ker_inf_wid/2+1, ker_inf_wid/2+1)
+			// fmt.Print(res_out)
+			fmt.Println("\n result: ", res_out[:fc_out])
+			writeTxt(out_dir+"class_result_"+ker_name+"_"+strconv.Itoa(iter)+".csv", res_out[:fc_out])
+		}
 
 		fmt.Println("Blc1: ", timings[0], " sec")
 		fmt.Println("Blc1->2: ", timings[1], " sec")
@@ -1122,13 +1173,16 @@ func testResNet_crop_fast_in(st, end, ker_wid, depth int, debug bool) {
 
 }
 
-func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug bool) {
+func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug, cf100 bool) {
 	// init_batch fixed to 16
 	ker_name := "ker" + strconv.Itoa(ker_wid)
 	weight_dir := "Resnet_weights/weights_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid" + strconv.Itoa(wide_case) + "/"
 	out_dir := "Resnet_enc_results/results_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid" + strconv.Itoa(wide_case) + "/"
 
-	fc_out := 10     // 100 for cifar100
+	fc_out := 10 // 100 for cifar100
+	if cf100 {
+		fc_out = 100
+	}
 	init_batch := 16 // needs to be modified to 16
 
 	var num_blcs [3]int
@@ -1162,6 +1216,7 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug 
 
 	logN := 16
 	alpha := 0.0
+	pow := 5.0
 	in_wids := []int{32, 16, 8}                                         // before cropping
 	raw_in_wids := []int{32 - ker_wid/2, 16 - ker_wid/2, 8 - ker_wid/2} // same as python
 	fast_pack := true
@@ -1219,13 +1274,13 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug 
 			bn_b := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-b.csv", bn_batch)
 			if i == 1 {
 				ker_in := readTxt(weight_dir+"w0-conv.csv", 3*init_batch*ker_size)
-				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], raw_in_wids[0], ker_wid, 3, init_batch, norm[0], 0, step[0], 2, "Conv", fast_pack, debug)
+				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, 3, init_batch, norm[0], 0, step[0], 2, "Conv", fast_pack, debug)
 			} else if i == 2 {
 				ker_in := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-conv.csv", init_batch*real_batch[0]*ker_size)
-				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], raw_in_wids[0], ker_wid, init_batch, real_batch[0], norm[0], 0, step[0], 2, "Conv", fast_pack, debug)
+				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, init_batch, real_batch[0], norm[0], 0, step[0], 2, "Conv", fast_pack, debug)
 			} else {
 				ker_in := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-conv.csv", real_batch[0]*real_batch[0]*ker_size)
-				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], raw_in_wids[0], ker_wid, real_batch[0], real_batch[0], norm[0], 0, step[0], 2, "Conv", fast_pack, debug)
+				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, real_batch[0], real_batch[0], norm[0], 0, step[0], 2, "Conv", fast_pack, debug)
 			}
 			fmt.Println("Block1, Layer ", i, "done!")
 		}
@@ -1260,7 +1315,7 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug 
 		bn_b := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0])+"-b.csv", real_batch[1])
 
 		if wide_case == 2 {
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in12_new, bn_a, bn_b, alpha, in_wids[0], 2*raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[0]/2, 0, step[1], 2, "StrConv_odd", fast_pack, debug)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in12_new, bn_a, bn_b, alpha, pow, in_wids[0], 2*raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[0]/2, 0, step[1], 2, "StrConv_odd", fast_pack, debug)
 		} else if wide_case == 3 {
 			bn_a_0 := make([]float64, real_batch[1]/2)
 			bn_a_1 := make([]float64, real_batch[1]/2)
@@ -1272,8 +1327,8 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug 
 				bn_b_0[i] = bn_b[2*i]
 				bn_b_1[i] = bn_b[2*i+1]
 			}
-			ct_result1 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_0, bn_a_0, bn_b_0, alpha, in_wids[0], 2*raw_in_wids[1], ker_wid, real_batch[0], real_batch[0], norm[0], 0, step[1], 2, "StrConv_odd", fast_pack, debug)
-			ct_result2 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_1, bn_a_1, bn_b_1, alpha, in_wids[0], 2*raw_in_wids[1], ker_wid, real_batch[0], real_batch[0], norm[0], 2, step[1], 2, "StrConv_odd", fast_pack, debug)
+			ct_result1 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_0, bn_a_0, bn_b_0, alpha, pow, in_wids[0], 2*raw_in_wids[1], ker_wid, real_batch[0], real_batch[0], norm[0], 0, step[1], 2, "StrConv_odd", fast_pack, debug)
+			ct_result2 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_1, bn_a_1, bn_b_1, alpha, pow, in_wids[0], 2*raw_in_wids[1], ker_wid, real_batch[0], real_batch[0], norm[0], 2, step[1], 2, "StrConv_odd", fast_pack, debug)
 			ct_layer = cont.evaluator.AddNew(ct_result1, ct_result2)
 		}
 		fmt.Println("Block1 to 2 done!")
@@ -1291,7 +1346,7 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug 
 			bn_b2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+i)+"-b.csv", real_batch[1])
 			ker_in2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+i)+"-conv.csv", real_batch[1]*real_batch[1]*ker_size)
 
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, step[1], 2, "Conv_inside", fast_pack, debug)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, step[1], 2, "Conv_inside", fast_pack, debug)
 			fmt.Println("Block2, Layer ", i, "done!")
 		}
 		fmt.Println("Block2 done.")
@@ -1309,7 +1364,7 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug 
 				}
 			}
 		}
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, in_wids[1], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[2], 0, step[2], 2, "StrConv_inside", fast_pack, debug)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, pow, in_wids[1], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[2], 0, step[2], 2, "StrConv_inside", fast_pack, debug)
 		fmt.Println("Block2 to 3 done!")
 		if debug {
 			max_bat := cont.N / (in_wids[1] * in_wids[1])
@@ -1325,7 +1380,7 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug 
 			bn_b3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+i+1)+"-b.csv", real_batch[2])
 			ker_in3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+i+1)+"-conv.csv", real_batch[2]*real_batch[2]*ker_size)
 
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, in_wids[1], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[2], 0, step[2], 2, "Conv_inside", fast_pack, debug)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, pow, in_wids[1], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[2], 0, step[2], 2, "Conv_inside", fast_pack, debug)
 			fmt.Println("Block3, Layer ", i, "done!")
 		}
 		fmt.Println("Block3 done.")
@@ -1408,6 +1463,7 @@ func testResNet_crop_in_new(st, end, ker_wid int, wide bool) {
 
 	logN := 16
 	alpha := 0.0
+	pow := 5.0
 	in_wids := []int{32, 16, 8}                                         // before cropping
 	raw_in_wids := []int{32 - ker_wid/2, 16 - ker_wid/2, 8 - ker_wid/2} // same as python
 	fast_pack := true
@@ -1464,13 +1520,13 @@ func testResNet_crop_in_new(st, end, ker_wid int, wide bool) {
 			bn_b := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-b.csv", real_batch[0])
 			if i == 1 {
 				ker_in := readTxt(weight_dir+"w0-conv.csv", 3*init_batch*ker_size)
-				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], raw_in_wids[0], ker_wid, 3, init_batch, norm[0], 0, 0, 2, "Conv", fast_pack, prt_result)
+				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, 3, init_batch, norm[0], 0, 0, 2, "Conv", fast_pack, prt_result)
 			} else if i == 2 {
 				ker_in := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-conv.csv", init_batch*real_batch[0]*ker_size)
-				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], raw_in_wids[0], ker_wid, init_batch, real_batch[0], norm[0], 0, 0, 2, "Conv", fast_pack, prt_result)
+				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, init_batch, real_batch[0], norm[0], 0, 0, 2, "Conv", fast_pack, prt_result)
 			} else {
 				ker_in := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-conv.csv", real_batch[0]*real_batch[0]*ker_size)
-				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], raw_in_wids[0], ker_wid, real_batch[0], real_batch[0], norm[0], 0, 0, 2, "Conv", fast_pack, prt_result)
+				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, real_batch[0], real_batch[0], norm[0], 0, 0, 2, "Conv", fast_pack, prt_result)
 			}
 			fmt.Println("Block1, Layer ", i, "done!")
 		}
@@ -1489,7 +1545,7 @@ func testResNet_crop_in_new(st, end, ker_wid int, wide bool) {
 		}
 		bn_a := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0])+"-a.csv", real_batch[1])
 		bn_b := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0])+"-b.csv", real_batch[1])
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in12_new, bn_a, bn_b, alpha, in_wids[0], 2*raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, 0, 2, "StrConv_odd", fast_pack, prt_result)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in12_new, bn_a, bn_b, alpha, pow, in_wids[0], 2*raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, 0, 2, "StrConv_odd", fast_pack, prt_result)
 
 		fmt.Println("Block1 to 2 done!")
 		max_bat := cont.N / (in_wids[1] * in_wids[1])
@@ -1509,7 +1565,7 @@ func testResNet_crop_in_new(st, end, ker_wid int, wide bool) {
 			bn_b2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+i)+"-b.csv", real_batch[1])
 			ker_in2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+i)+"-conv.csv", real_batch[1]*real_batch[1]*ker_size)
 
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[2], 0, 0, 2, "Conv", fast_pack, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[2], 0, 0, 2, "Conv", fast_pack, prt_result)
 			fmt.Println("Block2, Layer ", i, "done!")
 		}
 		timings[2] = time.Since(new_start).Seconds()
@@ -1526,7 +1582,7 @@ func testResNet_crop_in_new(st, end, ker_wid int, wide bool) {
 				}
 			}
 		}
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, in_wids[1], 2*raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[3], 0, 0, 2, "StrConv_odd", fast_pack, prt_result)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, pow, in_wids[1], 2*raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[3], 0, 0, 2, "StrConv_odd", fast_pack, prt_result)
 
 		fmt.Println("Block2 to 3 done!")
 		max_bat = cont.N / (in_wids[2] * in_wids[2])
@@ -1545,7 +1601,7 @@ func testResNet_crop_in_new(st, end, ker_wid int, wide bool) {
 			bn_b3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+i+1)+"-b.csv", real_batch[2])
 			ker_in3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+i+1)+"-conv.csv", real_batch[2]*real_batch[2]*ker_size)
 
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, in_wids[2], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[4], 0, 0, 2, "Conv", fast_pack, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, pow, in_wids[2], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[4], 0, 0, 2, "Conv", fast_pack, prt_result)
 			fmt.Println("Block3, Layer ", i, "done!")
 		}
 		timings[4] = time.Since(new_start).Seconds()
@@ -1621,6 +1677,7 @@ func testResNet_crop_in(st, end, ker_wid int, wide bool) {
 
 	logN := 16
 	alpha := 0.0
+	pow := 5.0
 	in_wids := []int{32, 16, 8}                                         // before cropping
 	raw_in_wids := []int{32 - ker_wid/2, 16 - ker_wid/2, 8 - ker_wid/2} // same as python
 	fast_pack := true
@@ -1677,10 +1734,10 @@ func testResNet_crop_in(st, end, ker_wid int, wide bool) {
 			bn_b := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-b.csv", real_batch[0])
 			if i == 1 {
 				ker_in := readTxt(weight_dir+"w0-conv.csv", 3*real_batch[0]*ker_size)
-				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], raw_in_wids[0], ker_wid, 3, real_batch[0], norm[0], 0, 0, 2, "Conv", fast_pack, prt_result)
+				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, 3, real_batch[0], norm[0], 0, 0, 2, "Conv", fast_pack, prt_result)
 			} else {
 				ker_in := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-conv.csv", real_batch[0]*real_batch[0]*ker_size)
-				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], raw_in_wids[0], ker_wid, real_batch[0], real_batch[0], norm[0], 0, 0, 2, "Conv", fast_pack, prt_result)
+				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, real_batch[0], real_batch[0], norm[0], 0, 0, 2, "Conv", fast_pack, prt_result)
 			}
 			fmt.Println("Block1, Layer ", i, "done!")
 		}
@@ -1699,7 +1756,7 @@ func testResNet_crop_in(st, end, ker_wid int, wide bool) {
 		}
 		bn_a := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0])+"-a.csv", real_batch[1])
 		bn_b := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0])+"-b.csv", real_batch[1])
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in12_new, bn_a, bn_b, alpha, in_wids[0], 2*raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, 0, 2, "StrConv_odd", fast_pack, prt_result)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in12_new, bn_a, bn_b, alpha, pow, in_wids[0], 2*raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, 0, 2, "StrConv_odd", fast_pack, prt_result)
 
 		fmt.Println("Block1 to 2 done!")
 		max_bat := cont.N / (in_wids[1] * in_wids[1])
@@ -1719,7 +1776,7 @@ func testResNet_crop_in(st, end, ker_wid int, wide bool) {
 			bn_b2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+i)+"-b.csv", real_batch[1])
 			ker_in2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+i)+"-conv.csv", real_batch[1]*real_batch[1]*ker_size)
 
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[2], 0, 0, 2, "Conv", fast_pack, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[2], 0, 0, 2, "Conv", fast_pack, prt_result)
 			fmt.Println("Block2, Layer ", i, "done!")
 		}
 		timings[2] = time.Since(new_start).Seconds()
@@ -1736,7 +1793,7 @@ func testResNet_crop_in(st, end, ker_wid int, wide bool) {
 				}
 			}
 		}
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, in_wids[1], 2*raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[3], 0, 0, 2, "StrConv_odd", fast_pack, prt_result)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, pow, in_wids[1], 2*raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[3], 0, 0, 2, "StrConv_odd", fast_pack, prt_result)
 
 		fmt.Println("Block2 to 3 done!")
 		max_bat = cont.N / (in_wids[2] * in_wids[2])
@@ -1755,7 +1812,7 @@ func testResNet_crop_in(st, end, ker_wid int, wide bool) {
 			bn_b3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+i+1)+"-b.csv", real_batch[2])
 			ker_in3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+i+1)+"-conv.csv", real_batch[2]*real_batch[2]*ker_size)
 
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, in_wids[2], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[4], 0, 0, 2, "Conv", fast_pack, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, pow, in_wids[2], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[4], 0, 0, 2, "Conv", fast_pack, prt_result)
 			fmt.Println("Block3, Layer ", i, "done!")
 		}
 		timings[4] = time.Since(new_start).Seconds()
@@ -1829,6 +1886,7 @@ func testResNet_in_old(iter int) {
 	}
 
 	alpha := 0.0 // 0.3 => leakyrelu
+	pow := 5.0
 	input := make([]float64, cont.N)
 	k := 0
 	for i := 0; i < in_wids[0]; i++ {
@@ -1872,10 +1930,10 @@ func testResNet_in_old(iter int) {
 		bn_b := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-b.csv", real_batch[0])
 		if i == 1 {
 			ker_in := readTxt(weight_dir+"w0-conv.csv", 3*real_batch[0]*ker_size)
-			ct_layer = evalConv_BNRelu(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], ker_wid, 3, real_batch[0], norm, 0, 0, padding, false, prt_result)
+			ct_layer = evalConv_BNRelu(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], ker_wid, 3, real_batch[0], norm, 0, 0, padding, false, prt_result)
 		} else {
 			ker_in := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-conv.csv", real_batch[0]*real_batch[0]*ker_size)
-			ct_layer = evalConv_BNRelu(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 0, 0, padding, false, prt_result)
+			ct_layer = evalConv_BNRelu(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 0, 0, padding, false, prt_result)
 		}
 		fmt.Println("Block1, Layer ", i, "done!")
 	}
@@ -1896,8 +1954,8 @@ func testResNet_in_old(iter int) {
 	bn_b0 := bn_b[:real_batch[1]/2]
 	bn_b1 := bn_b[real_batch[1]/2:]
 
-	ct_result1 := evalConv_BNRelu(cont, ct_layer, ker_in_0, bn_a0, bn_b0, alpha, in_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 0, 0, padding, true, prt_result)
-	ct_result2 := evalConv_BNRelu(cont, ct_layer, ker_in_1, bn_a1, bn_b1, alpha, in_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 1, 0, padding, true, prt_result)
+	ct_result1 := evalConv_BNRelu(cont, ct_layer, ker_in_0, bn_a0, bn_b0, alpha, pow, in_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 0, 0, padding, true, prt_result)
+	ct_result2 := evalConv_BNRelu(cont, ct_layer, ker_in_1, bn_a1, bn_b1, alpha, pow, in_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 1, 0, padding, true, prt_result)
 	ct_result := cont.evaluator.AddNew(ct_result1, ct_result2)
 	fmt.Println("Block1 to 2 done!")
 	timings[1] = time.Since(new_start).Seconds()
@@ -1915,7 +1973,7 @@ func testResNet_in_old(iter int) {
 		bn_b2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+i)+"-b.csv", real_batch[1])
 		ker_in2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+i)+"-conv.csv", real_batch[1]*real_batch[1]*ker_size)
 
-		ct_layer2 = evalConv_BNRelu(cont, ct_layer2, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, padding, false, prt_result)
+		ct_layer2 = evalConv_BNRelu(cont, ct_layer2, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, padding, false, prt_result)
 		fmt.Println("Block2, Layer ", i, "done!")
 	}
 	timings[2] = time.Since(new_start).Seconds()
@@ -1925,7 +1983,7 @@ func testResNet_in_old(iter int) {
 	bn_a3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+num_blc2+1)+"-a.csv", real_batch[2])
 	bn_b3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+num_blc2+1)+"-b.csv", real_batch[2])
 
-	ct_result = evalConv_BNRelu(cont, ct_layer2, ker_in23, bn_a3, bn_b3, alpha, in_wids[1], ker_wid, real_batch[1], real_batch[2], norm, 0, 0, padding, true, prt_result)
+	ct_result = evalConv_BNRelu(cont, ct_layer2, ker_in23, bn_a3, bn_b3, alpha, pow, in_wids[1], ker_wid, real_batch[1], real_batch[2], norm, 0, 0, padding, true, prt_result)
 	fmt.Println("Block2 to 3 done!")
 	timings[3] = time.Since(new_start).Seconds()
 	new_start = time.Now()
@@ -1942,7 +2000,7 @@ func testResNet_in_old(iter int) {
 		bn_b3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+num_blc2+i+1)+"-b.csv", real_batch[2])
 		ker_in3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+num_blc2+i+1)+"-conv.csv", real_batch[2]*real_batch[2]*ker_size)
 
-		ct_layer3 = evalConv_BNRelu(cont, ct_layer3, ker_in3, bn_a3, bn_b3, alpha, in_wids[2], ker_wid, real_batch[2], real_batch[2], norm, 0, 0, padding, false, prt_result)
+		ct_layer3 = evalConv_BNRelu(cont, ct_layer3, ker_in3, bn_a3, bn_b3, alpha, pow, in_wids[2], ker_wid, real_batch[2], real_batch[2], norm, 0, 0, padding, false, prt_result)
 		fmt.Println("Block3, Layer ", i, "done!")
 	}
 	timings[4] = time.Since(new_start).Seconds()
@@ -2159,6 +2217,7 @@ func testResNet_ker23() {
 	}
 
 	alpha := 0.0 // 0.3 => leakyrelu
+	pow := 5.0
 	input := make([]float64, cont.N)
 	k := 0.0
 	for i := 0; i < in_wids[1]; i++ {
@@ -2285,9 +2344,9 @@ func testResNet_ker23() {
 	// 		prt_result = true
 	// 	}
 	// 	if i == 1 {
-	// 		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], kp_wids[0], ker_wid, 3, real_batch[0], norm, 0, 1, "Conv", prt_result)
+	// 		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], kp_wids[0], ker_wid, 3, real_batch[0], norm, 0, 1, "Conv", prt_result)
 	// 	} else {
-	// 		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in1, bn_a, bn_b, alpha, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 0, 1, "Conv", prt_result)
+	// 		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in1, bn_a, bn_b, alpha, pow, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 0, 1, "Conv", prt_result)
 	// 	}
 	// 	fmt.Println("Block1, Layer ", i, "done!")
 	// }
@@ -2295,8 +2354,8 @@ func testResNet_ker23() {
 	// timings[0] = time.Since(new_start).Seconds()
 	// new_start = time.Now()
 
-	// ct_result1 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_0, bn_a2_0, bn_b2_0, alpha, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 0, 1, "StrConv", false)
-	// ct_result2 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_1, bn_a2_1, bn_b2_1, alpha, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 2, 1, "StrConv", false)
+	// ct_result1 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_0, bn_a2_0, bn_b2_0, alpha, pow, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 0, 1, "StrConv", false)
+	// ct_result2 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_1, bn_a2_1, bn_b2_1, alpha, pow, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 2, 1, "StrConv", false)
 	// ct_result := cont.evaluator.AddNew(ct_result1, ct_result2)
 	// fmt.Println("Block1 to 2 done!")
 	// max_bat := cont.N / (in_wids[1] * in_wids[1])
@@ -2314,13 +2373,13 @@ func testResNet_ker23() {
 		if i == num_blc2 {
 			prt_result = true
 		}
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
 		fmt.Println("Block2, Layer ", i, "done!")
 	}
 	timings[2] = time.Since(new_start).Seconds()
 	new_start = time.Now()
 	norm = 1
-	ct_result := evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, in_wids[1], kp_wids[1], ker_wid, 2*real_batch[1], real_batch[2], norm, 0, 0, 1, "StrConv", fast_pack, prt_result)
+	ct_result := evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, pow, in_wids[1], kp_wids[1], ker_wid, 2*real_batch[1], real_batch[2], norm, 0, 0, 1, "StrConv", fast_pack, prt_result)
 	fmt.Println("Block2 to 3 done!")
 	max_bat := cont.N / (in_wids[2] * in_wids[2])
 	res_ttmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_result))
@@ -2336,7 +2395,7 @@ func testResNet_ker23() {
 		if i == num_blc3 {
 			prt_result = true
 		}
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, in_wids[2], kp_wids[2], ker_wid, real_batch[2], real_batch[2], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, pow, in_wids[2], kp_wids[2], ker_wid, real_batch[2], real_batch[2], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
 		fmt.Println("Block3, Layer ", i, "done!")
 	}
 	timings[4] = time.Since(new_start).Seconds()
@@ -2413,6 +2472,7 @@ func testResNet() {
 	}
 
 	alpha := 0.0 // 0.3 => leakyrelu
+	pow := 5.0
 	input := make([]float64, cont.N)
 	k := 1.0
 	for i := 0; i < in_wids[0]; i++ {
@@ -2526,9 +2586,9 @@ func testResNet() {
 			prt_result = true
 		}
 		if i == 1 {
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], kp_wids[0], ker_wid, 3, real_batch[0], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], kp_wids[0], ker_wid, 3, real_batch[0], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
 		} else {
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in1, bn_a, bn_b, alpha, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in1, bn_a, bn_b, alpha, pow, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
 		}
 		fmt.Println("Block1, Layer ", i, "done!")
 	}
@@ -2536,8 +2596,8 @@ func testResNet() {
 	timings[0] = time.Since(new_start).Seconds()
 	new_start = time.Now()
 
-	ct_result1 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_0, bn_a2_0, bn_b2_0, alpha, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 0, 0, 1, "StrConv", fast_pack, false)
-	ct_result2 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_1, bn_a2_1, bn_b2_1, alpha, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 2, 0, 1, "StrConv", fast_pack, false)
+	ct_result1 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_0, bn_a2_0, bn_b2_0, alpha, pow, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 0, 0, 1, "StrConv", fast_pack, false)
+	ct_result2 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_1, bn_a2_1, bn_b2_1, alpha, pow, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 2, 0, 1, "StrConv", fast_pack, false)
 	ct_result := cont.evaluator.AddNew(ct_result1, ct_result2)
 	fmt.Println("Block1 to 2 done!")
 	max_bat := cont.N / (in_wids[1] * in_wids[1])
@@ -2555,13 +2615,13 @@ func testResNet() {
 		if i == num_blc2 {
 			prt_result = true
 		}
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
 		fmt.Println("Block2, Layer ", i, "done!")
 	}
 	timings[2] = time.Since(new_start).Seconds()
 	new_start = time.Now()
 	norm = 1
-	ct_result = evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, in_wids[1], kp_wids[1], ker_wid, 2*real_batch[1], real_batch[2], norm, 0, 0, 1, "StrConv", fast_pack, prt_result)
+	ct_result = evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, pow, in_wids[1], kp_wids[1], ker_wid, 2*real_batch[1], real_batch[2], norm, 0, 0, 1, "StrConv", fast_pack, prt_result)
 	fmt.Println("Block2 to 3 done!")
 	max_bat = cont.N / (in_wids[2] * in_wids[2])
 	res_ttmp = cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_result))
@@ -2577,7 +2637,7 @@ func testResNet() {
 		if i == num_blc3 {
 			prt_result = true
 		}
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, in_wids[2], kp_wids[2], ker_wid, real_batch[2], real_batch[2], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, pow, in_wids[2], kp_wids[2], ker_wid, real_batch[2], real_batch[2], norm, 0, 0, 1, "Conv", fast_pack, prt_result)
 		fmt.Println("Block3, Layer ", i, "done!")
 	}
 	timings[4] = time.Since(new_start).Seconds()
@@ -2632,6 +2692,7 @@ func testResNet_crop() {
 	in_wids := []int{32, 16, 8}
 	raw_in_wids := []int{32 - ker_wid/2, 16 - ker_wid/2, 8 - ker_wid/2} // same as python
 	alpha := 0.0
+	pow := 5.0
 	fc_out := 10
 	fast_pack := true
 
@@ -2759,11 +2820,11 @@ func testResNet_crop() {
 			prt_result = true
 		}
 		if i == 1 {
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in0, bn_a1, bn_b1, alpha, in_wids[0], raw_in_wids[0], ker_wid, 3, init_batch, norm[0], 0, 0, 2, "Conv", fast_pack, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in0, bn_a1, bn_b1, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, 3, init_batch, norm[0], 0, 0, 2, "Conv", fast_pack, prt_result)
 		} else if i == 2 {
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in01, bn_a1, bn_b1, alpha, in_wids[0], raw_in_wids[0], ker_wid, init_batch, real_batch[0], norm[0], 0, 0, 2, "Conv", fast_pack, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in01, bn_a1, bn_b1, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, init_batch, real_batch[0], norm[0], 0, 0, 2, "Conv", fast_pack, prt_result)
 		} else {
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in1, bn_a1, bn_b1, alpha, in_wids[0], raw_in_wids[0], ker_wid, real_batch[0], real_batch[0], norm[0], 0, 0, 2, "Conv", fast_pack, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in1, bn_a1, bn_b1, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, real_batch[0], real_batch[0], norm[0], 0, 0, 2, "Conv", fast_pack, prt_result)
 		}
 		fmt.Println("Block1, Layer ", i, "done!")
 	}
@@ -2771,7 +2832,7 @@ func testResNet_crop() {
 	timings[0] = time.Since(new_start).Seconds()
 	new_start = time.Now()
 
-	ct_result := evalConv_BNRelu_new(cont, ct_layer, ker_in12_new, bn_a2, bn_b2, alpha, in_wids[0], 2*raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, 0, 2, "StrConv_odd", fast_pack, prt_result)
+	ct_result := evalConv_BNRelu_new(cont, ct_layer, ker_in12_new, bn_a2, bn_b2, alpha, pow, in_wids[0], 2*raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, 0, 2, "StrConv_odd", fast_pack, prt_result)
 
 	fmt.Println("Block1 to 2 done!")
 	max_bat := cont.N / (in_wids[1] * in_wids[1])
@@ -2788,13 +2849,13 @@ func testResNet_crop() {
 		if i == num_blc2 {
 			prt_result = true
 		}
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[2], 0, 0, 2, "Conv", fast_pack, prt_result)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[2], 0, 0, 2, "Conv", fast_pack, prt_result)
 		fmt.Println("Block2, Layer ", i, "done!")
 	}
 	timings[2] = time.Since(new_start).Seconds()
 	new_start = time.Now()
 
-	ct_result = evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, in_wids[1], 2*raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[3], 0, 0, 2, "StrConv_odd", fast_pack, prt_result)
+	ct_result = evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, pow, in_wids[1], 2*raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[3], 0, 0, 2, "StrConv_odd", fast_pack, prt_result)
 
 	fmt.Println("Block2 to 3 done!")
 	max_bat = cont.N / (in_wids[2] * in_wids[2])
@@ -2811,7 +2872,7 @@ func testResNet_crop() {
 		if i == num_blc3 {
 			prt_result = true
 		}
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, in_wids[2], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[4], 0, 0, 2, "Conv", fast_pack, prt_result)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, pow, in_wids[2], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[4], 0, 0, 2, "Conv", fast_pack, prt_result)
 		fmt.Println("Block3, Layer ", i, "done!")
 	}
 	timings[4] = time.Since(new_start).Seconds()
@@ -2865,6 +2926,7 @@ func testResNet_crop_fast() {
 	in_wids := []int{32, 16, 8}
 	raw_in_wids := []int{32 - ker_wid/2, 16 - ker_wid/2, 8 - ker_wid/2} // same as python
 	alpha := 0.0
+	pow := 5.0
 	fc_out := 10
 	fast_pack := true
 
@@ -2990,11 +3052,11 @@ func testResNet_crop_fast() {
 			prt_result = true
 		}
 		if i == 1 {
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in0, bn_a1, bn_b1, alpha, in_wids[0], raw_in_wids[0], ker_wid, 3, init_batch, norm[0], 0, step[0], 2, "Conv_inside", fast_pack, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in0, bn_a1, bn_b1, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, 3, init_batch, norm[0], 0, step[0], 2, "Conv_inside", fast_pack, prt_result)
 		} else if i == 2 {
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in01, bn_a1, bn_b1, alpha, in_wids[0], raw_in_wids[0], ker_wid, init_batch, real_batch[0], norm[0], 0, step[0], 2, "Conv_inside", fast_pack, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in01, bn_a1, bn_b1, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, init_batch, real_batch[0], norm[0], 0, step[0], 2, "Conv_inside", fast_pack, prt_result)
 		} else {
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in1, bn_a1, bn_b1, alpha, in_wids[0], raw_in_wids[0], ker_wid, real_batch[0], real_batch[0], norm[0], 0, step[0], 2, "Conv_inside", fast_pack, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in1, bn_a1, bn_b1, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, real_batch[0], real_batch[0], norm[0], 0, step[0], 2, "Conv_inside", fast_pack, prt_result)
 		}
 		fmt.Println("Block1, Layer ", i, "done!")
 	}
@@ -3002,7 +3064,7 @@ func testResNet_crop_fast() {
 	timings[0] = time.Since(new_start).Seconds()
 	new_start = time.Now()
 
-	ct_result := evalConv_BNRelu_new(cont, ct_layer, ker_in12_new, bn_a2, bn_b2, alpha, in_wids[0], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, step[1], 2, "StrConv_inside", fast_pack, prt_result)
+	ct_result := evalConv_BNRelu_new(cont, ct_layer, ker_in12_new, bn_a2, bn_b2, alpha, pow, in_wids[0], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, step[1], 2, "StrConv_inside", fast_pack, prt_result)
 
 	fmt.Println("Block1 to 2 done!")
 	max_bat := cont.N / (in_wids[0] * in_wids[0])
@@ -3019,13 +3081,13 @@ func testResNet_crop_fast() {
 		if i == num_blc2 {
 			prt_result = true
 		}
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, in_wids[0], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, step[1], 2, "Conv_inside", fast_pack, prt_result)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[0], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, step[1], 2, "Conv_inside", fast_pack, prt_result)
 		fmt.Println("Block2, Layer ", i, "done!")
 	}
 	timings[2] = time.Since(new_start).Seconds()
 	new_start = time.Now()
 
-	ct_result = evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, in_wids[0], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[2], 0, step[2], 2, "StrConv_inside", fast_pack, prt_result)
+	ct_result = evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, pow, in_wids[0], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[2], 0, step[2], 2, "StrConv_inside", fast_pack, prt_result)
 
 	fmt.Println("Block2 to 3 done!")
 	max_bat = cont.N / (in_wids[0] * in_wids[0])
@@ -3042,7 +3104,7 @@ func testResNet_crop_fast() {
 		if i == num_blc3 {
 			prt_result = true
 		}
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, in_wids[0], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[2], 0, step[2], 2, "Conv_inside", fast_pack, prt_result)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, pow, in_wids[0], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[2], 0, step[2], 2, "Conv_inside", fast_pack, prt_result)
 		fmt.Println("Block3, Layer ", i, "done!")
 	}
 	timings[4] = time.Since(new_start).Seconds()
@@ -3110,6 +3172,7 @@ func testResNet_crop_fast_wide() {
 	in_wids := []int{16, 8, 4}
 	raw_in_wids := []int{16 - ker_wid/2, 8 - ker_wid/2, 4 - ker_wid/2} // same as python
 	alpha := 0.0
+	pow := 5.0
 	fc_out := 10
 	fast_pack := true
 
@@ -3259,11 +3322,11 @@ func testResNet_crop_fast_wide() {
 			prt_result = true
 		}
 		if i == 1 {
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in0, bn_a1, bn_b1, alpha, in_wids[0], raw_in_wids[0], ker_wid, 3, init_batch, norm[0], 0, step[0], 2, "Conv", fast_pack, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in0, bn_a1, bn_b1, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, 3, init_batch, norm[0], 0, step[0], 2, "Conv", fast_pack, prt_result)
 		} else if i == 2 {
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in01, bn_a1, bn_b1, alpha, in_wids[0], raw_in_wids[0], ker_wid, init_batch, real_batch[0], norm[0], 0, step[0], 2, "Conv", fast_pack, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in01, bn_a1, bn_b1, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, init_batch, real_batch[0], norm[0], 0, step[0], 2, "Conv", fast_pack, prt_result)
 		} else {
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in1, bn_a1, bn_b1, alpha, in_wids[0], raw_in_wids[0], ker_wid, real_batch[0], real_batch[0], norm[0], 0, step[0], 2, "Conv", fast_pack, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in1, bn_a1, bn_b1, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, real_batch[0], real_batch[0], norm[0], 0, step[0], 2, "Conv", fast_pack, prt_result)
 		}
 		fmt.Println("Block1, Layer ", i, "done!")
 	}
@@ -3273,10 +3336,10 @@ func testResNet_crop_fast_wide() {
 
 	var ct_result *ckks.Ciphertext
 	if wide == 2 {
-		ct_result = evalConv_BNRelu_new(cont, ct_layer, ker_in12_new, bn_a2, bn_b2, alpha, in_wids[0], 2*raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[0]/2, 0, step[1], 2, "StrConv_odd", fast_pack, prt_result)
+		ct_result = evalConv_BNRelu_new(cont, ct_layer, ker_in12_new, bn_a2, bn_b2, alpha, pow, in_wids[0], 2*raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[0]/2, 0, step[1], 2, "StrConv_odd", fast_pack, prt_result)
 	} else if wide == 3 {
-		ct_result1 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_0, bn_a2_0, bn_b2_0, alpha, in_wids[0], 2*raw_in_wids[1], ker_wid, real_batch[0], real_batch[0], norm[0], 0, step[1], 2, "StrConv_odd", fast_pack, prt_result)
-		ct_result2 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_1, bn_a2_1, bn_b2_1, alpha, in_wids[0], 2*raw_in_wids[1], ker_wid, real_batch[0], real_batch[0], norm[0], 2, step[1], 2, "StrConv_odd", fast_pack, prt_result)
+		ct_result1 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_0, bn_a2_0, bn_b2_0, alpha, pow, in_wids[0], 2*raw_in_wids[1], ker_wid, real_batch[0], real_batch[0], norm[0], 0, step[1], 2, "StrConv_odd", fast_pack, prt_result)
+		ct_result2 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_1, bn_a2_1, bn_b2_1, alpha, pow, in_wids[0], 2*raw_in_wids[1], ker_wid, real_batch[0], real_batch[0], norm[0], 2, step[1], 2, "StrConv_odd", fast_pack, prt_result)
 		ct_result = cont.evaluator.AddNew(ct_result1, ct_result2)
 	} else {
 		panic("wrong wide")
@@ -3297,13 +3360,13 @@ func testResNet_crop_fast_wide() {
 		if i == num_blc2 {
 			prt_result = true
 		}
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, step[1], 2, "Conv_inside", fast_pack, prt_result)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, step[1], 2, "Conv_inside", fast_pack, prt_result)
 		fmt.Println("Block2, Layer ", i, "done!")
 	}
 	timings[2] = time.Since(new_start).Seconds()
 	new_start = time.Now()
 
-	ct_result = evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, in_wids[1], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[2], 0, step[2], 2, "StrConv_inside", fast_pack, prt_result)
+	ct_result = evalConv_BNRelu_new(cont, ct_layer, ker_in23_new, bn_a3, bn_b3, alpha, pow, in_wids[1], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[2], 0, step[2], 2, "StrConv_inside", fast_pack, prt_result)
 
 	fmt.Println("Block2 to 3 done!")
 	max_bat = cont.N / (in_wids[1] * in_wids[1])
@@ -3320,7 +3383,7 @@ func testResNet_crop_fast_wide() {
 		if i == num_blc3 {
 			prt_result = true
 		}
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, in_wids[1], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[2], 0, step[2], 2, "Conv_inside", fast_pack, prt_result)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, pow, in_wids[1], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[2], 0, step[2], 2, "Conv_inside", fast_pack, prt_result)
 		fmt.Println("Block3, Layer ", i, "done!")
 	}
 	timings[4] = time.Since(new_start).Seconds()
@@ -3393,6 +3456,7 @@ func testResNet_old() {
 	}
 
 	alpha := 0.0 // 0.3 => leakyrelu
+	pow := 5.0
 	input := make([]float64, cont.N)
 	k := 0.0
 	for i := 0; i < in_wids[0]; i++ {
@@ -3478,15 +3542,15 @@ func testResNet_old() {
 		if i == num_blc1 {
 			prt_result = true
 		}
-		ct_layer[i] = evalConv_BNRelu(cont, ct_layer[i-1], ker_in, bn_a, bn_b, alpha, in_wids[0], ker_wid, max_batch[0], max_batch[0], norm, 0, 0, padding, false, prt_result)
+		ct_layer[i] = evalConv_BNRelu(cont, ct_layer[i-1], ker_in, bn_a, bn_b, alpha, pow, in_wids[0], ker_wid, max_batch[0], max_batch[0], norm, 0, 0, padding, false, prt_result)
 		fmt.Println("Block1, Layer ", i, "done!")
 	}
 	fmt.Println("done.")
 	timings[0] = time.Since(new_start).Seconds()
 	new_start = time.Now()
 
-	ct_result1 := evalConv_BNRelu(cont, ct_layer[num_blc1], ker_in12_0, bn_a, bn_b, alpha, in_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 0, 0, padding, true, prt_result)
-	ct_result2 := evalConv_BNRelu(cont, ct_layer[num_blc1], ker_in12_1, bn_a, bn_b, alpha, in_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 1, 0, padding, true, prt_result)
+	ct_result1 := evalConv_BNRelu(cont, ct_layer[num_blc1], ker_in12_0, bn_a, bn_b, alpha, pow, in_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 0, 0, padding, true, prt_result)
+	ct_result2 := evalConv_BNRelu(cont, ct_layer[num_blc1], ker_in12_1, bn_a, bn_b, alpha, pow, in_wids[0], ker_wid, real_batch[0], real_batch[1]/2, norm, 1, 0, padding, true, prt_result)
 	ct_result := cont.evaluator.AddNew(ct_result1, ct_result2)
 	fmt.Println("Block1 to 2 done!")
 	timings[1] = time.Since(new_start).Seconds()
@@ -3501,13 +3565,13 @@ func testResNet_old() {
 		if i == num_blc2 {
 			prt_result = true
 		}
-		ct_layer2[i] = evalConv_BNRelu(cont, ct_layer2[i-1], ker_in2, bn_a2, bn_b2, alpha, in_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, padding, false, prt_result)
+		ct_layer2[i] = evalConv_BNRelu(cont, ct_layer2[i-1], ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, padding, false, prt_result)
 		fmt.Println("Block2, Layer ", i, "done!")
 	}
 	timings[2] = time.Since(new_start).Seconds()
 	new_start = time.Now()
 
-	ct_result = evalConv_BNRelu(cont, ct_layer2[num_blc2], ker_in23, bn_a3, bn_b3, alpha, in_wids[1], ker_wid, real_batch[1], real_batch[2], norm, 0, 0, padding, true, prt_result)
+	ct_result = evalConv_BNRelu(cont, ct_layer2[num_blc2], ker_in23, bn_a3, bn_b3, alpha, pow, in_wids[1], ker_wid, real_batch[1], real_batch[2], norm, 0, 0, padding, true, prt_result)
 	fmt.Println("Block2 to 3 done!")
 	timings[3] = time.Since(new_start).Seconds()
 	new_start = time.Now()
@@ -3521,7 +3585,7 @@ func testResNet_old() {
 		if i == num_blc3 {
 			prt_result = true
 		}
-		ct_layer3[i] = evalConv_BNRelu(cont, ct_layer3[i-1], ker_in3, bn_a3, bn_b3, alpha, in_wids[2], ker_wid, real_batch[2], real_batch[2], norm, 0, 0, padding, false, prt_result)
+		ct_layer3[i] = evalConv_BNRelu(cont, ct_layer3[i-1], ker_in3, bn_a3, bn_b3, alpha, pow, in_wids[2], ker_wid, real_batch[2], real_batch[2], norm, 0, 0, padding, false, prt_result)
 		fmt.Println("Block3, Layer ", i, "done!")
 	}
 	timings[4] = time.Since(new_start).Seconds()
@@ -3757,6 +3821,7 @@ func testImagenet_final_fast() {
 	}
 
 	alpha := 0.0 // 0.3 => leakyrelu
+	pow := 5.0
 	raw_input := make([]float64, raw_in_wids[0]*raw_in_wids[0]*real_batch[0])
 	for i := range raw_input {
 		raw_input[i] = 1.0 - 1.0*float64(i)/float64(len(raw_input))
@@ -3852,8 +3917,8 @@ func testImagenet_final_fast() {
 	begin_start := time.Now()
 	// input to block 2
 	new_start := time.Now()
-	ct_result1 := evalConv_BNRelu_new(cont, ct_input, ker_in12_0, bn_a12_0, bn_b12_0, alpha, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 0, 0, iter, "StrConv", false, false)
-	ct_result2 := evalConv_BNRelu_new(cont, ct_input, ker_in12_1, bn_a12_1, bn_b12_1, alpha, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 1, 0, iter, "StrConv", false, false)
+	ct_result1 := evalConv_BNRelu_new(cont, ct_input, ker_in12_0, bn_a12_0, bn_b12_0, alpha, pow, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 0, 0, iter, "StrConv", false, false)
+	ct_result2 := evalConv_BNRelu_new(cont, ct_input, ker_in12_1, bn_a12_1, bn_b12_1, alpha, pow, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 1, 0, iter, "StrConv", false, false)
 	ct_result := cont.evaluator.AddNew(ct_result1, ct_result2)
 	fmt.Println("Block1 to 2 done!")
 	res_tmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_result))
@@ -3869,7 +3934,7 @@ func testImagenet_final_fast() {
 		if i == num_blc {
 			prt_result = true
 		}
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, iter, "Conv", false, prt_result)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, iter, "Conv", false, prt_result)
 		fmt.Println("Block2, Layer ", i, "done!")
 	}
 	timings[1] = time.Since(new_start).Seconds()
@@ -3919,6 +3984,7 @@ func testImagenet_final() {
 	}
 
 	alpha := 0.0 // 0.3 => leakyrelu
+	pow := 5.0
 	raw_input := make([]float64, raw_in_wids[0]*raw_in_wids[0]*real_batch[0])
 	for i := range raw_input {
 		raw_input[i] = 1.0 - 1.0*float64(i)/float64(len(raw_input))
@@ -4014,8 +4080,8 @@ func testImagenet_final() {
 	begin_start := time.Now()
 	// input to block 2
 	new_start := time.Now()
-	ct_result1 := evalConv_BNRelu_new(cont, ct_input, ker_in12_0, bn_a12_0, bn_b12_0, alpha, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 0, 0, iter, "StrConv", true, false)
-	ct_result2 := evalConv_BNRelu_new(cont, ct_input, ker_in12_1, bn_a12_1, bn_b12_1, alpha, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 2, 0, iter, "StrConv", true, false)
+	ct_result1 := evalConv_BNRelu_new(cont, ct_input, ker_in12_0, bn_a12_0, bn_b12_0, alpha, pow, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 0, 0, iter, "StrConv", true, false)
+	ct_result2 := evalConv_BNRelu_new(cont, ct_input, ker_in12_1, bn_a12_1, bn_b12_1, alpha, pow, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 2, 0, iter, "StrConv", true, false)
 	ct_result := cont.evaluator.AddNew(ct_result1, ct_result2)
 	fmt.Println("Block1 to 2 done!")
 	res_tmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_result))
@@ -4032,7 +4098,7 @@ func testImagenet_final() {
 		if i == num_blc {
 			prt_result = true
 		}
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, iter, "Conv", fast_pack, prt_result)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, iter, "Conv", fast_pack, prt_result)
 		fmt.Println("Block2, Layer ", i, "done!")
 	}
 	timings[1] = time.Since(new_start).Seconds()
@@ -4083,6 +4149,7 @@ func testImagenet() {
 	}
 
 	alpha := 0.0 // 0.3 => leakyrelu
+	pow := 5.0
 	input := make([]float64, raw_in_wids[0]*raw_in_wids[0]*real_batch[0])
 	for i := range input {
 		input[i] = 1.0 // 1.0 - 1.0*float64(i)/float64(len(input))
@@ -4237,8 +4304,8 @@ func testImagenet() {
 	prt_result := false
 	var ct_result *ckks.Ciphertext
 	for pos := 0; pos < 4; pos++ {
-		ct_tmp := cont.evaluator.AddNew(evalConv_BNRelu_new(cont, ct_input[0], ker_in0_sep[pos][0], bn_a0_sep[pos], bn_b0_sep[pos], alpha, in_wids[0], kp_wids[0], ker_wid, max_batch[0], max_batch[0], norm, pos, 0, iter, "StrConv", fast_pack, prt_result),
-			evalConv_BNRelu_new(cont, ct_input[1], ker_in0_sep[pos][1], bn_a0_sep[pos], bn_b0_sep[pos], alpha, in_wids[0], kp_wids[0], ker_wid, max_batch[0], max_batch[0], norm, pos, 0, iter, "StrConv", fast_pack, prt_result))
+		ct_tmp := cont.evaluator.AddNew(evalConv_BNRelu_new(cont, ct_input[0], ker_in0_sep[pos][0], bn_a0_sep[pos], bn_b0_sep[pos], alpha, pow, in_wids[0], kp_wids[0], ker_wid, max_batch[0], max_batch[0], norm, pos, 0, iter, "StrConv", fast_pack, prt_result),
+			evalConv_BNRelu_new(cont, ct_input[1], ker_in0_sep[pos][1], bn_a0_sep[pos], bn_b0_sep[pos], alpha, pow, in_wids[0], kp_wids[0], ker_wid, max_batch[0], max_batch[0], norm, pos, 0, iter, "StrConv", fast_pack, prt_result))
 		if pos == 0 {
 			ct_result = ct_tmp
 		} else {
@@ -4259,15 +4326,15 @@ func testImagenet() {
 		if i == num_blc1 {
 			prt_result = true
 		}
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in1, bn_a1, bn_b1, alpha, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, iter, "Conv", fast_pack, prt_result)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in1, bn_a1, bn_b1, alpha, pow, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, iter, "Conv", fast_pack, prt_result)
 		fmt.Println("Block1, Layer ", i, "done!")
 	}
 	fmt.Println("Block1 done.")
 	timings[1] = time.Since(new_start).Seconds()
 	new_start = time.Now()
 
-	ct_result1 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_0, bn_a12_0, bn_b12_0, alpha, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, iter, "StrConv", true, false)
-	ct_result2 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_1, bn_a12_1, bn_b12_1, alpha, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 2, 0, iter, "StrConv", true, false)
+	ct_result1 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_0, bn_a12_0, bn_b12_0, alpha, pow, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, iter, "StrConv", true, false)
+	ct_result2 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_1, bn_a12_1, bn_b12_1, alpha, pow, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 2, 0, iter, "StrConv", true, false)
 	ct_result = cont.evaluator.AddNew(ct_result1, ct_result2)
 	fmt.Println("Block1 to 2 done!")
 	res_ttmp = cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_result))
@@ -4284,7 +4351,7 @@ func testImagenet() {
 		if i == num_blc2 {
 			prt_result = true
 		}
-		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, in_wids[2], kp_wids[2], ker_wid, real_batch[2], real_batch[2], norm, 0, 0, iter, "Conv", fast_pack, prt_result)
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[2], kp_wids[2], ker_wid, real_batch[2], real_batch[2], norm, 0, 0, iter, "Conv", fast_pack, prt_result)
 		fmt.Println("Block2, Layer ", i, "done!")
 	}
 	timings[3] = time.Since(new_start).Seconds()
@@ -4346,6 +4413,7 @@ func testImagenet_final_fast_in(st, end, ker_wid int) {
 		max_batch[i] = cont.N / (in_wids[i] * in_wids[i])
 	}
 	alpha := 0.0 // 0.3 => leakyrelu
+	pow := 5.0
 
 	for name_iter := st; name_iter < end; name_iter++ {
 		weight_num := 10
@@ -4385,7 +4453,7 @@ func testImagenet_final_fast_in(st, end, ker_wid int) {
 			weight_num++
 			bn_a1 := readTxt(weight_dir+"w"+strconv.Itoa(weight_num)+"-a.csv", real_batch[0])
 			bn_b1 := readTxt(weight_dir+"w"+strconv.Itoa(weight_num)+"-b.csv", real_batch[0])
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in1, bn_a1, bn_b1, alpha, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 0, 0, iter, "Conv", false, false)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in1, bn_a1, bn_b1, alpha, pow, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 0, 0, iter, "Conv", false, false)
 			fmt.Println("Block1, Layer ", i, "done!")
 		}
 		fmt.Println("Block1 done!")
@@ -4419,8 +4487,8 @@ func testImagenet_final_fast_in(st, end, ker_wid int) {
 		}
 
 		// block1 to block 2
-		ct_result1 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_0, bn_a12_0, bn_b12_0, alpha, in_wids[0], 2*kp_wids[1], ker_wid, real_batch[0], real_batch[0], norm, 0, 0, iter, "StrConv", false, false)
-		ct_result2 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_1, bn_a12_1, bn_b12_1, alpha, in_wids[0], 2*kp_wids[1], ker_wid, real_batch[0], real_batch[0], norm, 1, 0, iter, "StrConv", false, false)
+		ct_result1 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_0, bn_a12_0, bn_b12_0, alpha, pow, in_wids[0], 2*kp_wids[1], ker_wid, real_batch[0], real_batch[0], norm, 0, 0, iter, "StrConv", false, false)
+		ct_result2 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_1, bn_a12_1, bn_b12_1, alpha, pow, in_wids[0], 2*kp_wids[1], ker_wid, real_batch[0], real_batch[0], norm, 1, 0, iter, "StrConv", false, false)
 		ct_layer = cont.evaluator.AddNew(ct_result1, ct_result2)
 		fmt.Println("Block1 to 2 done!")
 		// res_tmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_result))
@@ -4434,7 +4502,7 @@ func testImagenet_final_fast_in(st, end, ker_wid int) {
 			weight_num++
 			bn_a2 := readTxt(weight_dir+"w"+strconv.Itoa(weight_num)+"-a.csv", real_batch[1])
 			bn_b2 := readTxt(weight_dir+"w"+strconv.Itoa(weight_num)+"-b.csv", real_batch[1])
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, iter, "Conv", false, false)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, iter, "Conv", false, false)
 			fmt.Println("Block2, Layer ", i, "done!")
 		}
 		fmt.Println("Block2 done!")
@@ -4522,6 +4590,7 @@ func testImagenet_final_fast_in_old(st, end, ker_wid int) {
 		max_batch[i] = cont.N / (in_wids[i] * in_wids[i])
 	}
 	alpha := 0.0 // 0.3 => leakyrelu
+	pow := 5.0
 
 	for name_iter := st; name_iter < end; name_iter++ {
 		weight_num := st_weight_num
@@ -4581,8 +4650,8 @@ func testImagenet_final_fast_in_old(st, end, ker_wid int) {
 		begin_start := time.Now()
 		// input to block 2
 		new_start := time.Now()
-		ct_result1 := evalConv_BNRelu_new(cont, ct_input, ker_in12_0, bn_a12_0, bn_b12_0, alpha, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 0, 0, iter, "StrConv", false, false)
-		ct_result2 := evalConv_BNRelu_new(cont, ct_input, ker_in12_1, bn_a12_1, bn_b12_1, alpha, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 1, 0, iter, "StrConv", false, false)
+		ct_result1 := evalConv_BNRelu_new(cont, ct_input, ker_in12_0, bn_a12_0, bn_b12_0, alpha, pow, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 0, 0, iter, "StrConv", false, false)
+		ct_result2 := evalConv_BNRelu_new(cont, ct_input, ker_in12_1, bn_a12_1, bn_b12_1, alpha, pow, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 1, 0, iter, "StrConv", false, false)
 		ct_result := cont.evaluator.AddNew(ct_result1, ct_result2)
 		fmt.Println("Block1 to 2 done!")
 		res_tmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_result))
@@ -4602,7 +4671,7 @@ func testImagenet_final_fast_in_old(st, end, ker_wid int) {
 			if i == num_blc {
 				prt_result = true
 			}
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, iter, "Conv", false, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, iter, "Conv", false, prt_result)
 			fmt.Println("Block2, Layer ", i, "done!")
 		}
 		timings[1] = time.Since(new_start).Seconds()
@@ -4678,6 +4747,7 @@ func testImagenet_in(st, end int) {
 		max_batch[i] = cont.N / (in_wids[i] * in_wids[i])
 	}
 	alpha := 0.0 // 0.3 => leakyrelu
+	pow := 5.0
 
 	for name_iter := st; name_iter < end; name_iter++ {
 		norm := 1
@@ -4754,8 +4824,8 @@ func testImagenet_in(st, end int) {
 		prt_result := false
 		var ct_result *ckks.Ciphertext
 		for pos := 0; pos < 4; pos++ {
-			ct_tmp := cont.evaluator.AddNew(evalConv_BNRelu_new(cont, ct_input[0], ker_in0_sep[pos][0], bn_a0_sep[pos], bn_b0_sep[pos], alpha, in_wids[0], kp_wids[0], ker_wid, max_batch[0], max_batch[0], norm, pos, 0, iter, "StrConv", fast_pack, prt_result),
-				evalConv_BNRelu_new(cont, ct_input[1], ker_in0_sep[pos][1], bn_a0_sep[pos], bn_b0_sep[pos], alpha, in_wids[0], kp_wids[0], ker_wid, max_batch[0], max_batch[0], norm, pos, 0, iter, "StrConv", fast_pack, prt_result))
+			ct_tmp := cont.evaluator.AddNew(evalConv_BNRelu_new(cont, ct_input[0], ker_in0_sep[pos][0], bn_a0_sep[pos], bn_b0_sep[pos], alpha, pow, in_wids[0], kp_wids[0], ker_wid, max_batch[0], max_batch[0], norm, pos, 0, iter, "StrConv", fast_pack, prt_result),
+				evalConv_BNRelu_new(cont, ct_input[1], ker_in0_sep[pos][1], bn_a0_sep[pos], bn_b0_sep[pos], alpha, pow, in_wids[0], kp_wids[0], ker_wid, max_batch[0], max_batch[0], norm, pos, 0, iter, "StrConv", fast_pack, prt_result))
 			if pos == 0 {
 				ct_result = ct_tmp
 			} else {
@@ -4781,7 +4851,7 @@ func testImagenet_in(st, end int) {
 			if i == num_blc1 {
 				prt_result = true
 			}
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in1, bn_a1, bn_b1, alpha, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, iter, "Conv", fast_pack, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in1, bn_a1, bn_b1, alpha, pow, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, iter, "Conv", fast_pack, prt_result)
 			fmt.Println("Block1, Layer ", i, "done!")
 		}
 		fmt.Println("Block1 done.")
@@ -4815,8 +4885,8 @@ func testImagenet_in(st, end int) {
 			bn_b12_1[i] = bn_b12[2*i+1]
 		}
 
-		ct_result1 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_0, bn_a12_0, bn_b12_0, alpha, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, iter, "StrConv", true, false)
-		ct_result2 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_1, bn_a12_1, bn_b12_1, alpha, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 2, 0, iter, "StrConv", true, false)
+		ct_result1 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_0, bn_a12_0, bn_b12_0, alpha, pow, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 0, 0, iter, "StrConv", true, false)
+		ct_result2 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_1, bn_a12_1, bn_b12_1, alpha, pow, in_wids[1], kp_wids[1], ker_wid, real_batch[1], real_batch[1], norm, 2, 0, iter, "StrConv", true, false)
 		ct_result = cont.evaluator.AddNew(ct_result1, ct_result2)
 		fmt.Println("Block1 to 2 done!")
 		res_ttmp = cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_result))
@@ -4838,7 +4908,7 @@ func testImagenet_in(st, end int) {
 			if i == num_blc2 {
 				prt_result = true
 			}
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, in_wids[2], kp_wids[2], ker_wid, real_batch[2], real_batch[2], norm, 0, 0, iter, "Conv", fast_pack, prt_result)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[2], kp_wids[2], ker_wid, real_batch[2], real_batch[2], norm, 0, 0, iter, "Conv", fast_pack, prt_result)
 			fmt.Println("Block2, Layer ", i, "done!")
 		}
 		timings[3] = time.Since(new_start).Seconds()

@@ -19,8 +19,6 @@ const log_c_scale = 30
 const log_in_scale = 30
 const log_out_scale = 30
 
-const pow = 6 // making sure that ReLu can cover values in [-2^pow, 2^pow].
-
 type context struct {
 	logN    int
 	N       int
@@ -698,11 +696,11 @@ func main() {
 	// fmt.Println("Now, fast version (norm = 1)")
 	// testImagenet_final_fast()
 
-	st, _ := strconv.Atoi(os.Args[1])
-	end, _ := strconv.Atoi(os.Args[2])
-	ker, _ := strconv.Atoi(os.Args[3])
+	// st, _ := strconv.Atoi(os.Args[1])
+	// end, _ := strconv.Atoi(os.Args[2])
+	// ker, _ := strconv.Atoi(os.Args[3])
 	// testImagenet_final_in(st, end)
-	testImagenet_final_fast_in(st, end, ker)
+	// testImagenet_final_fast_in(st, end, ker)
 	// testImageNet_BL_final_in(st, end)
 	// testImagenet_in(st, end)
 	// testResNet_in_BL(st, end)
@@ -762,17 +760,18 @@ func main() {
 	// testResNet_crop()
 
 	// // latest version for resnet crop cifar10
-	// st, _ := strconv.Atoi(os.Args[1])
-	// end, _ := strconv.Atoi(os.Args[2])
-	// ker_wid, _ := strconv.Atoi(os.Args[3])
-	// depth, _ := strconv.Atoi(os.Args[4])
-	// wide_case, _ := strconv.Atoi(os.Args[5])
-	// debug := false
-	// if wide_case == 1 {
-	// 	testResNet_crop_fast_in(st, end, ker_wid, depth, debug)
-	// } else {
-	// 	testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case, debug)
-	// }
+	st, _ := strconv.Atoi(os.Args[1])
+	end, _ := strconv.Atoi(os.Args[2])
+	ker_wid, _ := strconv.Atoi(os.Args[3])
+	depth, _ := strconv.Atoi(os.Args[4])
+	wide_case, _ := strconv.Atoi(os.Args[5])
+	debug := false
+	cf100 := true
+	if wide_case == 1 {
+		testResNet_crop_fast_in(st, end, ker_wid, depth, debug, cf100)
+	} else {
+		testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case, debug, cf100)
+	}
 
 	// testResNet_crop_fast_in(st, end, ker_wid, dep_case)
 	// testResNet_crop_in(st, end, ker_wid, true)

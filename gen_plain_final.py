@@ -7,7 +7,7 @@ import os
 from tensorflow.keras.layers import Cropping2D
 # from statistics import mean, stdev
 
-
+# need to change 10 -> 100 for cf100
 def plain_resnet(input_image, crop, ker, depth, wid):
     if crop:
         in_dir = 'Resnet_weights/weights_crop_ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)+'/'
@@ -17,6 +17,7 @@ def plain_resnet(input_image, crop, ker, depth, wid):
     in_wid = [32, 16, 8]    
     init_batch = 16
     batch = [16*wid, 32*wid, 64*wid]
+    fc_out = 10
     
     blc_list = {20: [7,6,6], 14: [5,4,4], 8: [3,2,2]} # depends on depth
     pad_list = {3: [1,1,1], 5: [2,1,1], 7: [3,2,2]} # depends on ker
@@ -75,8 +76,8 @@ def plain_resnet(input_image, crop, ker, depth, wid):
         # print("after", blc_iter+1, "-th block\n", conv, "\n")
 
     # conv = conv * ten_pad # zeroizing the relus(ten_b) part!!
-    ten_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fckernel.csv'), tf.float32), [1, 1, batch[2], 10])
-    bias_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fcbias.csv'), tf.float32), [10])
+    ten_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fckernel.csv'), tf.float32), [1, 1, batch[2], fc_out])
+    bias_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fcbias.csv'), tf.float32), [fc_out])
     conv = tf.reduce_mean(conv, [1,2], keepdims = True)
     conv = tf.nn.conv2d(conv, ten_final, strides = [1,1,1,1], padding = "SAME")
     conv = conv + bias_final

@@ -239,6 +239,7 @@ func testConv_noBoot_BL_in(real_batch, in_wid, ker_wid int, boot bool) {
 		if boot {
 			for pos := 0; pos < 2; pos++ {
 				alpha := 0.0
+				pow := 5.0
 				ct_res[pos].Scale = ct_res[pos].Scale * math.Pow(2, pow)
 				// vals_preB := cont.encoder.Decode(cont.decryptor.DecryptNew(ct_res[pos]), cont.logN-1)
 				fmt.Println("\n ========= Bootstrapping... (original) ========= ")
@@ -268,7 +269,7 @@ func testConv_noBoot_BL_in(real_batch, in_wid, ker_wid int, boot bool) {
 
 				// fmt.Println("after Rescale: LV = ", ct_boot.Level(), " Scale = 2^", math.Log2(ct_boot.Scale))
 				ct_res[pos] = evalReLU(cont.params, cont.evaluator, ct_boot, alpha)
-				cont.evaluator.MulByPow2(ct_res[pos], pow, ct_res[pos])
+				cont.evaluator.MulByPow2(ct_res[pos], int(pow), ct_res[pos])
 				cont.evaluator.SetScale(ct_res[pos], cont.params.Scale())
 				fmt.Printf("Relu Done in %s \n", time.Since(start))
 				// printDebug(cont.params, ct_res[pos], vals_relu, cont.decryptor, cont.encoder)
@@ -301,6 +302,7 @@ func testConv_BNRelu_BL(in_kind string, printResult bool) {
 	pad := in_wid - raw_in_wid
 	ker_wid := 3
 	alpha := 0.0
+	pow := 5.0
 
 	in_size := in_wid * in_wid
 	slots := in_batch * in_size
@@ -365,7 +367,7 @@ func testConv_BNRelu_BL(in_kind string, printResult bool) {
 	ct_input := cont.encryptor.EncryptNew(cont.encoder.EncodeAtLvlNew(cont.ECD_LV, input_rs, log_slots))
 	fmt.Printf("Encryption done in %s \n", time.Since(start))
 
-	ct_result := evalConv_BNRelu_BL(cont, ct_input, ker_in, bn_a, bn_b, alpha, in_wid, ker_wid, in_batch, out_batch, 1, pad, strides, trans, printResult)
+	ct_result := evalConv_BNRelu_BL(cont, ct_input, ker_in, bn_a, bn_b, alpha, pow, in_wid, ker_wid, in_batch, out_batch, 1, pad, strides, trans, printResult)
 
 	fmt.Println()
 	fmt.Println("===============  DECRYPTION  ===============")
@@ -407,6 +409,7 @@ func testResNet_BL() {
 	}
 
 	alpha := 0.0 // 0.3 => leakyrelu
+	pow := 5.0
 	input := make([]float64, cont.N/2)
 	k := 0.0
 	for i := 0; i < in_wids[0]; i++ {
@@ -518,16 +521,16 @@ func testResNet_BL() {
 			prt_result = true
 		}
 		if i == 1 {
-			ct_layer = evalConv_BNRelu_BL(cont, ct_layer, ker_in0, bn_a, bn_b, alpha, in_wids[0], ker_wid, 3, real_batch[0], 1, pad, false, false, prt_result)
+			ct_layer = evalConv_BNRelu_BL(cont, ct_layer, ker_in0, bn_a, bn_b, alpha, pow, in_wids[0], ker_wid, 3, real_batch[0], 1, pad, false, false, prt_result)
 		} else {
-			ct_layer = evalConv_BNRelu_BL(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], ker_wid, real_batch[0], real_batch[0], 1, pad, false, false, prt_result)
+			ct_layer = evalConv_BNRelu_BL(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], ker_wid, real_batch[0], real_batch[0], 1, pad, false, false, prt_result)
 		}
 		fmt.Println("Block1, Layer ", i, "done!")
 	}
 	fmt.Println("done.")
 	timings[0] = time.Since(new_start).Seconds()
 	new_start = time.Now()
-	ct_result := evalConv_BNRelu_BL(cont, ct_layer, ker_in12, bn_a2, bn_b2, alpha, in_wids[0], ker_wid, real_batch[0], real_batch[1], 1, pad, true, false, prt_result)
+	ct_result := evalConv_BNRelu_BL(cont, ct_layer, ker_in12, bn_a2, bn_b2, alpha, pow, in_wids[0], ker_wid, real_batch[0], real_batch[1], 1, pad, true, false, prt_result)
 	timings[1] = time.Since(new_start).Seconds()
 	fmt.Println("Block1 to 2 done!")
 
@@ -538,7 +541,7 @@ func testResNet_BL() {
 		if i == num_blc2 {
 			prt_result = true
 		}
-		ct_layer2 = evalConv_BNRelu_BL(cont, ct_layer2, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], ker_wid, real_batch[1], real_batch[1], 4, pad, false, false, prt_result)
+		ct_layer2 = evalConv_BNRelu_BL(cont, ct_layer2, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], ker_wid, real_batch[1], real_batch[1], 4, pad, false, false, prt_result)
 
 		fmt.Println("Block2, Layer ", i, "done!")
 	}
@@ -580,7 +583,7 @@ func testResNet_BL() {
 
 	fmt.Println("after Rescale: LV = ", ct_boot.Level(), " Scale = 2^", math.Log2(ct_boot.Scale))
 	ct_result = evalReLU(cont.params, cont.evaluator, ct_boot, alpha)
-	cont.evaluator.MulByPow2(ct_result, pow, ct_result)
+	cont.evaluator.MulByPow2(ct_result, int(pow), ct_result)
 	cont.evaluator.SetScale(ct_result, cont.params.Scale())
 	fmt.Printf("Relu Done in %s \n", time.Since(start))
 	printDebug(cont.params, ct_result, vals_relu, cont.decryptor, cont.encoder)
@@ -602,7 +605,7 @@ func testResNet_BL() {
 		if i == num_blc3 {
 			prt_result = true
 		}
-		ct_layer3 = evalConv_BNRelu_BL(cont, ct_layer3, ker_in3, bn_a3, bn_b3, alpha, in_wids[2], ker_wid, real_batch[2], real_batch[2], 8, pad, false, false, prt_result)
+		ct_layer3 = evalConv_BNRelu_BL(cont, ct_layer3, ker_in3, bn_a3, bn_b3, alpha, pow, in_wids[2], ker_wid, real_batch[2], real_batch[2], 8, pad, false, false, prt_result)
 		fmt.Println("Block3, Layer ", i, "done!")
 	}
 	timings[4] = time.Since(new_start).Seconds()
@@ -655,6 +658,7 @@ func testResNet_in_BL(st, end int) {
 		image := readTxt("test_data/test_image_"+strconv.Itoa(iter)+".csv", 32*32*3)
 
 		alpha := 0.0 // 0.3 => leakyrelu
+		pow := 5.0
 		input := make([]float64, cont.N/2)
 		k := 0
 		for i := 0; i < in_wids[0]; i++ {
@@ -699,10 +703,10 @@ func testResNet_in_BL(st, end int) {
 			bn_b := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-b.csv", real_batch[0])
 			if i == 1 {
 				ker_in := readTxt(weight_dir+"w0-conv.csv", 3*real_batch[0]*ker_size)
-				ct_layer = evalConv_BNRelu_BL(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], ker_wid, 3, real_batch[0], 1, pad, false, false, prt_result)
+				ct_layer = evalConv_BNRelu_BL(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], ker_wid, 3, real_batch[0], 1, pad, false, false, prt_result)
 			} else {
 				ker_in := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-conv.csv", real_batch[0]*real_batch[0]*ker_size)
-				ct_layer = evalConv_BNRelu_BL(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], ker_wid, real_batch[0], real_batch[0], 1, pad, false, false, prt_result)
+				ct_layer = evalConv_BNRelu_BL(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], ker_wid, real_batch[0], real_batch[0], 1, pad, false, false, prt_result)
 			}
 			fmt.Println("Block1, Layer ", i, "done!")
 		}
@@ -712,7 +716,7 @@ func testResNet_in_BL(st, end int) {
 		ker_in := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1)+"-conv.csv", real_batch[0]*real_batch[1]*ker_size)
 		bn_a := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1)+"-a.csv", real_batch[1])
 		bn_b := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1)+"-b.csv", real_batch[1])
-		ct_result := evalConv_BNRelu_BL(cont, ct_layer, ker_in, bn_a, bn_b, alpha, in_wids[0], ker_wid, real_batch[0], real_batch[1], 1, pad, true, false, prt_result)
+		ct_result := evalConv_BNRelu_BL(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], ker_wid, real_batch[0], real_batch[1], 1, pad, true, false, prt_result)
 		timings[1] = time.Since(new_start).Seconds()
 		new_start = time.Now()
 		fmt.Println("Block1 to 2 done!")
@@ -727,7 +731,7 @@ func testResNet_in_BL(st, end int) {
 			bn_a2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+i)+"-a.csv", real_batch[1])
 			bn_b2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+i)+"-b.csv", real_batch[1])
 			ker_in2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+i)+"-conv.csv", real_batch[1]*real_batch[1]*ker_size)
-			ct_layer2 = evalConv_BNRelu_BL(cont, ct_layer2, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], ker_wid, real_batch[1], real_batch[1], 4, pad, false, false, prt_result)
+			ct_layer2 = evalConv_BNRelu_BL(cont, ct_layer2, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], ker_wid, real_batch[1], real_batch[1], 4, pad, false, false, prt_result)
 
 			fmt.Println("Block2, Layer ", i, "done!")
 		}
@@ -794,7 +798,7 @@ func testResNet_in_BL(st, end int) {
 
 		fmt.Println("after Rescale: LV = ", ct_boot.Level(), " Scale = 2^", math.Log2(ct_boot.Scale))
 		ct_result = evalReLU(cont.params, cont.evaluator, ct_boot, alpha)
-		cont.evaluator.MulByPow2(ct_result, pow, ct_result)
+		cont.evaluator.MulByPow2(ct_result, int(pow), ct_result)
 		cont.evaluator.SetScale(ct_result, cont.params.Scale())
 		fmt.Printf("Relu Done in %s \n", time.Since(start))
 		printDebug(cont.params, ct_result, vals_relu, cont.decryptor, cont.encoder)
@@ -819,7 +823,7 @@ func testResNet_in_BL(st, end int) {
 			ker_in3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+num_blc2+i+1)+"-conv.csv", real_batch[2]*real_batch[2]*ker_size)
 			bn_a3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+num_blc2+i+1)+"-a.csv", real_batch[2])
 			bn_b3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blc1+num_blc2+i+1)+"-b.csv", real_batch[2])
-			ct_layer3 = evalConv_BNRelu_BL(cont, ct_layer3, ker_in3, bn_a3, bn_b3, alpha, in_wids[2], ker_wid, real_batch[2], real_batch[2], 8, pad, false, false, prt_result)
+			ct_layer3 = evalConv_BNRelu_BL(cont, ct_layer3, ker_in3, bn_a3, bn_b3, alpha, pow, in_wids[2], ker_wid, real_batch[2], real_batch[2], 8, pad, false, false, prt_result)
 			fmt.Println("Block3, Layer ", i, "done!")
 		}
 		timings[4] = time.Since(new_start).Seconds()
@@ -940,6 +944,7 @@ func testImageNet_BL() {
 	}
 
 	alpha := 0.0 // 0.3 => leakyrelu
+	pow := 5.0
 	input := make([]float64, cont.N)
 	k := 0.0
 	for i := 0; i < in_wids[0]; i++ {
@@ -1092,10 +1097,10 @@ func testImageNet_BL() {
 		if i == num_blc1 {
 			prt_result = true
 		}
-		ct_out1 := cont.evaluator.AddNew(evalConv_BNRelu_BL(cont, ct_input1, ker_in_11, bn_a_1, bn_b_1, alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result),
-			evalConv_BNRelu_BL(cont, ct_input2, ker_in_21, bn_a_1, bn_b_1, alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result))
-		ct_out2 := cont.evaluator.AddNew(evalConv_BNRelu_BL(cont, ct_input1, ker_in_12, bn_a_2, bn_b_2, alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result),
-			evalConv_BNRelu_BL(cont, ct_input2, ker_in_22, bn_a_2, bn_b_2, alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result))
+		ct_out1 := cont.evaluator.AddNew(evalConv_BNRelu_BL(cont, ct_input1, ker_in_11, bn_a_1, bn_b_1, alpha, pow, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result),
+			evalConv_BNRelu_BL(cont, ct_input2, ker_in_21, bn_a_1, bn_b_1, alpha, pow, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result))
+		ct_out2 := cont.evaluator.AddNew(evalConv_BNRelu_BL(cont, ct_input1, ker_in_12, bn_a_2, bn_b_2, alpha, pow, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result),
+			evalConv_BNRelu_BL(cont, ct_input2, ker_in_22, bn_a_2, bn_b_2, alpha, pow, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result))
 		ct_input1 = ct_out1
 		ct_input2 = ct_out2
 		fmt.Println("Block1, Layer ", i, "done!")
@@ -1104,16 +1109,16 @@ func testImageNet_BL() {
 	timings[0] = time.Since(new_start).Seconds()
 	new_start = time.Now()
 
-	// ct_result := evalConv_BNRelu_BL(cont, ct_layer, ker_in12, bn_a2, bn_b2, alpha, in_wids[0], ker_wid, real_batch[0], real_batch[1], 1, true, false, prt_result)
+	// ct_result := evalConv_BNRelu_BL(cont, ct_layer, ker_in12, bn_a2, bn_b2, alpha, pow, in_wids[0], ker_wid, real_batch[0], real_batch[1], 1, true, false, prt_result)
 
-	ct_res1 := cont.evaluator.AddNew(evalConv_BNRelu_BL(cont, ct_input1, ker_in12_11, bn_a12_1, bn_b12_1, alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result),
-		evalConv_BNRelu_BL(cont, ct_input2, ker_in12_21, bn_a12_1, bn_b12_1, alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result))
-	ct_res2 := cont.evaluator.AddNew(evalConv_BNRelu_BL(cont, ct_input1, ker_in12_12, bn_a12_2, bn_b12_2, alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result),
-		evalConv_BNRelu_BL(cont, ct_input2, ker_in12_22, bn_a12_2, bn_b12_2, alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result))
-	ct_res3 := cont.evaluator.AddNew(evalConv_BNRelu_BL(cont, ct_input1, ker_in12_13, bn_a12_3, bn_b12_3, alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result),
-		evalConv_BNRelu_BL(cont, ct_input2, ker_in12_23, bn_a12_3, bn_b12_3, alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result))
-	ct_res4 := cont.evaluator.AddNew(evalConv_BNRelu_BL(cont, ct_input1, ker_in12_14, bn_a12_4, bn_b12_4, alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result),
-		evalConv_BNRelu_BL(cont, ct_input2, ker_in12_24, bn_a12_4, bn_b12_4, alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result))
+	ct_res1 := cont.evaluator.AddNew(evalConv_BNRelu_BL(cont, ct_input1, ker_in12_11, bn_a12_1, bn_b12_1, alpha, pow, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result),
+		evalConv_BNRelu_BL(cont, ct_input2, ker_in12_21, bn_a12_1, bn_b12_1, alpha, pow, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result))
+	ct_res2 := cont.evaluator.AddNew(evalConv_BNRelu_BL(cont, ct_input1, ker_in12_12, bn_a12_2, bn_b12_2, alpha, pow, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result),
+		evalConv_BNRelu_BL(cont, ct_input2, ker_in12_22, bn_a12_2, bn_b12_2, alpha, pow, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result))
+	ct_res3 := cont.evaluator.AddNew(evalConv_BNRelu_BL(cont, ct_input1, ker_in12_13, bn_a12_3, bn_b12_3, alpha, pow, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result),
+		evalConv_BNRelu_BL(cont, ct_input2, ker_in12_23, bn_a12_3, bn_b12_3, alpha, pow, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result))
+	ct_res4 := cont.evaluator.AddNew(evalConv_BNRelu_BL(cont, ct_input1, ker_in12_14, bn_a12_4, bn_b12_4, alpha, pow, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result),
+		evalConv_BNRelu_BL(cont, ct_input2, ker_in12_24, bn_a12_4, bn_b12_4, alpha, pow, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad, false, false, prt_result))
 
 	ct_res1 = evalRot_BL(cont, ct_res1, in_wids[0], 0, false)
 	ct_res2 = evalRot_BL(cont, ct_res2, in_wids[0], 1, false)
@@ -1150,7 +1155,7 @@ func testImageNet_BL() {
 
 	fmt.Println("after Rescale: LV = ", ct_boot.Level(), " Scale = 2^", math.Log2(ct_boot.Scale))
 	ct_result = evalReLU(cont.params, cont.evaluator, ct_boot, alpha)
-	cont.evaluator.MulByPow2(ct_result, pow, ct_result)
+	cont.evaluator.MulByPow2(ct_result, int(pow), ct_result)
 	cont.evaluator.SetScale(ct_result, cont.params.Scale())
 	fmt.Printf("Relu Done in %s \n", time.Since(start))
 	printDebug(cont.params, ct_result, vals_relu, cont.decryptor, cont.encoder)
@@ -1171,7 +1176,7 @@ func testImageNet_BL() {
 		if i == num_blc2 {
 			prt_result = true
 		}
-		ct_in = evalConv_BNRelu_BL(cont, ct_in, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], ker_wid, real_batch[1], real_batch[1], 1, pad, false, false, prt_result)
+		ct_in = evalConv_BNRelu_BL(cont, ct_in, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], ker_wid, real_batch[1], real_batch[1], 1, pad, false, false, prt_result)
 
 		fmt.Println("Block2, Layer ", i, "done!")
 	}
@@ -1217,6 +1222,7 @@ func testConv_BNRelu_BL_same() {
 	}
 
 	alpha := 0.0 // 0.3 => leakyrelu
+	pow := 5.0
 	input := make([]float64, raw_in_wids[0]*raw_in_wids[0]*real_batch[0])
 	for i := range input {
 		input[i] = 0.1 * float64(i%13) //1.0 - 1.0*float64(i)/float64(len(input))
@@ -1332,7 +1338,7 @@ func testConv_BNRelu_BL_same() {
 
 	fmt.Println("after Rescale: LV = ", ct_boot.Level(), " Scale = 2^", math.Log2(ct_boot.Scale))
 	ct_result = evalReLU(cont.params, cont.evaluator, ct_boot, alpha)
-	cont.evaluator.MulByPow2(ct_result, pow, ct_result)
+	cont.evaluator.MulByPow2(ct_result, int(pow), ct_result)
 	cont.evaluator.SetScale(ct_result, cont.params.Scale())
 	fmt.Printf("Relu Done in %s \n", time.Since(start))
 	printDebug(cont.params, ct_result, vals_relu, cont.decryptor, cont.encoder)
@@ -1379,6 +1385,7 @@ func testImageNet_BL_final() {
 	}
 
 	alpha := 0.0 // 0.3 => leakyrelu
+	pow := 5.0
 	input := make([]float64, raw_in_wids[0]*raw_in_wids[0]*real_batch[0])
 	for i := range input {
 		input[i] = 0.1 * float64(i%13) //1.0 - 1.0*float64(i)/float64(len(input))
@@ -1475,8 +1482,8 @@ func testImageNet_BL_final() {
 
 	ct_res := make([]*ckks.Ciphertext, 4)
 	for pos := 0; pos < 4; pos++ {
-		ct_res[pos] = cont.evaluator.AddNew(evalConv_BNRelu_BL(cont, ct_input1, ker_in12_sep[pos][0], bn_a12_sep[pos], bn_b12_sep[pos], alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad0, false, false, false),
-			evalConv_BNRelu_BL(cont, ct_input2, ker_in12_sep[pos][1], bn_a12_sep[pos], zeros, alpha, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad0, false, false, false))
+		ct_res[pos] = cont.evaluator.AddNew(evalConv_BNRelu_BL(cont, ct_input1, ker_in12_sep[pos][0], bn_a12_sep[pos], bn_b12_sep[pos], alpha, pow, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad0, false, false, false),
+			evalConv_BNRelu_BL(cont, ct_input2, ker_in12_sep[pos][1], bn_a12_sep[pos], zeros, alpha, pow, in_wids[0], ker_wid, real_batch[0]/2, real_batch[0]/2, 1, pad0, false, false, false))
 		ct_res[pos] = evalRot_BL(cont, ct_res[pos], in_wids[0], pos, false)
 	}
 	ct_result := cont.evaluator.AddNew(cont.evaluator.AddNew(ct_res[0], ct_res[1]), cont.evaluator.AddNew(ct_res[2], ct_res[3]))
@@ -1510,7 +1517,7 @@ func testImageNet_BL_final() {
 
 	fmt.Println("after Rescale: LV = ", ct_boot.Level(), " Scale = 2^", math.Log2(ct_boot.Scale))
 	ct_result = evalReLU(cont.params, cont.evaluator, ct_boot, alpha)
-	cont.evaluator.MulByPow2(ct_result, pow, ct_result)
+	cont.evaluator.MulByPow2(ct_result, int(pow), ct_result)
 	cont.evaluator.SetScale(ct_result, cont.params.Scale())
 	fmt.Printf("Relu Done in %s \n", time.Since(start))
 	printDebug(cont.params, ct_result, vals_relu, cont.decryptor, cont.encoder)
@@ -1531,7 +1538,7 @@ func testImageNet_BL_final() {
 		if i == num_blc {
 			prt_result = true
 		}
-		ct_in = evalConv_BNRelu_BL(cont, ct_in, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], ker_wid, real_batch[1], real_batch[1], 1, pad1, false, false, prt_result)
+		ct_in = evalConv_BNRelu_BL(cont, ct_in, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], ker_wid, real_batch[1], real_batch[1], 1, pad1, false, false, prt_result)
 
 		fmt.Println("Block2, Layer ", i, "done!")
 	}
@@ -1611,6 +1618,7 @@ func testImageNet_BL_final_in(st, end int) {
 	}
 
 	alpha := 0.0 // 0.3 => leakyrelu
+	pow := 5.0
 
 	for name_iter := st; name_iter < end; name_iter++ {
 
@@ -1725,7 +1733,7 @@ func testImageNet_BL_final_in(st, end int) {
 
 		fmt.Println("after Rescale: LV = ", ct_boot.Level(), " Scale = 2^", math.Log2(ct_boot.Scale))
 		ct_result = evalReLU(cont.params, cont.evaluator, ct_boot, alpha)
-		cont.evaluator.MulByPow2(ct_result, pow, ct_result)
+		cont.evaluator.MulByPow2(ct_result, int(pow), ct_result)
 		cont.evaluator.SetScale(ct_result, cont.params.Scale())
 		fmt.Printf("Relu Done in %s \n", time.Since(start))
 		printDebug(cont.params, ct_result, vals_relu, cont.decryptor, cont.encoder)
@@ -1751,7 +1759,7 @@ func testImageNet_BL_final_in(st, end int) {
 			if i == num_blc {
 				prt_result = true
 			}
-			ct_in = evalConv_BNRelu_BL(cont, ct_in, ker_in2, bn_a2, bn_b2, alpha, in_wids[1], ker_wid, real_batch[1], real_batch[1], 1, pad1, false, false, prt_result)
+			ct_in = evalConv_BNRelu_BL(cont, ct_in, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], ker_wid, real_batch[1], real_batch[1], 1, pad1, false, false, prt_result)
 
 			fmt.Println("Block2, Layer ", i, "done!")
 		}

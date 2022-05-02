@@ -501,7 +501,7 @@ func encode_circ_in(vec_in []float64, pos, block, N int) []float64 {
 // Divide coeff gen later
 // alpha: for leaky relu
 func evalReLU(params ckks.Parameters, evaluator ckks.Evaluator, ctxt_in *ckks.Ciphertext, alpha float64) (ctxt_out *ckks.Ciphertext) {
-	time_coeffs := time.Now()
+	// time_coeffs := time.Now()
 	// alpha 10 (from minimax)
 	// prescale is multiplied to improve precision (previously done in StoC matmult)
 	// coeffs_tmp := []complex128{0.0, 10.8541842577442 * prescale, 0.0, -62.2833925211098 * prescale * prescale * prescale,
@@ -522,7 +522,7 @@ func evalReLU(params ckks.Parameters, evaluator ckks.Evaluator, ctxt_in *ckks.Ci
 	}
 	coeffsReLU3 := ckks.NewPoly(coeffs_tmp3)
 
-	fmt.Println("Time for coeffs: ", time.Since(time_coeffs))
+	// fmt.Println("Time for coeffs: ", time.Since(time_coeffs))
 
 	fmt.Printf("Eval: ")
 	ctxt_sign, err := evaluator.EvaluatePoly(ctxt_in, coeffsReLU, params.Scale())
