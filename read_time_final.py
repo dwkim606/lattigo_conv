@@ -4,7 +4,8 @@ from statistics import mean, stdev
 
 prec = 2
 
-def read_out_analysis_time(prefix, os_path):
+# read time or prec?
+def read_out_analysis(time, prefix, os_path):
     # prefix = "After CtS    :"
     # prefix = "After Sine   :"
     # prefix = "After StC    : "
@@ -34,62 +35,23 @@ def read_out_analysis_time(prefix, os_path):
                         time_str = line.strip(prefix)
                     
                     if new_iter:
-                        list_results.append(get_seconds(time_str))
+                        if time:
+                            list_results.append(get_seconds(time_str))
+                        else:
+                            prec_str, _ = time_str.split(',')
+                            list_results.append(float(prec_str))
                         new_iter = False
                     else:
-                        list_results[-1] += get_seconds(time_str)
+                        if time:
+                            list_results[-1] += get_seconds(time_str)
+                        else:
+                            prec_str, _ = time_str.split(',')
+                            list_results[-1] += float(prec_str)
     else:
         print("No file exists")
         exit(1)
     
     return(count, list_results)
-
-# read precision
-def read_out_analysis_prec():
-    os_path = 'Resnet_enc_result_ker3_'+'/total200.out'
-    # os_path = 'test_convRelu_ker5.out'
-
-    # prefix = "Evaluation total done in "
-    # prefix = "After CtS    :"
-    # prefix = "After Sine   :"
-    # prefix = "After StC    : "
-    # prefix = "Eval: Relu Done in"
-
-    # prefix = "Total done in "
-    # prefix = "Done in "
-    # prefix = "Conv (with BN) Done in" 
-    # prefix = "(until CtoS):"
-    # prefix = "Eval: Eval: ReLU Done in"
-    # prefix = "Boot (StoC) Done in "
-    # prefix = "AVG Prec : ("
-
-    line_number = 0
-    list_results = [] 
-    base_line = False
-    if os.path.exists(os_path):
-        with open(os_path, 'r') as read_obj:
-            for line in read_obj:
-                if "BL" in line:
-                    base_line = True
-                if not base_line:
-                    if prefix in line:
-                        # try:
-                        #     time_str = line.strip(prefix).rstrip()
-                        #     if line_number%6 == 0:
-                        #         list_results.append(get_seconds(time_str))
-                        #     line_number += 1
-                        # except:
-                        #     continue
-                        line_number += 1
-                        time_str, _ = line.strip(prefix).split(',') # for prec
-                        if line_number%7 == 0:
-                            list_results.append(float(time_str))      # for prec
-                        
-    else:
-        print("No file exists")
-        exit(1)
-    
-    return(list_results)
 
 
 def get_seconds(time_str):
@@ -120,7 +82,7 @@ def get_seconds(time_str):
     return float(m)*60 + float(s) + float(ms)*0.001
 
 
-## read output timing ##
+## read output timing or prec ##
 
 
 crop = True
@@ -128,25 +90,30 @@ ker = int(sys.argv[1])
 depth = int(sys.argv[2])
 wide = int(sys.argv[3])
 suffix = sys.argv[4]
+measure = "time"
 
-
-# prefix = "Final (reduce_mean & FC):", "for odd stride, offset time"
-
-prefix_choices = [
-"Total done in "]
+if measure == "time":
+    prefix_choices = ["Total done in "]
 #"Conv (with BN) Done in",
 #"(until CtoS):",
 #"Eval: Eval: ReLU Done in",
 #"Boot (StoC) Done in ",
 #"Plaintext (kernel) preparation, Done in"]
+# prefix = "Final (reduce_mean & FC):", "for odd stride, offset time"
+## for conv test
+#"Evaluation total done in "
+#"Conv (with BN) Done in "
+elif measure == "prec":
+    prefix_choices = ["AVG Prec : ("]
+else:
+    print("wrong measure type: time or prec")
+    exit(1)
 
-# os_path = 'out/out_cr_k'+str(ker)+'_d'+str(depth)+'_w'+str(wide)+'.txt'
-# os_path = 'out/out_cr_k5_d8_w3.txt'
 os_path = 'out_kdw_'+str(ker)+str(depth)+str(wide)+'_'+suffix+'.txt'
 print(os_path)
 
 for prefix in prefix_choices:
-    result_count, result_list = read_out_analysis_time(prefix, os_path)
+    result_count, result_list = read_out_analysis(False, prefix, os_path)
 
     if (len(result_list)==1):
         print(prefix, result_count, "each", " total iters: ", len(result_list), "\n")

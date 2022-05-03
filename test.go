@@ -487,7 +487,7 @@ func testConv_noBoot_in(in_batch, in_wid, ker_wid int, boot bool) {
 	raw_in_wid := in_wid - ker_wid/2 // same as python
 	norm := in_batch / raw_in_batch
 	test_dir := "test_conv_data/"
-	pow := 5.0
+	pow := 4.0
 
 	// set basic variables for above input variables
 	kp_wid, out_batch, logN, trans := set_Variables(in_batch, raw_in_wid, in_wid, ker_wid, kind)
@@ -932,7 +932,8 @@ func testResNet_crop_fast_in(st, end, ker_wid, depth int, debug, cf100 bool) {
 	out_dir := "Resnet_enc_results/results_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid1/"
 	fc_out := 10    // 100 for cifar100
 	init_pow := 6.0 // covers [-2^pow, 2^pow] values at ReLU evaluation
-	final_pow := 7.0
+	mid_pow := 5.0
+	final_pow := 6.0
 	if cf100 {
 		weight_dir = "Resnet_weights/weights_cf100_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid1/"
 		out_dir = "Resnet_enc_results/results_cf100_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid1/"
@@ -1017,6 +1018,7 @@ func testResNet_crop_fast_in(st, end, ker_wid, depth int, debug, cf100 bool) {
 			}
 			ker_in := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-conv.csv", ker_in_batch*real_batch[0]*ker_size)
 			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, ker_in_batch, real_batch[0], norm[0], 0, step[0], 2, "Conv_inside", fast_pack, debug)
+			pow = mid_pow
 			fmt.Println("Block1, Layer ", i, "done!")
 		}
 		fmt.Println("Block1 done.")
@@ -1225,7 +1227,8 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug,
 	logN := 16
 	alpha := 0.0
 	init_pow := 6.0
-	final_pow := 7.0
+	mid_pow := 5.0
+	final_pow := 6.0
 	in_wids := []int{32, 16, 8}                                         // before cropping
 	raw_in_wids := []int{32 - ker_wid/2, 16 - ker_wid/2, 8 - ker_wid/2} // same as python
 	fast_pack := true
@@ -1285,6 +1288,7 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug,
 			if i == 1 {
 				ker_in := readTxt(weight_dir+"w0-conv.csv", 3*init_batch*ker_size)
 				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, 3, init_batch, norm[0], 0, step[0], 2, "Conv", fast_pack, debug)
+				pow = mid_pow
 			} else if i == 2 {
 				ker_in := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-conv.csv", init_batch*real_batch[0]*ker_size)
 				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, init_batch, real_batch[0], norm[0], 0, step[0], 2, "Conv", fast_pack, debug)

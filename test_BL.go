@@ -217,10 +217,6 @@ func testConv_noBoot_BL_in(real_batch, in_wid, ker_wid int, boot bool) {
 			}
 		}
 
-		// input encryption
-		// fmt.Println()
-		// fmt.Println("===============  ENCRYPTION  ===============")
-		// fmt.Println()
 		input1_rs := reshape_input_BL(pad_input1, in_wid)
 		input2_rs := reshape_input_BL(pad_input2, in_wid)
 		start := time.Now()
@@ -239,7 +235,7 @@ func testConv_noBoot_BL_in(real_batch, in_wid, ker_wid int, boot bool) {
 		if boot {
 			for pos := 0; pos < 2; pos++ {
 				alpha := 0.0
-				pow := 5.0
+				pow := 4.0
 				ct_res[pos].Scale = ct_res[pos].Scale * math.Pow(2, pow)
 				// vals_preB := cont.encoder.Decode(cont.decryptor.DecryptNew(ct_res[pos]), cont.logN-1)
 				fmt.Println("\n ========= Bootstrapping... (original) ========= ")
@@ -247,7 +243,7 @@ func testConv_noBoot_BL_in(real_batch, in_wid, ker_wid int, boot bool) {
 				// fmt.Println("initial (before boot): LV = ", ct_res[pos].Level(), " Scale = ", math.Log2(ct_res[pos].Scale))
 
 				ct_boot := cont.btp.Bootstrapp(ct_res[pos])
-				fmt.Printf("Done in %s \n", time.Since(start_boot))
+				fmt.Printf("Boot Done in %s \n", time.Since(start_boot))
 				// fmt.Println("after Boot: LV = ", ct_boot.Level(), " Scale = ", math.Log2(ct_boot.Scale))
 
 				// Only for checking the correctness (for Boot)

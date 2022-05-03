@@ -718,16 +718,24 @@ func main() {
 
 	// testBRrot()
 
+	// // Test Conv Boot & NoBoot FINAL!
 	// kers := [3]int{3, 5, 7}
-	// batchs := [5]int{4, 16, 64, 256, 1024}
-	// widths := [5]int{128, 64, 32, 16, 8}
+	batchs := [5]int{4, 16, 64, 256, 1024}
+	widths := [5]int{128, 64, 32, 16, 8}
 
-	// ker, _ := strconv.Atoi(os.Args[1])
-	// i, _ := strconv.Atoi(os.Args[2])
+	ker, _ := strconv.Atoi(os.Args[1])
+	i, _ := strconv.Atoi(os.Args[2])
+	BL, _ := strconv.ParseBool(os.Args[3])
+	boot, _ := strconv.ParseBool(os.Args[4])
 
-	// testConv_noBoot_in(batchs[i], widths[i], ker, true)
-	// fmt.Println("BL start.")
-	// testConv_noBoot_BL_in(batchs[i], widths[i], ker, true)
+	fmt.Println("Ker: ", ker, "batches: ", batchs[i], "widths: ", widths[i])
+	if BL {
+		fmt.Println("BL start.")
+		testConv_noBoot_BL_in(batchs[i], widths[i], ker, boot)
+	} else {
+		fmt.Println("Ours start.")
+		testConv_noBoot_in(batchs[i], widths[i], ker, boot)
+	}
 
 	// for _, k := range kers {
 	// 	for i := 4; i < 5; i++ {
@@ -760,18 +768,18 @@ func main() {
 	// testResNet_crop()
 
 	// // latest version for resnet crop cifar10
-	st, _ := strconv.Atoi(os.Args[1])
-	end, _ := strconv.Atoi(os.Args[2])
-	ker_wid, _ := strconv.Atoi(os.Args[3])
-	depth, _ := strconv.Atoi(os.Args[4])
-	wide_case, _ := strconv.Atoi(os.Args[5])
-	debug := false
-	cf100 := true
-	if wide_case == 1 {
-		testResNet_crop_fast_in(st, end, ker_wid, depth, debug, cf100)
-	} else {
-		testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case, debug, cf100)
-	}
+	// st, _ := strconv.Atoi(os.Args[1])
+	// end, _ := strconv.Atoi(os.Args[2])
+	// ker_wid, _ := strconv.Atoi(os.Args[3])
+	// depth, _ := strconv.Atoi(os.Args[4])
+	// wide_case, _ := strconv.Atoi(os.Args[5])
+	// debug := false
+	// cf100 := true
+	// if wide_case == 1 {
+	// 	testResNet_crop_fast_in(st, end, ker_wid, depth, debug, cf100)
+	// } else {
+	// 	testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case, debug, cf100)
+	// }
 
 	// testResNet_crop_fast_in(st, end, ker_wid, dep_case)
 	// testResNet_crop_in(st, end, ker_wid, true)
