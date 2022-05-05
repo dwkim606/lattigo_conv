@@ -7,8 +7,8 @@ import os
 from tensorflow.keras.layers import Cropping2D
 # from statistics import mean, stdev
 
-# need to change 10 -> 100 for cf100
-def plain_resnet(input_image, crop, ker, depth, wid):
+
+def final_plain_resnet(input_image, crop, ker, depth, wid):
     if crop:
         in_dir = 'Resnet_weights/weights_crop_ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)+'/'
     else:
@@ -17,7 +17,6 @@ def plain_resnet(input_image, crop, ker, depth, wid):
     in_wid = [32, 16, 8]    
     init_batch = 16
     batch = [16*wid, 32*wid, 64*wid]
-    fc_out = 10
     
     blc_list = {20: [7,6,6], 14: [5,4,4], 8: [3,2,2]} # depends on depth
     pad_list = {3: [1,1,1], 5: [2,1,1], 7: [3,2,2]} # depends on ker
@@ -76,8 +75,8 @@ def plain_resnet(input_image, crop, ker, depth, wid):
         # print("after", blc_iter+1, "-th block\n", conv, "\n")
 
     # conv = conv * ten_pad # zeroizing the relus(ten_b) part!!
-    ten_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fckernel.csv'), tf.float32), [1, 1, batch[2], fc_out])
-    bias_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fcbias.csv'), tf.float32), [fc_out])
+    ten_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fckernel.csv'), tf.float32), [1, 1, batch[2], 10])
+    bias_final = tf.reshape(tf.constant(np.loadtxt(in_dir+'final-fcbias.csv'), tf.float32), [10])
     conv = tf.reduce_mean(conv, [1,2], keepdims = True)
     conv = tf.nn.conv2d(conv, ten_final, strides = [1,1,1,1], padding = "SAME")
     conv = conv + bias_final
@@ -85,9 +84,10 @@ def plain_resnet(input_image, crop, ker, depth, wid):
     conv = tf.squeeze(conv, axis=[1,2])
     return conv
 
+
 # output num_samples of images, true_labels, plain_labels on which given resnet model has the full precision 
 # generate folder named "ker3_d8_wid1" inside Resnet_plain_data, then test_labels_100, plain_prediction_100, test_image_0.csv, ..., .
-def gen_plain_predictions(crop, ker, depth, wid):
+def final_gen_plain_predictions(crop, ker, depth, wid):
     num_samples = 1000 # [100, 1000, 10000]
     tf_labels = tf.constant(np.loadtxt('Resnet_plain_data/test_labels.csv'), tf.int64)
     tf_images = tf.constant(np.loadtxt('Resnet_plain_data/test_images.csv'), tf.float32, [10000, 32, 32, 3])
@@ -95,7 +95,7 @@ def gen_plain_predictions(crop, ker, depth, wid):
     #     tf_labels = tf.constant(np.loadtxt('Resnet_plain_data/test_labels_'+str(num_samples)+'.csv'), tf.int64)
     #     tf_images = tf.constant(np.loadtxt('Resnet_plain_data/test_images_'+str(num_samples)+'.csv'), tf.float32, [num_samples, 32, 32, 3])
 
-    predictions = plain_resnet(tf_images, crop, ker, depth, wid)
+    predictions = final_plain_resnet(tf_images, crop, ker, depth, wid)
     full_prec = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(predictions, 1), tf_labels), 'float32')).numpy()
     print("full precision: ", full_prec)
     if num_samples == 1000:
@@ -123,7 +123,7 @@ def gen_plain_predictions(crop, ker, depth, wid):
 
     part_labels = tf.boolean_mask(tf_labels, idx_list)
     part_images = tf.boolean_mask(tf_images, idx_list)
-    part_predictions = plain_resnet(part_images, crop, ker, depth, wid)
+    part_predictions = final_plain_resnet(part_images, crop, ker, depth, wid)
 
     print("num samples: ", len(part_labels), "precision: ", tf.reduce_mean(tf.cast(tf.equal(tf.argmax(part_predictions, 1), part_labels), 'float32')))
 
@@ -145,9 +145,80 @@ def gen_plain_predictions(crop, ker, depth, wid):
             np.savetxt(os.path.join(out_folder_dir, "test_image_"+str(i)+".csv"), np.reshape(part_images[i,:,:,:], [-1]), fmt='%.18e', delimiter=',')        
     
 
+
+
+# output num_samples of images, true_labels, plain_labels on which given resnet model has the full precision 
+# generate folder named "ker3_d8_wid1" inside Resnet_plain_data, then test_labels_100, plain_prediction_100, test_image_0.csv, ..., .
+def final_gen_plain_predictions_part(out_num_samples, prev_num_samples, crop, ker, depth, wid):
+    num_samples = prev_num_samples
+    tf_labels = tf.constant(np.loadtxt('Resnet_plain_data/test_labels.csv'), tf.int64)
+    tf_images = tf.constant(np.loadtxt('Resnet_plain_data/test_images.csv'), tf.float32, [10000, 32, 32, 3])
+
+    predictions = final_plain_resnet(tf_images, crop, ker, depth, wid)
+    full_prec = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(predictions, 1), tf_labels), 'float32')).numpy()
+    print("full precision: ", full_prec)
+    full_prec_int = int(full_prec * num_samples + 0.5)
+    full_prec_int_out = int(full_prec * out_num_samples + 0.5)
+
+    res_cpr = tf.equal(tf.argmax(predictions, 1), tf_labels).numpy()
+    idx_list = np.array([False for i in range(10000)])
+    idx = 0
+    num_true = 0
+    num_false = 0
+    print("full prec int: ", full_prec_int)
+    while (num_true + num_false) < num_samples:
+        if res_cpr[idx] and (num_true < full_prec_int):
+            idx_list[idx] = True
+            num_true += 1
+        if (not res_cpr[idx]) and (num_false < (num_samples - full_prec_int)):
+            idx_list[idx] = True
+            num_false += 1
+        idx += 1
+
+    idx_list_out = np.array([False for i in range(10000)])
+    idx = 0
+    num_true = 0
+    num_false = 0
+    print("full prec int: ", full_prec_int_out)
+    while (num_true + num_false) < out_num_samples:
+        if res_cpr[idx] and (num_true < full_prec_int_out):
+            idx_list_out[idx] = True
+            num_true += 1
+        if (not res_cpr[idx]) and (num_false < (out_num_samples - full_prec_int_out)):
+            idx_list_out[idx] = True
+            num_false += 1
+        idx += 1
+
+    idx_final_list = np.array([i!=j for i,j in zip(idx_list, idx_list_out)])
+
+    part_labels = tf.boolean_mask(tf_labels, idx_final_list)
+    part_images = tf.boolean_mask(tf_images, idx_final_list)
+    part_predictions = final_plain_resnet(part_images, crop, ker, depth, wid)
+
+    print("num samples: ", len(part_labels), "precision: ", tf.reduce_mean(tf.cast(tf.equal(tf.argmax(part_predictions, 1), part_labels), 'float32')))
+
+    out_folder = 'ker'+str(ker)+'_d'+str(depth)+'_wid'+str(wid)
+    if crop:
+        out_folder = 'crop_' + out_folder
+    try:
+        out_folder_dir = os.path.join('Resnet_plain_data', out_folder)
+        os.mkdir(out_folder_dir)        
+    except OSError as error:
+        print(error)
+
+    if not os.path.exists(os.path.join(out_folder_dir, "test_labels_"+str(out_num_samples-num_samples)+".csv")):
+        np.savetxt(os.path.join(out_folder_dir, "test_labels_"+str(out_num_samples-num_samples)+".csv"), np.reshape(part_labels, [-1]), fmt='%.18e', delimiter=',')        
+    if not os.path.exists(os.path.join(out_folder_dir, "plain_prediction_"+str(out_num_samples-num_samples)+".csv")):
+        np.savetxt(os.path.join(out_folder_dir, "plain_prediction_"+str(out_num_samples-num_samples)+".csv"), np.reshape(part_predictions, [-1]), fmt='%.18e', delimiter=',')        
+    if not os.path.exists(os.path.join(out_folder_dir, "test_image_"+str(out_num_samples-1)+".csv")):
+        for i in range(out_num_samples - num_samples):
+            np.savetxt(os.path.join(out_folder_dir, "test_image_"+str(num_samples+i)+".csv"), np.reshape(part_images[i,:,:,:], [-1]), fmt='%.18e', delimiter=',')        
+
+
 crop = True
 ker = int(sys.argv[1])
 depth = int(sys.argv[2])
 wide = int(sys.argv[3])
 
-gen_plain_predictions(crop, ker, depth, wide)
+#final_gen_plain_predictions(crop, ker, depth, wide)
+final_gen_plain_predictions_part(5000, 1000, crop, ker, depth, wide)

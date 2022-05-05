@@ -1363,11 +1363,11 @@ func testImageNet_BL_final() {
 	pad0 := 2
 	pad1 := 2
 	num_blc := 1
-	logN := 12
+	logN := 16
 	raw_in_wids := []int{14, 6} // = raw_in_wids = same as python
 	in_wids := []int{16, 8}
-	real_batch := []int{16, 32} // same as python
-	ker_wid := 5
+	real_batch := []int{256, 512} // same as python
+	ker_wid := 3
 	final_out := 60
 	prt_result := true
 	kp_wids := make([]int, len(in_wids)) // NOT used in BL
