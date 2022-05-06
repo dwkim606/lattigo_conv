@@ -1,92 +1,62 @@
-set terminal eps       
+set terminal eps size 4, 6
 set output  "boot_graph.eps"   
-set multiplot
 
-set object rect from screen 0.01, screen 0.05 to screen 0.475, screen 0.2 dashtype 2 lw 2 fs empty border lc rgb 'black' #fc rgb "cyan" fs pattern 1 bo -1
-set object rect from 4,100 to 110,625 lw 1 fs border lc rgb 'black'
-set arrow from screen 0.01, screen 0.2 to 4,100 dashtype 2 lw 2 lc rgb 'black' nohead
-set arrow from screen 0.475, screen 0.2 to 110,100 dashtype 2 lw 2 lc rgb 'black' nohead
-set arrow from 4,32 to 1024, 32 dt 4 lw 3 lc rgb "#2E8957" nohead
-set label "Boot" at 625, 48 tc rgb "#2E8957"
-
-
-set xlabel "Number of Batches"
-set y2label "Running Time (seconds)"
-set logscale x 4
-set xrange [4:1024]
-set xtics (4,16,64,256,1024)
-set y2tics mirror
+set style data histogram
+set style histogram rowstacked title offset -0.5, -1.5
+set style fill solid
+set boxwidth 0.75
+# set key invert samplen 0.2
+# set key samplen 0.2
+# set ytics rotate 90
+set xtics rotate 90
+set y2label "Running Time (seconds)" rotate by 90
+set y2tics mirror rotate by 90 offset 0, -1
 set link y2 via y inv y
 set my2tics
+set y2range [:250]
 unset ytics
+set grid y2tics my2tics lc rgb 'gray' lt 1 lw 2, lc rgb 'gray' dt 3 lt 3 lw 3
 
-set grid xtics
-set grid y2tics my2tics lc rgb 'gray' lt 1 lw 2, lc rgb 'gray' dt 3 lt 3 lw 2
-set key at 700, 600
-set key spacing 1.25
-
-
-# set style line 1 lc rgb '#48494B' lt 1 lw 3 pt 7 ps 0.5 # gray
-# set style line 2 lc rgb '#828282' lt 1 lw 3 pt 7 ps 0.5  # green
-# set style line 3 lc rgb '#97978F' lt 1 lw 3 pt 7 ps 0.5 # blue
-set style line 1 lc rgb '#0A1172' lt 1 lw 3 pt 7 ps 0.5 # gray
-set style line 2 lc rgb '#0147AB' lt 1 lw 3 pt 7 ps 0.5  # green
-set style line 3 lc rgb '#588BAE' lt 1 lw 3 pt 7 ps 0.5 # blue
-set style line 4 lc rgb '#ed7014' lt 1 lw 3 pt 9 ps 1.0 # blue
-# set style line 4 lc rgb '#ed7014' lt 1 lw 3 pt 9 ps 1.0 # orange
-
-
-plot "conv.dat" using 1:4 w l smooth bezier ls 1 notitle, \
-    "conv.dat" using 1:4 with points ls 1 notitle "Ker7", \
-    1/0 with linespoints ls 1 title "Ker7", \
-    "conv.dat" using 1:3 smooth bezier ls 2 notitle, \
-    "conv.dat" using 1:3 with points ls 2 notitle, \
-    1/0 with linespoints ls 2 title "Ker5", \
-    "conv.dat" using 1:2 smooth bezier ls 3 notitle, \
-    "conv.dat" using 1:2 with points ls 3 notitle, \
-    1/0 with linespoints ls 3 title "Ker3", \
-    "conv.dat" using 1:5 smooth bezier ls 4 notitle, \
-    "conv.dat" using 1:5 with points ls 4 notitle, \
-    1/0 with linespoints ls 4 title "Ours"
-
-#fc rgb "cyan" fs pattern 1 bo -1
-#set object rect from screen 0.03, screen 0.28 to 0.55, 1 lw 2 fs border lc rgb 'black' #fc rgb "cyan" fs pattern 1 bo -1
-
-set origin .04, .275
-set size .425,.65
-clear
 unset key
-unset grid
-unset object
-unset arrow
-unset label
-unset logscale x
-unset xlabel
-unset y2label
+# set key invert left top
+set lmargin 6
+set bmargin 7
 
-set arrow from 4,32 to 64, 32 dt 4 lw 4 lc rgb "#2E8957" nohead
-set label "Boot" at 6, 34 tc rgb "#2E8957"
-set logscale x 4
-set xrange [4:64]
-set xtics (4,16,64)
-set grid xtics
-set grid y2tics my2tics lc rgb 'gray' lt 1 lw 2, lc rgb 'gray' dt 3 lt 3 lw 2
-set tmargin 1
-set lmargin 1
-set rmargin 1
-plot "conv.dat" using 1:4 w l smooth bezier ls 1 notitle, \
-    "conv.dat" using 1:4 with points ls 1 notitle "Ker7", \
-    1/0 with linespoints ls 1 title "Ker7", \
-    "conv.dat" using 1:3 smooth bezier ls 2 notitle, \
-    "conv.dat" using 1:3 with points ls 2 notitle, \
-    1/0 with linespoints ls 2 title "Ker5", \
-    "conv.dat" using 1:2 smooth bezier ls 3 notitle, \
-    "conv.dat" using 1:2 with points ls 3 notitle, \
-    1/0 with linespoints ls 3 title "Ker3", \
-    "conv.dat" using 1:5 smooth bezier ls 4 notitle, \
-    "conv.dat" using 1:5 with points ls 4 notitle, \
-    1/0 with linespoints ls 4 title "Ours"
-unset multiplot
+x = 0.035
+y = 0.2
+Dy = 0.2
+
+rx = 0.015
+ry = 0.26
+dx = 0.05
+dy = 0.04
+
+set label 'Conv' at screen x, screen y rotate by 90
+set object rect from screen rx, screen ry to screen rx+dx, screen ry+dy fc rgbcolor "#ED7117" fs pattern 1
+
+set label 'ReLU' at screen x, screen y+Dy rotate by 90
+set object rect from screen rx, screen ry+Dy to screen rx+dx, screen ry+Dy+dy fc rgbcolor "#B3DFE9"
+
+set label 'StoC' at screen x, screen y+2*Dy rotate by 90
+set object rect from screen rx, screen ry+2*Dy to screen rx+dx, screen ry+2*Dy+dy fc rgbcolor "#234F1E" fs pattern 10
+
+set label 'CtoS+Sine' at screen x, screen y+3*Dy rotate by 90
+set object rect from screen rx, screen ry+3*Dy+0.05 to screen rx+dx, screen ry+3*Dy+0.05+dy fc rgbcolor '#DEDEDE'
+
+plot newhistogram "(Ker3, B16)" rotate by 135 lt 1, \
+     'boot.dat' index 0 u 2:xtic(1) title "Conv" lc rgbcolor "#ED7117" fs pattern 1 border -1, \
+     '' index 0 u 3 title "ReLU" lc rgbcolor "#B3DFE9" fs border -1, \
+     '' index 0 u 4 title "StoC" lc rgbcolor "#234F1E" fs pattern 10 border -1, \
+     '' index 0 u 5 title "CtoS+Sine" lc rgbcolor "#DEDEDE" fs border -1, \
+     newhistogram "(Ker5, B64)" rotate by 135 lt 1, \
+     'boot.dat' index 1 u 2:xtic(1) notitle lc rgbcolor "#ED7117" fs pattern 1 border -1, \
+     '' index 1 u 3 notitle lc rgbcolor "#B3DFE9" fs border -1, \
+     '' index 1 u 4 notitle lc rgbcolor "#234F1E" fs pattern 10 border -1, \
+     '' index 1 u 5 notitle lc rgbcolor "#DEDEDE" fs border -1,\
+      newhistogram "(Ker7, B256)" rotate by 135 lt 1, \
+     'boot.dat' index 2 u 2:xtic(1) notitle lc rgbcolor "#ED7117" fs pattern 1 border -1, \
+     '' index 2 u 3 notitle lc rgbcolor "#B3DFE9" fs border -1, \
+     '' index 2 u 4 notitle lc rgbcolor "#234F1E" fs pattern 10 border -1,  \
+     '' index 2 u 5 notitle lc rgbcolor "#DEDEDE" fs border -1
 
 
-#pause -1 "Hit any key to continue"
