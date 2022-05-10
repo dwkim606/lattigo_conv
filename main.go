@@ -607,7 +607,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 			panic(err)
 		}
 		new_kgen := ckks.NewKeyGenerator(new_params)
-		rotkeys = new_kgen.GenRotationKeysForRotations(rotations, false, sk)
+		rotkeys = new_kgen.GenRotationKeysForRotations(rotations, true, sk)
 		cont.pack_evaluator = ckks.NewEvaluator(new_params, rlwe.EvaluationKey{Rlk: rlk, Rtks: rotkeys})
 
 		cont.encoder = ckks.NewEncoder(cont.params)
@@ -712,7 +712,7 @@ func main() {
 	// testConv_BNRelu_BL("Conv", false)
 	// testConv_noBoot_BL("Conv", true)
 	// testResNet_BL()
-	testImageNet_BL_final()
+	// testImageNet_BL_final()
 	// testReduceMean_BL()
 
 	// basic()
@@ -721,22 +721,22 @@ func main() {
 
 	// // Test Conv Boot & NoBoot FINAL!
 	// kers := [3]int{3, 5, 7}
-	// batchs := [5]int{4, 16, 64, 256, 1024}
-	// widths := [5]int{128, 64, 32, 16, 8}
+	batchs := [5]int{4, 16, 64, 256, 1024}
+	widths := [5]int{128, 64, 32, 16, 8}
 
-	// ker, _ := strconv.Atoi(os.Args[1])
-	// i, _ := strconv.Atoi(os.Args[2])
-	// BL, _ := strconv.ParseBool(os.Args[3])
-	// boot, _ := strconv.ParseBool(os.Args[4])
+	ker, _ := strconv.Atoi(os.Args[1])
+	i, _ := strconv.Atoi(os.Args[2])
+	BL, _ := strconv.ParseBool(os.Args[3])
+	boot, _ := strconv.ParseBool(os.Args[4])
 
-	// fmt.Println("Ker: ", ker, "batches: ", batchs[i], "widths: ", widths[i])
-	// if BL {
-	// 	fmt.Println("BL start.")
-	// 	testConv_noBoot_BL_in(batchs[i], widths[i], ker, boot)
-	// } else {
-	// 	fmt.Println("Ours start.")
-	// 	testConv_noBoot_in(batchs[i], widths[i], ker, boot)
-	// }
+	fmt.Println("Ker: ", ker, "batches: ", batchs[i], "widths: ", widths[i])
+	if BL {
+		fmt.Println("BL start.")
+		testConv_noBoot_BL_in_fast(batchs[i], widths[i], ker, boot)
+	} else {
+		fmt.Println("Ours start.")
+		testConv_noBoot_in(batchs[i], widths[i], ker, boot)
+	}
 
 	// for _, k := range kers {
 	// 	for i := 4; i < 5; i++ {

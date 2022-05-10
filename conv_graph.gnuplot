@@ -13,6 +13,7 @@ set label "Boot" at 625, 48 tc rgb "#2E8957"
 set xlabel "Number of Batches"
 set y2label "Running Time (seconds)"
 set logscale x 4
+# set logscale y
 set xrange [4:1024]
 set xtics (4,16,64,256,1024)
 set y2tics mirror
@@ -20,8 +21,9 @@ set link y2 via y inv y
 set my2tics
 unset ytics
 
+
 set grid xtics
-set grid y2tics my2tics lc rgb 'gray' lt 1 lw 2, lc rgb 'gray' dt 3 lt 3 lw 2
+# set grid y2tics my2tics lc rgb 'gray' lt 1 lw 2, lc rgb 'gray' dt 3 lt 3 lw 2
 set key at 700, 600
 set key spacing 1.25
 
