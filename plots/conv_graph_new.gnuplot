@@ -1,4 +1,4 @@
-set terminal eps       
+set terminal eps
 set output  "conv_graph_new.eps"   
 set multiplot
 
@@ -6,30 +6,34 @@ set multiplot
 # set object rect from 4,100 to 110,625 lw 1 fs border lc rgb 'black'
 # set arrow from screen 0.01, screen 0.2 to 4,100 dashtype 2 lw 2 lc rgb 'black' nohead
 # set arrow from screen 0.475, screen 0.2 to 110,100 dashtype 2 lw 2 lc rgb 'black' nohead
-set arrow from 4,32 to 1024, 26.82 dt 4 lw 3 lc rgb "#2E8957" nohead
-set label "Bootstrapping" at screen 0.85, screen 0.71 tc rgb "#2E8957"
+set arrow from 4,32 to 1024, 26.82 dt 4 lw 5 lc rgb "#2E8957" nohead
+set arrow from 1024, 26.82 to screen 0.765, screen 0.625 lt 1 lw 5 lc rgb "#2E8957"
+set label "Bootstrapping" font ",20" at screen 0.77, screen 0.6 tc rgb "#2E8957"
 # set label "Bootstrapping" at screen 0.8, 40 tc rgb "#2E8957"
 
-set xlabel "Number of Batches"
-set ylabel "Running Time (seconds)"
+set xlabel "Number of Batches" font ",20" offset 0, -1
+set ylabel "Running Time (seconds)" font ",20" offset -2, 0
 set logscale x 4
 set logscale y 4
 set xrange [4:1024]
-set xtics (4,16,64,256,1024)
-set mytics 
+set xtics (4,16,64,256,1024) font ",18"
+set ytics font ",18"
+set mytics
 set grid xtics
-set grid ytics mytics lc rgb 'gray' lt 1 lw 2, lc rgb 'gray' dt 3 lt 3 lw 3
+set grid ytics mytics lc rgb 'gray' lt 1 lw 4, lc rgb 'gray' dt 3 lt 3 lw 4
 set key outside right top #at 700, 600
-set key spacing 1.25 box
-set rmargin 13
+set key spacing 1.25 box font ",20"
+set lmargin 17
+set rmargin 22
+set bmargin 5
 
 # set style line 1 lc rgb '#48494B' lt 1 lw 3 pt 7 ps 0.5 # gray
 # set style line 2 lc rgb '#828282' lt 1 lw 3 pt 7 ps 0.5  # green
 # set style line 3 lc rgb '#97978F' lt 1 lw 3 pt 7 ps 0.5 # blue
-set style line 1 lc rgb '#0A1172' lt 1 lw 3 pt 7 ps 0.5 # gray
-set style line 2 lc rgb '#0147AB' lt 1 lw 3 pt 7 ps 0.5  # green
-set style line 3 lc rgb '#588BAE' lt 1 lw 3 pt 7 ps 0.5 # blue
-set style line 4 lc rgb '#ed7014' lt 1 lw 3 pt 9 ps 1.0 # blue
+set style line 1 lc rgb '#0A1172' lt 1 lw 5 pt 7 ps 0.5 # gray
+set style line 2 lc rgb '#0147AB' lt 1 lw 5 pt 7 ps 0.5  # green
+set style line 3 lc rgb '#588BAE' lt 1 lw 5 pt 7 ps 0.5 # blue
+set style line 4 lc rgb '#ed7014' lt 1 lw 5 pt 9 ps 1.0 # blue
 # set style line 4 lc rgb '#ed7014' lt 1 lw 3 pt 9 ps 1.0 # orange
 
 
