@@ -4417,8 +4417,8 @@ func testImagenet_final_fast_in(st, end, ker_wid int) {
 		in_wids[1] = 8
 		kp_wids[0] = 14
 		kp_wids[1] = 6
-		num_blc1 = 1
-		num_blc2 = 1
+		num_blc1 = 3
+		num_blc2 = 3
 	} else {
 		panic("strange ker name!")
 	}
@@ -4430,9 +4430,18 @@ func testImagenet_final_fast_in(st, end, ker_wid int) {
 		max_batch[i] = cont.N / (in_wids[i] * in_wids[i])
 	}
 	alpha := 0.0 // 0.3 => leakyrelu
-	init_pow := 5.0
+	init_pow := 6.0
+	mid_pow := 5.0
 	final_pow := 6.0
 
+	// ker5_iter := []int{804, 886, 901, 956}
+	// {3, 29, 87, 254, 357,
+	// 399, 435, 455, 475, 476,
+	// 518, 540, 545, 571, 631,
+	// 657, 699, 711, 748, 790,
+	// 804, 886, 901, 956}
+
+	// for _, name_iter := range ker5_iter {
 	for name_iter := st; name_iter < end; name_iter++ {
 		weight_num := 10
 		norm := 1
@@ -4472,6 +4481,9 @@ func testImagenet_final_fast_in(st, end, ker_wid int) {
 			weight_num++
 			bn_a1 := readTxt(weight_dir+"w"+strconv.Itoa(weight_num)+"-a.csv", real_batch[0])
 			bn_b1 := readTxt(weight_dir+"w"+strconv.Itoa(weight_num)+"-b.csv", real_batch[0])
+			if i == num_blc1 {
+				pow = mid_pow
+			}
 			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in1, bn_a1, bn_b1, alpha, pow, in_wids[0], kp_wids[0], ker_wid, real_batch[0], real_batch[0], norm, 0, 0, iter, "Conv", false, false)
 			fmt.Println("Block1, Layer ", i, "done!")
 		}

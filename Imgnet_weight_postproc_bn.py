@@ -76,8 +76,33 @@ def bn_computation(iters):
         os.remove(in_dir+f_initial+str(num)+'-mean.csv') 
         os.remove(in_dir+f_initial+str(num)+'-var.csv') 
 
+def bn_computation_first():
+    num = 0
+    kinds = ['beta:0', 'gamma:0', 'moving_mean:0', 'moving_variance:0']
+
+    beta = np.loadtxt(in_dir+f_initial+'-bn-bn-'+kinds[0]+'.csv') 
+    gamma = np.loadtxt(in_dir+f_initial+'-bn-bn-'+kinds[1]+'.csv') 
+    mean = np.loadtxt(in_dir+f_initial+'-bn-bn-'+kinds[2]+'.csv') 
+    var = np.loadtxt(in_dir+f_initial+'-bn-bn-'+kinds[3]+'.csv') 
+
+    os.remove(in_dir+f_initial+'-bn-bn-'+kinds[0]+'.csv')
+    os.remove(in_dir+f_initial+'-bn-bn-'+kinds[1]+'.csv')
+    os.remove(in_dir+f_initial+'-bn-bn-'+kinds[2]+'.csv')
+    os.remove(in_dir+f_initial+'-bn-bn-'+kinds[3]+'.csv')
+
+    bn_a = gamma / np.sqrt(var + 0.001)
+    bn_b = beta - mean * gamma / np.sqrt(var + 0.001) 
+    
+    num = 17
+    np.savetxt(in_dir+f_initial+str(num)+'-a.csv', bn_a, fmt='%.18e', delimiter=',')
+    np.savetxt(in_dir+f_initial+str(num)+'-b.csv', bn_b, fmt='%.18e', delimiter=',')
+
+
 
 #### Main Start #### 
 
+## CAUTION : Needs to manage bn_0 to be converted at the end and to precede FC!
+
 # name_change()
 # bn_computation(14)
+# bn_computation_first()

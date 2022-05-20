@@ -696,11 +696,11 @@ func main() {
 	// fmt.Println("Now, fast version (norm = 1)")
 	// testImagenet_final_fast()
 
-	// st, _ := strconv.Atoi(os.Args[1])
-	// end, _ := strconv.Atoi(os.Args[2])
-	// ker, _ := strconv.Atoi(os.Args[3])
+	st, _ := strconv.Atoi(os.Args[1])
+	end, _ := strconv.Atoi(os.Args[2])
+	ker, _ := strconv.Atoi(os.Args[3])
 	// testImagenet_final_in(st, end)
-	// testImagenet_final_fast_in(st, end, ker)
+	testImagenet_final_fast_in(st, end, ker)
 	// testImageNet_BL_final_in(st, end)
 	// testImagenet_in(st, end)
 	// testResNet_in_BL(st, end)
@@ -721,22 +721,22 @@ func main() {
 
 	// // Test Conv Boot & NoBoot FINAL!
 	// kers := [3]int{3, 5, 7}
-	batchs := [5]int{4, 16, 64, 256, 1024}
-	widths := [5]int{128, 64, 32, 16, 8}
+	// batchs := [5]int{4, 16, 64, 256, 1024}
+	// widths := [5]int{128, 64, 32, 16, 8}
 
-	ker, _ := strconv.Atoi(os.Args[1])
-	i, _ := strconv.Atoi(os.Args[2])
-	BL, _ := strconv.ParseBool(os.Args[3])
-	boot, _ := strconv.ParseBool(os.Args[4])
+	// ker, _ := strconv.Atoi(os.Args[1])
+	// i, _ := strconv.Atoi(os.Args[2])
+	// BL, _ := strconv.ParseBool(os.Args[3])
+	// boot, _ := strconv.ParseBool(os.Args[4])
 
-	fmt.Println("Ker: ", ker, "batches: ", batchs[i], "widths: ", widths[i])
-	if BL {
-		fmt.Println("BL start.")
-		testConv_noBoot_BL_in_fast(batchs[i], widths[i], ker, boot)
-	} else {
-		fmt.Println("Ours start.")
-		testConv_noBoot_in(batchs[i], widths[i], ker, boot)
-	}
+	// fmt.Println("Ker: ", ker, "batches: ", batchs[i], "widths: ", widths[i])
+	// if BL {
+	// 	fmt.Println("BL start.")
+	// 	testConv_noBoot_BL_in_fast(batchs[i], widths[i], ker, boot)
+	// } else {
+	// 	fmt.Println("Ours start.")
+	// 	testConv_noBoot_in(batchs[i], widths[i], ker, boot)
+	// }
 
 	// for _, k := range kers {
 	// 	for i := 4; i < 5; i++ {
