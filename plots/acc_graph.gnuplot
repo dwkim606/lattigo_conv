@@ -22,6 +22,8 @@ set nonlinear x via f(x) inverse g(x)
 unset key
 
 # Creation of the broken axis marks (this should be automated)
+set for [i=1:20] arrow from 4000, graph 0.05*i to 12000, graph 0.05*i nohead lt 4000 lw 2 lc bgnd front
+
 set arrow from 4000, graph 0 to 12000, graph 0 nohead lt 4000 lw 2 lc bgnd front
 set arrow from 4000, graph 0 length graph  .01 angle 75 nohead lw 3 front
 set arrow from 4000, graph 0 length graph -.01 angle 75 nohead lw 3 front
@@ -43,6 +45,9 @@ set arrow from screen 0.76, graph 1 length graph  .01 angle 75 nohead lw 3 front
 set arrow from screen 0.76, graph 1 length graph -.01 angle 75 nohead lw 3 front
 
 
+
+
+
 # set style line 1 lc rgb '#48494B' lt 1 lw 3 pt 7 ps 0.5 # gray
 # set style line 2 lc rgb '#828282' lt 1 lw 3 pt 7 ps 0.5  # green
 # set style line 3 lc rgb '#97978F' lt 1 lw 3 pt 7 ps 0.5 # blue
@@ -53,11 +58,17 @@ set style line 4 lc rgb '#ed7014' lt 1 lw 3 pt 9 ps 1.0 # blue
 set style line 4 lc rgb '#ed7014' lt 1 lw 3 pt 9 ps 1.0 # orange
 
 set label "{/:Bold Ours}" at 750, 94.5 tc rgb '#ed7014'
-set label "Falcon (Lou et al., 2020)" at 340, 78.5
-set label "EVA (Dathathri et al., 2020)" at 3120, 82.5    
-set label "Lora (Brutzkus et al., 2019)" at 800, 77.3    
-set label "(Lee et al., 2021b)" at 3650, 91.5   
-set label "SHE (Lou  \\& \n       Jiang, 2019)" at 12200, 95.5
+set label "Falcon [20]" at 338, 78.5
+set label "EVA [17]" at 3120, 82.5    
+set label "Lora [19]" at 800, 77.3    
+set label "Lee et al. [29]" at 3650, 91.5   
+set label "SHE [27]" at 12200, 95.5
+
+#set label "Falcon (Lou et al., 2020)" at 340, 78.5
+#set label "EVA (Dathathri et al., 2020)" at 3120, 82.5    
+#set label "Lora (Brutzkus et al., 2019)" at 800, 77.3    
+#set label "(Lee et al., 2021b)" at 3650, 91.5   
+#set label "SHE (Lou  \\& \n       Jiang, 2019)" at 12200, 95.5
 set arrow from 340,78 to 150, 76.9 lw 2   
 
 set arrow from 2271, 91.31 to 3703, 92.4 nohead lt 1 lw 3 lc rgb '#0A1172'

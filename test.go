@@ -1226,9 +1226,9 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug,
 
 	logN := 16
 	alpha := 0.0
-	init_pow := 6.0
-	mid_pow := 5.0
-	final_pow := 6.0
+	init_pow := 5.0
+	mid_pow := 5.0 // highly adjusted to k3 d20 w3
+	// final_pow := 6.0
 	in_wids := []int{32, 16, 8}                                         // before cropping
 	raw_in_wids := []int{32 - ker_wid/2, 16 - ker_wid/2, 8 - ker_wid/2} // same as python
 	fast_pack := true
@@ -1277,6 +1277,9 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug,
 		pow := init_pow
 		ct_layer := ct_input
 		for i := 1; i <= num_blcs[0]; i++ {
+			if i == 5 {
+				pow = mid_pow
+			}
 			var bn_batch int
 			if i == 1 {
 				bn_batch = init_batch
@@ -1288,7 +1291,7 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug,
 			if i == 1 {
 				ker_in := readTxt(weight_dir+"w0-conv.csv", 3*init_batch*ker_size)
 				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, 3, init_batch, norm[0], 0, step[0], 2, "Conv", fast_pack, debug)
-				pow = mid_pow
+				// pow = mid_pow
 			} else if i == 2 {
 				ker_in := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-conv.csv", init_batch*real_batch[0]*ker_size)
 				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, init_batch, real_batch[0], norm[0], 0, step[0], 2, "Conv", fast_pack, debug)
@@ -1356,6 +1359,9 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug,
 
 		// ResNet Block 2
 		for i := 1; i <= num_blcs[1]; i++ {
+			if i == 5 {
+				pow = init_pow
+			}
 			bn_a2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+i)+"-a.csv", real_batch[1])
 			bn_b2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+i)+"-b.csv", real_batch[1])
 			ker_in2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+i)+"-conv.csv", real_batch[1]*real_batch[1]*ker_size)
@@ -1367,6 +1373,7 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug,
 		timings[2] = time.Since(start).Seconds()
 		start = time.Now()
 
+		pow = mid_pow
 		ker_in23 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+1)+"-conv.csv", real_batch[1]*real_batch[2]*ker_size)
 		bn_a3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+1)+"-a.csv", real_batch[2])
 		bn_b3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+1)+"-b.csv", real_batch[2])
@@ -1390,13 +1397,16 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug,
 
 		// ResNet Block 3
 		for i := 1; i <= num_blcs[2]; i++ {
+			if i == 3 {
+				pow = init_pow
+			}
+			if i == 5 {
+				pow = mid_pow
+			}
 			bn_a3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+i+1)+"-a.csv", real_batch[2])
 			bn_b3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+i+1)+"-b.csv", real_batch[2])
 			ker_in3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+i+1)+"-conv.csv", real_batch[2]*real_batch[2]*ker_size)
 
-			if i == num_blcs[2] {
-				pow = final_pow
-			}
 			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, pow, in_wids[1], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[2], 0, step[2], 2, "Conv_inside", fast_pack, debug)
 			fmt.Println("Block3, Layer ", i, "done!")
 		}

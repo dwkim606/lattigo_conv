@@ -44,11 +44,11 @@ set object rect from screen rx, screen ry+2*Dy to screen rx+dx, screen ry+2*Dy+d
 set label 'CtoS+Sine' at screen x, screen y+3*Dy rotate by 90 font ",15"
 set object rect from screen rx, screen ry+3*Dy+0.05 to screen rx+dx, screen ry+3*Dy+0.05+dy fc rgbcolor '#DEDEDE'
 
-set label '(-13%)' font ",15" tc rgbcolor "#0147AB" at screen 0.195, screen 0.35 rotate by 90
-set label '(-26%)' font ",15" tc rgbcolor "#0147AB" at screen 0.345, screen 0.35 rotate by 90
-set label '(-44%)' font ",15" tc rgbcolor "#0147AB" at screen 0.495, screen 0.35 rotate by 90
-set label '(-72%)' font ",15" tc rgbcolor "#0147AB" at screen 0.645, screen 0.35 rotate by 90
-set label '(-83%)' font ",15" tc rgbcolor "#0147AB" at screen 0.795, screen 0.35 rotate by 90
+set label '{/:Bold (-13%)}' font ",15" tc rgbcolor "#0147AB" at screen 0.195, screen 0.35 rotate by 90
+set label '{/:Bold (-26%)}' font ",15" tc rgbcolor "#0147AB" at screen 0.345, screen 0.35 rotate by 90
+set label '{/:Bold (-44%)}' font ",15" tc rgbcolor "#0147AB" at screen 0.495, screen 0.35 rotate by 90
+set label '{/:Bold (-72%)}' font ",15" tc rgbcolor "#0147AB" at screen 0.645, screen 0.35 rotate by 90
+set label '{/:Bold (-83%)}' font ",15" tc rgbcolor "#0147AB" at screen 0.795, screen 0.35 rotate by 90
 
 plot newhistogram "(Ker3, B16)" font ",18" offset 0, -3.5 rotate by 90 lt 1, \
      'boot.dat' index 0 u 2:xtic(1) title "Conv" lc rgbcolor "#ED7117" fs pattern 1 border -1, \

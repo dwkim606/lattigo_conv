@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ldsec/lattigo/v2/ckks"
-	"github.com/ldsec/lattigo/v2/rlwe"
+	"github.com/dwkim606/test_lattigo/ckks"
+	"github.com/dwkim606/test_lattigo/rlwe"
 )
 
 var err error
@@ -39,7 +39,6 @@ type context struct {
 	evaluator      ckks.Evaluator
 	pack_evaluator ckks.Evaluator
 	btp            *ckks.Bootstrapper
-	// new_decryptor  ckks.Decryptor
 }
 
 func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind string) *context {
@@ -51,7 +50,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	copy(cont.kp_wids, kp_wids)
 
 	btpParams := ckks.DefaultBootstrapParams[6]
-	if (kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet") || (kind == "BL_Imagenet") || (kind == "BL_Imagenet_final") {
+	if kind == "BL_Conv" {
 		btpParams = ckks.DefaultBootstrapParams[7]
 	}
 	cont.params, err = btpParams.Params()
@@ -73,7 +72,6 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	cont.m_idx = make(map[int][]map[int][]int)
 	cont.m_idx_l = make(map[int][]map[int][]int)
 	var iter int
-	half := true // only for DCGAN
 
 	switch kind {
 	case "BL_Conv":
@@ -88,147 +86,6 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 				rotations = append(rotations, k*elt*elt)
 			}
 		}
-	case "BL_StrConv":
-		for _, elt := range cont.in_wids {
-			for k := -(ker_wid / 2); k <= ker_wid/2; k++ { // rotations for conv
-				for k2 := -(ker_wid / 2); k2 <= ker_wid/2; k2++ {
-					rotations = append(rotations, k*elt+k2)
-				}
-			}
-			out_batch := (cont.N / 2) / (elt * elt)
-			for k := 1; k < out_batch; k++ { // rotations for conv
-				rotations = append(rotations, k*elt*elt)
-			}
-			for pos := 0; pos < 4; pos++ { // for final rotations for after strides
-				rotations = append(rotations, -pos*elt*elt/4)
-			}
-			cont.m_idx[elt] = make([]map[int][]int, 1)
-			cont.r_idx[elt] = make([]map[int][]int, 1)
-			cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_comprs_BL(cont.N/2, elt, 0)
-
-			for k := range cont.m_idx[elt][0] {
-				rotations = append(rotations, k)
-			}
-			for k := range cont.r_idx[elt][0] {
-				rotations = append(rotations, k)
-			}
-		}
-	case "BL_TransConv":
-		for _, elt := range cont.in_wids {
-			for k := -(ker_wid / 2); k <= ker_wid/2; k++ { // rotations for conv
-				for k2 := -(ker_wid / 2); k2 <= ker_wid/2; k2++ {
-					rotations = append(rotations, k*2*elt+k2)
-				}
-			}
-			out_batch := (cont.N / 2) / (4 * elt * elt)
-			for k := 1; k < out_batch; k++ { // rotations for conv
-				rotations = append(rotations, 4*k*elt*elt)
-			}
-			for pos := 0; pos < 4; pos++ { // for final rotations for prep expand
-				rotations = append(rotations, pos*elt*elt)
-			}
-			cont.m_idx[elt] = make([]map[int][]int, 1)
-			cont.r_idx[elt] = make([]map[int][]int, 1)
-			cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_expand_BL(cont.N/2, elt)
-
-			for k := range cont.m_idx[elt][0] {
-				rotations = append(rotations, k)
-			}
-			for k := range cont.r_idx[elt][0] {
-				rotations = append(rotations, k)
-			}
-		}
-	case "BL_Resnet": // need rots for strConv and Conv
-		for i, elt := range cont.in_wids {
-			for k := -(ker_wid / 2); k <= ker_wid/2; k++ { // rotations for conv
-				for k2 := -(ker_wid / 2); k2 <= ker_wid/2; k2++ {
-					rotations = append(rotations, k*elt+k2)
-				}
-			}
-			max_out_batch := cont.N / (2 * elt * elt) // originally (cont.N / 2) / (elt * elt)
-			norm := 1 << (i + 1)
-			if i == 0 {
-				norm = 1
-			}
-			for k := 1; k < max_out_batch/norm; k++ { // rotations for post conv
-				rotations = append(rotations, norm*k*elt*elt)
-			}
-			for pos := 0; pos < 4; pos++ { // for final rotations for after strides
-				rotations = append(rotations, -pos*elt*elt/4)
-			}
-			cont.m_idx[elt] = make([]map[int][]int, 1)
-			cont.r_idx[elt] = make([]map[int][]int, 1)
-			cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_comprs_BL(cont.N/2, elt, 0)
-
-			for k := range cont.m_idx[elt][0] {
-				rotations = append(rotations, k)
-			}
-			for k := range cont.r_idx[elt][0] {
-				rotations = append(rotations, k)
-			}
-			for i := 1; i < 64; i *= 2 { // for reduce mean & FC
-				rotations = append(rotations, i)
-			}
-			for i := 1; i < 4; i *= 2 {
-				rotations = append(rotations, i*16*64*8)
-			}
-			for i := 1; i < 16; i++ {
-				rotations = append(rotations, i*64*8)
-			}
-		}
-	case "BL_Imagenet":
-		for _, elt := range cont.in_wids {
-			for k := -(ker_wid / 2); k <= ker_wid/2; k++ { // rotations for conv
-				for k2 := -(ker_wid / 2); k2 <= ker_wid/2; k2++ {
-					rotations = append(rotations, k*elt+k2)
-				}
-			}
-			out_batch := (cont.N / 2) / (elt * elt)
-			for k := 1; k < out_batch; k++ { // rotations for conv
-				rotations = append(rotations, k*elt*elt)
-			}
-			for pos := 0; pos < 4; pos++ { // for final rotations for after strides
-				rotations = append(rotations, -pos*elt*elt/4)
-			}
-			cont.m_idx[elt] = make([]map[int][]int, 1)
-			cont.r_idx[elt] = make([]map[int][]int, 1)
-			cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_comprs_BL(cont.N/2, elt, 0)
-
-			for k := range cont.m_idx[elt][0] {
-				rotations = append(rotations, k)
-			}
-			for k := range cont.r_idx[elt][0] {
-				rotations = append(rotations, k)
-			}
-		}
-	case "BL_Imagenet_final":
-		for _, elt := range cont.in_wids {
-			for k := -(ker_wid / 2); k <= ker_wid/2; k++ { // rotations for conv
-				for k2 := -(ker_wid / 2); k2 <= ker_wid/2; k2++ {
-					rotations = append(rotations, k*elt+k2)
-				}
-			}
-			out_batch := (cont.N / 2) / (elt * elt)
-			for k := 1; k < out_batch; k++ { // rotations for conv
-				rotations = append(rotations, k*elt*elt)
-			}
-			for pos := 0; pos < 4; pos++ { // for final rotations for after strides
-				rotations = append(rotations, -pos*elt*elt/4)
-			}
-			cont.m_idx[elt] = make([]map[int][]int, 1)
-			cont.r_idx[elt] = make([]map[int][]int, 1)
-			if ker_wid == 3 {
-				cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_comprs_BL(cont.N/2, elt, 0) // no pad
-			} else {
-				cont.m_idx[elt][0], cont.r_idx[elt][0] = gen_comprs_BL(cont.N/2, elt, 2) // pad
-			}
-			for k := range cont.m_idx[elt][0] {
-				rotations = append(rotations, k)
-			}
-			for k := range cont.r_idx[elt][0] {
-				rotations = append(rotations, k)
-			}
-		}
 	case "Conv": // we assume manual padding using kp_wid
 		if boot {
 			iter = 2 // we assume full padding, i.e., up and low is both nonzero
@@ -236,86 +93,6 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 				cont.ext_idx[elt] = make([][]int, iter)
 				for ul := 0; ul < iter; ul++ {
 					cont.ext_idx[elt][ul] = gen_keep_vec(cont.N/2, elt, cont.kp_wids[i], ul)
-				}
-			}
-		}
-	case "StrConv_inside": // we assume manual padding using kp_wid
-		if boot {
-			iter = 2  // we assume full padding, i.e., up and low is both nonzero
-			step := 2 // will be 4 in the 3rd block
-
-			cont.ext_idx[step] = make([][]int, iter)
-			raw_in_wid_odd := true
-			if (cont.in_wids[0]-ker_wid/2)%2 == 0 {
-				raw_in_wid_odd = false
-			}
-			for ul := 0; ul < iter; ul++ {
-				cont.ext_idx[step][ul] = gen_keep_vec_stride(cont.N/2, cont.in_wids[0], cont.kp_wids[0], step, ul, raw_in_wid_odd)
-			}
-
-		}
-	case "StrConv":
-		if boot {
-			iter = 2 // we assume full padding, i.e., up and low is both nonzero
-			for i, elt := range cont.in_wids {
-				cont.r_idx[elt] = make([]map[int][]int, 4)
-				cont.r_idx_l[elt] = make([]map[int][]int, 4)
-				cont.m_idx[elt] = make([]map[int][]int, 4)
-				cont.m_idx_l[elt] = make([]map[int][]int, 4)
-				for pos := 0; pos < 4; pos++ {
-					cont.r_idx[elt][pos] = gen_comprs_full(cont.N/2, elt, cont.kp_wids[i], pos, 0)
-					cont.r_idx_l[elt][pos] = gen_comprs_full(cont.N/2, elt, cont.kp_wids[i], pos, 1)
-					for k := range cont.r_idx[elt][pos] {
-						rotations = append(rotations, k)
-					}
-					for k := range cont.r_idx_l[elt][pos] {
-						rotations = append(rotations, k)
-					}
-					for k := range cont.m_idx[elt][pos] {
-						rotations = append(rotations, k)
-					}
-					for k := range cont.m_idx_l[elt][pos] {
-						rotations = append(rotations, k)
-					}
-				}
-			}
-		}
-	case "StrConv_fast", "StrConv_odd":
-		if boot {
-			iter = 2 // we assume full padding, i.e., up and low is both nonzero
-			for i, elt := range cont.in_wids {
-				cont.r_idx[elt] = make([]map[int][]int, 4)
-				cont.r_idx_l[elt] = make([]map[int][]int, 4)
-				cont.m_idx[elt] = make([]map[int][]int, 4)
-				cont.m_idx_l[elt] = make([]map[int][]int, 4)
-				for pos := 0; pos < 4; pos++ {
-					cont.m_idx[elt][pos], cont.r_idx[elt][pos] = gen_comprs_fast(cont.N/2, elt, cont.kp_wids[i], pos, 0)
-					cont.m_idx_l[elt][pos], cont.r_idx_l[elt][pos] = gen_comprs_fast(cont.N/2, elt, cont.kp_wids[i], pos, 1)
-					for k := range cont.r_idx[elt][pos] {
-						rotations = append(rotations, k)
-					}
-					for k := range cont.r_idx_l[elt][pos] {
-						rotations = append(rotations, k)
-					}
-					for k := range cont.m_idx[elt][pos] {
-						rotations = append(rotations, k)
-					}
-					for k := range cont.m_idx_l[elt][pos] {
-						rotations = append(rotations, k)
-					}
-				}
-			}
-		}
-	case "TransConv": // we assume manual padding using kp_wid
-		if boot {
-			iter = 2 // we assume full padding, i.e., up and low is both nonzero
-			for i, elt := range cont.in_wids {
-				cont.r_idx[elt] = make([]map[int][]int, 4)
-				for ul := 0; ul < iter; ul++ {
-					cont.r_idx[elt][ul] = gen_extend_full(cont.N/2, elt, cont.kp_wids[i], 0, ul)
-					for k := range cont.r_idx[elt][ul] {
-						rotations = append(rotations, k)
-					}
 				}
 			}
 		}
@@ -416,101 +193,6 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 				rotations = append(rotations, k)
 			}
 		}
-	case "Resnet_crop": // Generate ext_idx for extracting valid values from conv with "same" padding
-		iter = 2 // since we use full padding,
-		for i, elt := range cont.in_wids {
-			cont.ext_idx[elt] = make([][]int, iter)
-			for ul := 0; ul < iter; ul++ {
-				cont.ext_idx[elt][ul] = gen_keep_vec(cont.N/2, elt, cont.kp_wids[i], ul)
-			}
-			cont.r_idx[elt] = make([]map[int][]int, 1)
-			cont.r_idx_l[elt] = make([]map[int][]int, 1)
-			cont.m_idx[elt] = make([]map[int][]int, 1)
-			cont.m_idx_l[elt] = make([]map[int][]int, 1)
-
-			pos := 0
-			if i < 2 { // For strides at bl1 to bl2, bl2 to bl3
-				cont.m_idx[elt][pos], cont.r_idx[elt][pos] = gen_comprs_fast(cont.N/2, elt, 2*cont.kp_wids[i+1], pos, 0)
-				cont.m_idx_l[elt][pos], cont.r_idx_l[elt][pos] = gen_comprs_fast(cont.N/2, elt, 2*cont.kp_wids[i+1], pos, 1)
-				for k := range cont.r_idx[elt][pos] {
-					rotations = append(rotations, k)
-				}
-				for k := range cont.r_idx_l[elt][pos] {
-					rotations = append(rotations, k)
-				}
-				for k := range cont.m_idx[elt][pos] {
-					rotations = append(rotations, k)
-				}
-				for k := range cont.m_idx_l[elt][pos] {
-					rotations = append(rotations, k)
-				}
-			}
-		}
-	case "Resnet": // Generate ext_idx for extracting valid values from conv with "same" padding
-		iter = 1 // since we use half padding, i.e., lower part is all zero
-		end := 4
-		for _, elt := range cont.in_wids {
-			cont.ext_idx[elt] = make([][]int, iter)
-			for ul := 0; ul < iter; ul++ {
-				cont.ext_idx[elt][ul] = gen_keep_vec(cont.N/2, elt, elt/2, ul)
-			}
-			cont.r_idx[elt] = make([]map[int][]int, 4)
-			cont.m_idx[elt] = make([]map[int][]int, 4)
-
-			for pos := 0; pos < end; pos += 2 {
-				// cont.r_idx[elt][pos] = gen_comprs_full(cont.N/2, elt, elt/2, pos, 0)
-				cont.m_idx[elt][pos], cont.r_idx[elt][pos] = gen_comprs_fast(cont.N/2, elt, elt/2, pos, 0)
-				for k := range cont.r_idx[elt][pos] {
-					rotations = append(rotations, k)
-				}
-				for k := range cont.m_idx[elt][pos] {
-					rotations = append(rotations, k)
-				}
-			}
-			end = 1
-		}
-	case "Imagenet": // Generate ext_idx for extracting valid values from conv with "same" padding
-		iter = 2 // since we use half padding, i.e., lower part is all zero
-		for i, elt := range cont.in_wids {
-			cont.ext_idx[elt] = make([][]int, iter)
-			for ul := 0; ul < iter; ul++ {
-				cont.ext_idx[elt][ul] = gen_keep_vec(cont.N/2, elt, cont.kp_wids[i], ul)
-			}
-			cont.r_idx[elt] = make([]map[int][]int, 4)
-			cont.r_idx_l[elt] = make([]map[int][]int, 4)
-			cont.m_idx[elt] = make([]map[int][]int, 4)
-			cont.m_idx_l[elt] = make([]map[int][]int, 4)
-
-			if i == 0 {
-				for pos := 0; pos < 4; pos += 1 {
-					cont.r_idx[elt][pos] = gen_comprs_full(cont.N/2, elt, cont.kp_wids[i], pos, 0)
-					cont.r_idx_l[elt][pos] = gen_comprs_full(cont.N/2, elt, cont.kp_wids[i], pos, 1)
-					for k := range cont.r_idx[elt][pos] {
-						rotations = append(rotations, k)
-					}
-					for k := range cont.r_idx_l[elt][pos] {
-						rotations = append(rotations, k)
-					}
-				}
-			} else if i == 1 {
-				for pos := 0; pos < 4; pos += 2 {
-					cont.m_idx[elt][pos], cont.r_idx[elt][pos] = gen_comprs_fast(cont.N/2, elt, cont.kp_wids[i], pos, 0)
-					cont.m_idx_l[elt][pos], cont.r_idx_l[elt][pos] = gen_comprs_fast(cont.N/2, elt, cont.kp_wids[i], pos, 1)
-					for k := range cont.r_idx[elt][pos] {
-						rotations = append(rotations, k)
-					}
-					for k := range cont.m_idx[elt][pos] {
-						rotations = append(rotations, k)
-					}
-					for k := range cont.r_idx_l[elt][pos] {
-						rotations = append(rotations, k)
-					}
-					for k := range cont.m_idx_l[elt][pos] {
-						rotations = append(rotations, k)
-					}
-				}
-			}
-		}
 	case "Imagenet_final": // Generate ext_idx for extracting valid values from conv with "same" padding
 		iter = 2 // since we use half padding, i.e., lower part is all zero
 		for i, elt := range cont.in_wids {
@@ -567,20 +249,6 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 				}
 			}
 		}
-	case "DCGAN": // Generate rotations for EXT_FULL
-		for _, elt := range cont.in_wids {
-			cont.r_idx[elt] = make([]map[int][]int, 4)
-			cont.m_idx[elt] = make([]map[int][]int, 4)
-			for pos := 0; pos < 4; pos++ {
-				cont.r_idx[elt][pos], cont.m_idx[elt][pos] = gen_extend_full_nhf(cont.N/2, elt, pos, half, half)
-				for k := range cont.r_idx[elt][pos] {
-					rotations = append(rotations, k)
-				}
-				for k := range cont.m_idx[elt][pos] {
-					rotations = append(rotations, k)
-				}
-			}
-		}
 	default:
 		panic("Wrong kinds!")
 	}
@@ -622,7 +290,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 		cont.evaluator = ckks.NewEvaluator(cont.params, rlwe.EvaluationKey{Rlk: rlk, Rtks: rotkeys})
 	}
 
-	if !((kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet") || (kind == "BL_Imagenet") || (kind == "BL_Imagenet_final")) {
+	if !(kind == "BL_Conv") {
 		// we use smaller keys for rotations for pack_ctxts
 		new_params, err := ckks.NewParametersFromLiteral(ckks.ParametersLiteral{
 			LogN: logN,
@@ -640,25 +308,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 		new_encoder := ckks.NewEncoder(new_params)
 
 		cont.pl_idx, cont.pack_evaluator = gen_idxNlogs(0, new_kgen, sk, new_encoder, new_params)
-	} //else {
-	// All rotations BL can be here
-	// new_params, err := ckks.NewParametersFromLiteral(ckks.ParametersLiteral{
-	// 	LogN: logN,
-	// 	Q:    cont.params.Q(),
-	// 	P:    []uint64{0x1fffffffffe00001}, // Pi 61
-	// 	// Pi 61
-	// 	Sigma:    rlwe.DefaultSigma,
-	// 	LogSlots: logN - 1,
-	// 	Scale:    float64(1 << 30),
-	// })
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// new_kgen := ckks.NewKeyGenerator(new_params)
-	// new_rlk := new_kgen.GenRelinearizationKey(sk, 2)
-	// new_rotkeys := new_kgen.GenRotationKeysForRotations(rotations, false, sk)
-	// cont.pack_evaluator = ckks.NewEvaluator(new_params, rlwe.EvaluationKey{Rlk: new_rlk, Rtks: new_rotkeys})
-	//}
+	}
 
 	if boot {
 		fmt.Println("Generating bootstrapping keys...")
@@ -666,7 +316,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 		rotkeys = kgen.GenRotationKeysForRotations(rotations, true, sk)
 		btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
 
-		if (kind == "BL_Conv") || (kind == "BL_StrConv") || (kind == "BL_TransConv") || (kind == "BL_Resnet") || (kind == "BL_Imagenet") || (kind == "BL_Imagenet_final") {
+		if kind == "BL_Conv" {
 			if cont.btp, err = ckks.NewBootstrapper(cont.params, btpParams, btpKey); err != nil {
 				panic(err)
 			}
@@ -682,119 +332,72 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 }
 
 func main() {
-	// testConv_noBoot(7, 8, 8, true)
-
-	// testImageNet_BL()
-	// testImagenet()
-	// testImagenet_final()
-
-	// testReduceMean_norm()
-	// testResNet_ker23()
-	// testImagenet_final()
-	// testImageNet_BL_final()
-
-	// fmt.Println("Now, fast version (norm = 1)")
-	// testImagenet_final_fast()
-
 	// st, _ := strconv.Atoi(os.Args[1])
 	// end, _ := strconv.Atoi(os.Args[2])
 	// ker, _ := strconv.Atoi(os.Args[3])
-	// testImagenet_final_in(st, end)
 	// testImagenet_final_fast_in(st, end, ker)
-	// testImageNet_BL_final_in(st, end)
-	// testImagenet_in(st, end)
-	// testResNet_in_BL(st, end)
-	// testResNet_in(st, end)
 
-	// testImageNet_BL_final()
+	// Test Conv Boot & NoBoot FINAL!
+	batchs := [5]int{4, 16, 64, 256, 1024}
+	widths := [5]int{128, 64, 32, 16, 8}
 
-	// testConv_BNRelu_BL_same()
-	// testConv_BNRelu_BL("Conv", false)
-	testConv_noBoot_BL("Conv", true)
-	// testResNet_BL()
-	// testImageNet_BL_final()
-	// testReduceMean_BL()
+	test_name := os.Args[1]
+	ker_wid, _ := strconv.Atoi(os.Args[2])
+	i_batch, _ := strconv.Atoi(os.Args[3])
+	num_tests, _ := strconv.Atoi(os.Args[4])
 
-	// basic()
-
-	// testBRrot()
-
-	// // Test Conv Boot & NoBoot FINAL!
-	// kers := [3]int{3, 5, 7}
-	// batchs := [5]int{4, 16, 64, 256, 1024}
-	// widths := [5]int{128, 64, 32, 16, 8}
-
-	// ker, _ := strconv.Atoi(os.Args[1])
-	// i, _ := strconv.Atoi(os.Args[2])
-	// BL, _ := strconv.ParseBool(os.Args[3])
-	// boot, _ := strconv.ParseBool(os.Args[4])
-
-	// fmt.Println("Ker: ", ker, "batches: ", batchs[i], "widths: ", widths[i])
-	// if BL {
-	// 	fmt.Println("BL start.")
-	// 	testConv_noBoot_BL_in_fast(batchs[i], widths[i], ker, boot)
-	// } else {
-	// 	fmt.Println("Ours start.")
-	// 	testConv_noBoot_in(batchs[i], widths[i], ker, boot)
-	// }
-
-	// for _, k := range kers {
-	// 	for i := 4; i < 5; i++ {
-	// 		testConv_noBoot_BL_in(batchs[i], widths[i], k)
-	// 	}
-	// }
-
-	// fmt.Println("BL end!")
-
-	// for _, k := range kers {
-	// 	for i := 4; i < 5; i++ {
-	// 		testConv_noBoot_in(batchs[i], widths[i], k)
-	// 	}
-	// }
-
-	testConv_noBoot("Conv", true)
-	// testConv_BNRelu("Conv", false)
-	// testConv_BNRelu("StrConv_odd", true)
-	// testConv_BNRelu("StrConv_inside", true)
-
-	// testResNet_crop_fast_wide()
-	// testResNet_crop_fast()
-
-	// testConv_BNRelu("StrConv_inside", true)
-	// testResNet_crop_fast()
-
-	// testConv_BNRelu("Conv", false)
-
-	// testReduceMean()
-	// testResNet_crop()
-
-	// // latest version for resnet crop cifar10
-	st, _ := strconv.Atoi(os.Args[1])
-	end, _ := strconv.Atoi(os.Args[2])
-	ker_wid, _ := strconv.Atoi(os.Args[3])
-	depth, _ := strconv.Atoi(os.Args[4])
-	wide_case, _ := strconv.Atoi(os.Args[5])
-	// ker_wid := 3
-	// depth := 20
-	// wide_case := 3
-	debug := false
-	cf100 := false
-	if wide_case == 1 {
-		testResNet_crop_fast_in(st, end, ker_wid, depth, debug, cf100)
-	} else {
-		testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case, debug, cf100)
+	if !((ker_wid == 3) || (ker_wid == 5) || (ker_wid == 7)) {
+		panic("Wrong kernel wid (not in 3,5,7)")
+	}
+	var boot, resnet bool
+	switch test_name {
+	case "conv":
+		boot = false
+		resnet = false
+		if (num_tests > 10) || (i_batch > 3) {
+			panic("Too many tests (>10) or too many batch index (>3)")
+		}
+	case "convReLU":
+		boot = true
+		resnet = false
+		if (num_tests > 10) || (i_batch > 3) {
+			panic("Too many tests (>10) or too many batch index (>3)")
+		}
+	case "resnet":
+		resnet = true
+	default:
+		panic("wrong test type")
 	}
 
-	// testResNet_crop_fast_in(st, end, ker_wid, dep_case)
-	// testResNet_crop_in(st, end, ker_wid, true)
+	if resnet {
+		// // latest version for resnet crop cifar10
+		ker_wid, _ := strconv.Atoi(os.Args[2])
+		depth, _ := strconv.Atoi(os.Args[3])
+		wide_case, _ := strconv.Atoi(os.Args[4])
+		test_idx, _ := strconv.Atoi(os.Args[5])
+		cf100, _ := strconv.ParseBool(os.Args[6])
 
-	// testResNet()
-	// testDCGAN()
+		debug := false // if turned on, it shows all intermediate input
+		if wide_case == 1 {
+			testResNet_crop_fast_in(test_idx-1, test_idx, ker_wid, depth, debug, cf100)
+		} else {
+			testResNet_crop_fast_wide_in(test_idx-1, test_idx, ker_wid, depth, wide_case, debug, cf100)
+		}
 
-	// input := testBRrot(logN, in_wid)
-	// testPoly()
-	// testBoot()
-	// testBootFast_Conv(input, logN, in_wid, ker_wid, print)
+	} else {
+		if boot {
+			fmt.Println("Convolution followed by ReLU (& Bootstrapping) test start!")
+		} else {
+			fmt.Println("Convolution test start! (No Bootstrapping)")
+		}
+		fmt.Println("Ker: ", ker_wid, "batches: ", batchs[i_batch], "widths: ", widths[i_batch])
+
+		fmt.Println("Base Line start.")
+		testConv_BL_in(batchs[i_batch], widths[i_batch], ker_wid, num_tests, boot)
+
+		fmt.Println("Ours start.")
+		testConv_in(batchs[i_batch], widths[i_batch], ker_wid, num_tests, boot)
+	}
 }
 
 func printDebugCfs(params ckks.Parameters, ciphertext *ckks.Ciphertext, valuesWant []float64, decryptor ckks.Decryptor, encoder ckks.Encoder) (valuesTest []float64) {
