@@ -80,12 +80,21 @@ func testResNet_crop_fast_in(st, end, ker_wid, depth int, debug, cf100 bool) {
 	out_dir := "Resnet_enc_results/results_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid1/"
 	fc_out := 10    // 100 for cifar100
 	init_pow := 6.0 // covers [-2^pow, 2^pow] values at ReLU evaluation
-	mid_pow := 5.0
+	mid_pow := 6.0
 	final_pow := 6.0
 	if cf100 {
 		weight_dir = "Resnet_weights/weights_cf100_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid1/"
 		out_dir = "Resnet_enc_results/results_cf100_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid1/"
 		fc_out = 100 // 100 for cifar100
+		if ker_wid == 3 {
+			final_pow = 7.0
+		} else if ker_wid == 5 {
+			final_pow = 6.0
+		} else {
+			final_pow = 5.0
+		}
+		init_pow = 5.0
+		mid_pow = 5.0
 	}
 
 	var num_blcs [3]int
@@ -125,6 +134,9 @@ func testResNet_crop_fast_in(st, end, ker_wid, depth int, debug, cf100 bool) {
 	for iter := st; iter < end; iter++ {
 		fmt.Println("Running ", iter, "-th iter... ker size: ", ker_wid)
 		image := readTxt("Resnet_plain_data/crop_ker"+strconv.Itoa(ker_wid)+"_d"+strconv.Itoa(depth)+"_wid1/test_image_"+strconv.Itoa(iter)+".csv", in_wids[0]*in_wids[0]*3)
+		if cf100 {
+			image = readTxt("Resnet_plain_data/cf100_crop_ker"+strconv.Itoa(ker_wid)+"_d"+strconv.Itoa(depth)+"_wid1/test_image_"+strconv.Itoa(iter)+".csv", in_wids[0]*in_wids[0]*3)
+		}
 		input := make([]float64, cont.N)
 		k := 0
 		for i := 0; i < in_wids[0]; i++ {
@@ -335,10 +347,26 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug,
 	out_dir := "Resnet_enc_results/results_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid" + strconv.Itoa(wide_case) + "/"
 	fc_out := 10 // 100 for cifar100
 
+	init_pow := 5.0
+	mid_pow := 5.0 // needs to be 5.0 in k3 d20 w3 for best performance
+	final_pow := 5.0
+	if ker_wid == 5 {
+		init_pow = 6.0
+		mid_pow = 6.0
+		final_pow = 6.0
+	}
+
 	if cf100 {
 		weight_dir = "Resnet_weights/weights_cf100_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid" + strconv.Itoa(wide_case) + "/"
 		out_dir = "Resnet_enc_results/results_cf100_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid" + strconv.Itoa(wide_case) + "/"
 		fc_out = 100 // 100 for cifar100
+		final_pow = 7.0
+		init_pow = 5.0
+		mid_pow = 5.0
+		if (ker_wid == 5) && (depth == 8) {
+			init_pow = 6.0
+			final_pow = 6.0
+		}
 	}
 
 	init_batch := 16 // needs to be modified to 16
@@ -374,9 +402,6 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug,
 
 	logN := 16
 	alpha := 0.0
-	init_pow := 5.0
-	mid_pow := 5.0 // highly adjusted to k3 d20 w3
-	// final_pow := 6.0
 	in_wids := []int{32, 16, 8}                                         // before cropping
 	raw_in_wids := []int{32 - ker_wid/2, 16 - ker_wid/2, 8 - ker_wid/2} // same as python
 	fast_pack := true
@@ -391,6 +416,9 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug,
 	for iter := st; iter < end; iter++ {
 		fmt.Println("Running ", iter, "-th iter... ker size: ", ker_wid)
 		image := readTxt("Resnet_plain_data/crop_ker"+strconv.Itoa(ker_wid)+"_d"+strconv.Itoa(depth)+"_wid"+strconv.Itoa(wide_case)+"/test_image_"+strconv.Itoa(iter)+".csv", in_wids[0]*in_wids[0]*3)
+		if cf100 {
+			image = readTxt("Resnet_plain_data/cf100_crop_ker"+strconv.Itoa(ker_wid)+"_d"+strconv.Itoa(depth)+"_wid"+strconv.Itoa(wide_case)+"/test_image_"+strconv.Itoa(iter)+".csv", in_wids[0]*in_wids[0]*3)
+		}
 		input := make([]float64, cont.N)
 		k := 0
 		for i := 0; i < in_wids[0]; i++ {
@@ -555,6 +583,9 @@ func testResNet_crop_fast_wide_in(st, end, ker_wid, depth, wide_case int, debug,
 			bn_b3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+i+1)+"-b.csv", real_batch[2])
 			ker_in3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+i+1)+"-conv.csv", real_batch[2]*real_batch[2]*ker_size)
 
+			if i == num_blcs[2] {
+				pow = final_pow
+			}
 			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, pow, in_wids[1], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[2], 0, step[2], 2, "Conv_inside", fast_pack, debug)
 			fmt.Println("Block3, Layer ", i, "done!")
 		}

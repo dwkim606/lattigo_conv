@@ -15,6 +15,8 @@ go get -u github.com/dwkim606/test_lattigo
 ```  
 **CAUTION**: For Lattigo, we must install the <em>forked version</em> with above command, instead of the latest [one](https://github.com/tuneinsight/lattigo)  
 
+3. Python3 with numpy package (required only for checking the precision of CNN classifier)   
+
 ## Running the Test  
 The following tests are available:   
 **In Code Ocean, please enter the command in <em>run</em> file**  
@@ -44,24 +46,37 @@ go run *.go convReLU 5 0 3
 	- (3,5,7): width of kernel
 	- (8,14,20): number of layers of CNN
 	- (1,2,3): wideness factor
-	- (1 to 100): index of test input
+	- (1 to 100 or 1 to 1000): number of tests
 	- (true, false): true -> CIFAR100, false -> CIFAR10  
-- Example command: run CNN with kernel width 3, number of layers 14, widness factor 2, on 10-th test input on CIFAR10 dataset 
+- **List of available arguments**: (given in the paper; other arguments require appropriate weights for CNN)
+	- resnet 3 20 1 (1 to 1000) (true/false)
+	- resnet 5 20 1 (1 to 100) (true/false)
+	- resnet 7 20 1 (1 to 100) (true/false)
+	- resnet 5 8 3 (1 to 1000) (true/false)
+	- resnet 3 14 3 (1 to 1000) (true/false)
+	- resnet 3 20 3 (1 to 1000) (true/false)
+- Example command: run CNN with kernel width 3, number of layers 20, widness factor 1, on 10 test inputs on CIFAR10 dataset 
 ```console
-go run *.go resnet 3 14 2 10 false
+go run *.go resnet 3 20 1 10 false
 ```  
 **CAUTION**: The CNN evaluation test requires at most roughly 100GB of memory.  
+- To check the precision of encrypted inference, run compare_final.py with python3, argument (width of kernel, depth, widness, CIFAR100 or not)  
+- Example command: check the precision of kernel 3, depth 20, widness 1 CNN inference on CIFAR10 dataset  
+```console
+python3 compare_final.py 3 20 1 false
+``` 
+**CAUTION**: Precision check requires the encrypted inference to be performed beforehand.   
 
 ## MISC.
 One can also generate an executble for a remote server with Linux and AMD cpu via the following command.  
 (Modify the command appropriately for other OS and cpu)   
 ```console
-env GOOS=linux GOARCH=amd64 go build
+env GOOS=linux GOARCH=amd64 go build -o test_run
 ```  
-It will generate an executable titled "main", which can run on the server with appropriate arguments.  
+It will generate an executable titled "test_run", which can run on the server with appropriate arguments.  
 (e.g., for convolution)    
 ```console
-./main conv 3 1 5
+./test_run conv 3 1 5
 ```  
 With this command, one can run the test on any server without Go (given that executable is generated from other device with Go for compile).  
 The executable must be in the same directory as data folders (test_conv_data \& test_resnet_data).

@@ -104,7 +104,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 			if cont.kp_wids[i]%2 == 0 {
 				raw_in_wid_odd = false
 			}
-			println("i, odd? ", i, raw_in_wid_odd)
+			// println("i, odd? ", i, raw_in_wid_odd)
 			cont.ext_idx[step] = make([][]int, iter)
 			for ul := 0; ul < iter; ul++ {
 				cont.ext_idx[step][ul] = gen_keep_vec_stride(cont.N/2, cont.in_wids[0], cont.kp_wids[i], step, ul, raw_in_wid_odd)
@@ -374,14 +374,14 @@ func main() {
 		ker_wid, _ := strconv.Atoi(os.Args[2])
 		depth, _ := strconv.Atoi(os.Args[3])
 		wide_case, _ := strconv.Atoi(os.Args[4])
-		test_idx, _ := strconv.Atoi(os.Args[5])
+		test_num, _ := strconv.Atoi(os.Args[5])
 		cf100, _ := strconv.ParseBool(os.Args[6])
 
 		debug := false // if turned on, it shows all intermediate input
 		if wide_case == 1 {
-			testResNet_crop_fast_in(test_idx-1, test_idx, ker_wid, depth, debug, cf100)
+			testResNet_crop_fast_in(0, test_num, ker_wid, depth, debug, cf100)
 		} else {
-			testResNet_crop_fast_wide_in(test_idx-1, test_idx, ker_wid, depth, wide_case, debug, cf100)
+			testResNet_crop_fast_wide_in(0, test_num, ker_wid, depth, wide_case, debug, cf100)
 		}
 
 	} else {
