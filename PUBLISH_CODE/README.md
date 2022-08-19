@@ -1,7 +1,6 @@
 # Source code for **Optimized Privacy-Preserving CNN Inference with Fully Homomorphic Encryption**
 
 ## Requirements
-**0. The following will be done authomatically in Code Ocean**  
 1. Go 1.16.6 or higher (<https://go.dev/>)  
 - Install command with apt-get:  
 ```console
@@ -13,13 +12,19 @@ apt-get install golang-go
 go get -u golang.org/x/crypto/...
 go get -u github.com/dwkim606/test_lattigo
 ```  
-**CAUTION**: For Lattigo, we must install the <em>forked version</em> with above command, instead of the latest [one](https://github.com/tuneinsight/lattigo)  
+**CAUTION**: For Lattigo, we must install the <em>forked version</em> with above command (instead of the latest [one](https://github.com/tuneinsight/lattigo))  
 
 3. Python3 with numpy package (required only for checking the precision of CNN classifier)   
 
 ## Running the Test  
+
+0. Dataset Preparation: **Necessary** to run the tests  
+
+- Download the data file from the link: https://drive.google.com/drive/folders/1zLTzJ58E_CDtqvnPv8t9YtgkDaHouWWn?usp=sharing  
+- Move all folders (Resnet_enc_results, Resnet_plain_data, Resnet_weights, test_conv_data) to the same directory as the source code.  
+
+
 The following tests are available:   
-**In Code Ocean, please enter the command in <em>run</em> file**  
 
 1. Convolutions: run Baseline and Ours for various number of batches  
 - Arguments (in the order of input):
@@ -79,4 +84,4 @@ It will generate an executable titled "test_run", which can run on the server wi
 ./test_run conv 3 1 5
 ```  
 With this command, one can run the test on any server without Go (given that executable is generated from other device with Go for compile).  
-The executable must be in the same directory as data folders (test_conv_data \& test_resnet_data).
+The executable must be in the same directory as data folders (Resnet_enc_results, Resnet_plain_data, Resnet_weights, test_conv_data).
