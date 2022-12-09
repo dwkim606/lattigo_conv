@@ -267,8 +267,9 @@ func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []
 // stride = true: apply [1,2,2,1] stride; false: [1,1,1,1]
 // pack_pos: position to pack (0,1,2,3): only for strided case
 // real_ib, real_ob: real number of batches (less or equal than max_batch)
-// step: step of the output
-func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha, pow float64, in_wid, kp_wid, ker_wid, real_ib, real_ob, norm, pack_pos, step, iter int, kind string, fast_pack, debug bool) (ct_res *ckks.Ciphertext) {
+// step: step of the output (used for conv_inside only)
+// log_sparse: 0 if no full slot, 1 if half slot, etc
+func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha, pow float64, in_wid, kp_wid, ker_wid, real_ib, real_ob, norm, pack_pos, step, iter, log_sparse int, kind string, fast_pack, debug bool) (ct_res *ckks.Ciphertext) {
 	// iter := 2 // for full packing (contrary to half packing)
 	var trans, stride, odd, inside bool
 	odd = false
@@ -346,7 +347,19 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	fmt.Println("Bootstrapping... Ours (until CtoS):")
 	start := time.Now()
 	ct_boots := make([]*ckks.Ciphertext, 2)
-	ct_boots[0], ct_boots[1], _ = cont.btp.BootstrappConv_CtoS(ct_conv)
+	switch log_sparse {
+	case 0:
+		ct_boots[0], ct_boots[1], _ = cont.btp.BootstrappConv_CtoS(ct_conv)
+	case 1:
+		ct_boots[0], ct_boots[1], _ = cont.btp2.BootstrappConv_CtoS(ct_conv)
+	case 2:
+		ct_boots[0], ct_boots[1], _ = cont.btp3.BootstrappConv_CtoS(ct_conv)
+	case 3:
+		ct_boots[0], ct_boots[1], _ = cont.btp4.BootstrappConv_CtoS(ct_conv)
+	default:
+		panic("No cases for log_sparse")
+	}
+
 	fmt.Printf("Done in %s \n", time.Since(start))
 	// fmt.Println("after Boot (CtoS): LV = ", ct_boots[0].Level(), " Scale = ", math.Log2(ct_boots[0].Scale))
 
@@ -402,8 +415,22 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	if iter == 1 {
 		ct_boots[1] = nil
 		ct_res = cont.btp.BootstrappConv_StoC(ct_keep[0], ct_boots[1])
+		if log_sparse != 0 {
+			panic("we didn't implement this case")
+		}
 	} else {
-		ct_res = cont.btp.BootstrappConv_StoC(ct_keep[0], ct_keep[1])
+		switch log_sparse {
+		case 0:
+			ct_res = cont.btp.BootstrappConv_StoC(ct_keep[0], ct_keep[1])
+		case 1:
+			ct_res = cont.btp2.BootstrappConv_StoC(ct_keep[0], ct_keep[1])
+		case 2:
+			ct_res = cont.btp3.BootstrappConv_StoC(ct_keep[0], ct_keep[1])
+		case 3:
+			ct_res = cont.btp4.BootstrappConv_StoC(ct_keep[0], ct_keep[1])
+		default:
+			panic("No cases for log_sparse")
+		}
 	}
 
 	cont.evaluator.Rescale(ct_res, cont.params.Scale(), ct_res)
@@ -412,7 +439,18 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	// Only for checking the correctness (for StoC)
 	if debug {
 		fmt.Println("Boot out: ")
-		printDebugCfs(cont.params, ct_res, cfs_postB, cont.decryptor, cont.encoder)
+		switch log_sparse {
+		case 0:
+			printDebugCfs(cont.params, ct_res, cfs_postB, cont.decryptor, cont.encoder)
+		case 1:
+			printDebugCfs(cont.params2, ct_res, cfs_postB, cont.decryptor, cont.encoder)
+		case 2:
+			printDebugCfs(cont.params3, ct_res, cfs_postB, cont.decryptor, cont.encoder)
+		case 3:
+			printDebugCfs(cont.params4, ct_res, cfs_postB, cont.decryptor, cont.encoder)
+		default:
+			panic("Nocases for log_sparse")
+		}
 		max_batch := cont.N / (in_wid * in_wid)
 		res_tmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_res))
 		if inside {

@@ -15,7 +15,7 @@ func main() {
 
 	var err error
 
-	var btp *ckks.Bootstrapper
+	var btp, btp2 *ckks.Bootstrapper
 	var kgen rlwe.KeyGenerator
 	var encoder ckks.Encoder
 	var sk *rlwe.SecretKey
@@ -35,6 +35,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	btpParams2 := ckks.DefaultBootstrapParams[8] // less slots
+	params2, err := btpParams2.Params()
+	if err != nil {
+		panic(err)
+	}
 
 	fmt.Println()
 	fmt.Printf("CKKS parameters: logN = %d, logSlots = %d, h = %d, logQP = %d, levels = %d, scale= 2^%f, sigma = %f \n", params.LogN(), params.LogSlots(), btpParams.H, params.LogQP(), params.QCount(), math.Log2(params.Scale()), params.Sigma())
@@ -50,11 +55,14 @@ func main() {
 
 	fmt.Println()
 	fmt.Println("Generating bootstrapping keys...")
-	rotations := btpParams.RotationsForBootstrapping(params.LogSlots())
+	rotations := append(btpParams.RotationsForBootstrapping(params.LogSlots()), btpParams.RotationsForBootstrapping(params2.LogSlots())...)
 	rotkeys := kgen.GenRotationKeysForRotations(rotations, true, sk)
 	rlk := kgen.GenRelinearizationKey(sk, 2)
 	btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
 	if btp, err = ckks.NewBootstrapper(params, btpParams, btpKey); err != nil {
+		panic(err)
+	}
+	if btp2, err = ckks.NewBootstrapper(params2, btpParams2, btpKey); err != nil {
 		panic(err)
 	}
 	fmt.Println("Done")
@@ -62,7 +70,13 @@ func main() {
 	// Generate a random plaintext
 	valuesWant := make([]complex128, params.Slots())
 	for i := range valuesWant {
-		valuesWant[i] = complex(utils.RandFloat64(-1, 1), 0)
+		if i < len(valuesWant)/4 {
+			valuesWant[i] = complex(utils.RandFloat64(-1, 1), 0)
+			valuesWant[i+len(valuesWant)/4] = valuesWant[i]
+			valuesWant[i+2*len(valuesWant)/4] = valuesWant[i]
+			valuesWant[i+3*len(valuesWant)/4] = valuesWant[i]
+		}
+
 		// valuesWant[i] = utils.RandComplex128(-1, 1)
 	}
 
@@ -85,7 +99,7 @@ func main() {
 	fmt.Println("Bootstrapping...")
 
 	start := time.Now()
-	ciphertext2 := btp.Bootstrapp(ciphertext1)
+	ciphertext2 := btp2.Bootstrapp(ciphertext1)
 	fmt.Printf("Done in %s \n", time.Since(start))
 
 	// Decrypt, print and compare with the plaintext values

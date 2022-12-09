@@ -385,9 +385,9 @@ def plain_resnet_bench():
 
 def plain_resnet_crop_bench():
     init_batch = 4
-    batch = 12   
+    batch = 4   
     ker_width = 3
-    input_width = 16 - ker_width//2
+    input_width = 32 - ker_width//2
     vec_size = 3*input_width**2
 
     pad_list = {3: [1,1,1], 5: [2,1,1], 7: [3,2,2]}
@@ -451,6 +451,8 @@ def plain_resnet_crop_bench():
         print(conv)
         print(i+1,"layer done\n")
     print("after 1st block\n", conv, "\n")
+
+    exit(1)
 
     conv = tf.nn.conv2d(conv, ten_k12, strides = [1,2,2,1], padding = "SAME")*bn_a[1]
     conv = Cropping2D(cropping=((0,pad_size[1]), (0,pad_size[1])))(conv)
@@ -1313,8 +1315,8 @@ def get_seconds(time_str):
 # gen_plain_predictions()
 # exit(1)
 
-post_process_Imgnet(300, 'ker3', False)
-exit(1)
+# post_process_Imgnet(300, 'ker3', False)
+# exit(1)
 # conv_bnReLU_BL_bench(False, True, False)
 
 ## Output test data for Conv
@@ -1345,8 +1347,8 @@ exit(1)
 # exit(1)
 # plain_resnet_bench()
 
-# plain_resnet_crop_bench()
-# exit(1)
+plain_resnet_crop_bench()
+exit(1)
 # gen_plain_predictions()
 
 # post_process_Imgnet(100, 'ker3', False)

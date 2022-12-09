@@ -26,19 +26,19 @@ type context struct {
 	in_wids []int // input widths including padding
 	kp_wids []int // keep widths among input widths
 	// pads           map[int]int
-	ext_idx        map[int][][]int         // ext_idx for keep_vec (saved for each possible input width) map: in_wid, [up/low]
-	r_idx          map[int][]map[int][]int // r_idx for compr_vec (or ext_vec) map: in_wid [pos] map: rot
-	r_idx_l        map[int][]map[int][]int // low, r_idx for compr_vec (or ext_vec) map: in_wid [pos] map: rot
-	m_idx          map[int][]map[int][]int // m_idx , map: in_wid [pos] map: rot
-	m_idx_l        map[int][]map[int][]int // low, m_idx , map: in_wid [pos] map: rot
-	pl_idx         []*ckks.Plaintext
-	params         ckks.Parameters
-	encoder        ckks.Encoder
-	encryptor      ckks.Encryptor
-	decryptor      ckks.Decryptor
-	evaluator      ckks.Evaluator
-	pack_evaluator ckks.Evaluator
-	btp            *ckks.Bootstrapper
+	ext_idx                           map[int][][]int         // ext_idx for keep_vec (saved for each possible input width) map: in_wid, [up/low]
+	r_idx                             map[int][]map[int][]int // r_idx for compr_vec (or ext_vec) map: in_wid [pos] map: rot
+	r_idx_l                           map[int][]map[int][]int // low, r_idx for compr_vec (or ext_vec) map: in_wid [pos] map: rot
+	m_idx                             map[int][]map[int][]int // m_idx , map: in_wid [pos] map: rot
+	m_idx_l                           map[int][]map[int][]int // low, m_idx , map: in_wid [pos] map: rot
+	pl_idx                            []*ckks.Plaintext
+	params, params2, params3, params4 ckks.Parameters
+	encoder                           ckks.Encoder
+	encryptor                         ckks.Encryptor
+	decryptor                         ckks.Decryptor
+	evaluator                         ckks.Evaluator
+	pack_evaluator                    ckks.Evaluator
+	btp, btp2, btp3, btp4             *ckks.Bootstrapper // many btps for sparse boots
 }
 
 func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind string) *context {
@@ -56,6 +56,26 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	cont.params, err = btpParams.Params()
 	if err != nil {
 		panic(err)
+	}
+	if kind == "Resnet_crop_sparse" { // generate 2 more params for sparse boot (logSlots, -1, -2)
+		btpParams.LogN = 14
+		btpParams.LogSlots = btpParams.LogN - 1
+		if cont.params, err = btpParams.Params(); err != nil {
+			panic(err)
+		}
+		btpParams.LogSlots = btpParams.LogN - 2
+		if cont.params2, err = btpParams.Params(); err != nil {
+			panic(err)
+		}
+		btpParams.LogSlots = btpParams.LogN - 3
+		if cont.params3, err = btpParams.Params(); err != nil {
+			panic(err)
+		}
+		btpParams.LogSlots = btpParams.LogN - 4
+		if cont.params4, err = btpParams.Params(); err != nil {
+			panic(err)
+		}
+		btpParams.LogSlots = btpParams.LogN - 1
 	}
 
 	fmt.Printf("CKKS parameters: logN = %d, logSlots = %d, h = %d, logQP = %d, levels = %d, scale= 2^%f, sigma = %f \n",
@@ -100,6 +120,21 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 		iter = 2 // since we use full padding,
 		for i := range cont.in_wids {
 			step := 1 << i
+			raw_in_wid_odd := true
+			if cont.kp_wids[i]%2 == 0 {
+				raw_in_wid_odd = false
+			}
+			// println("i, odd? ", i, raw_in_wid_odd)
+			cont.ext_idx[step] = make([][]int, iter)
+			for ul := 0; ul < iter; ul++ {
+				cont.ext_idx[step][ul] = gen_keep_vec_stride(cont.N/2, cont.in_wids[0], cont.kp_wids[i], step, ul, raw_in_wid_odd)
+			}
+		}
+	case "Resnet_crop_sparse": // Generate ext_idx for extracting valid values from conv with "same" padding
+		// !! ALSO NEEDS to extract values after strided conv!
+		iter = 2 // since we use full padding,
+		for i := range cont.in_wids {
+			step := 1
 			raw_in_wid_odd := true
 			if cont.kp_wids[i]%2 == 0 {
 				raw_in_wid_odd = false
@@ -313,11 +348,33 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	if boot {
 		fmt.Println("Generating bootstrapping keys...")
 		rotations = btpParams.RotationsForBootstrapping(cont.params.LogSlots())
+		if kind == "Resnet_crop_sparse" {
+			rotations = append(rotations, btpParams.RotationsForBootstrapping(cont.params2.LogSlots())...)
+			rotations = append(rotations, btpParams.RotationsForBootstrapping(cont.params3.LogSlots())...)
+			rotations = append(rotations, btpParams.RotationsForBootstrapping(cont.params4.LogSlots())...)
+		}
 		rotkeys = kgen.GenRotationKeysForRotations(rotations, true, sk)
 		btpKey := ckks.BootstrappingKey{Rlk: rlk, Rtks: rotkeys}
 
 		if kind == "BL_Conv" {
 			if cont.btp, err = ckks.NewBootstrapper(cont.params, btpParams, btpKey); err != nil {
+				panic(err)
+			}
+		} else if kind == "Resnet_crop_sparse" {
+			btpParams.LogSlots = btpParams.LogN - 1
+			if cont.btp, err = ckks.NewBootstrapper_mod(cont.params, btpParams, btpKey); err != nil {
+				panic(err)
+			}
+			btpParams.LogSlots = btpParams.LogN - 2
+			if cont.btp2, err = ckks.NewBootstrapper_mod(cont.params2, btpParams, btpKey); err != nil {
+				panic(err)
+			}
+			btpParams.LogSlots = btpParams.LogN - 3
+			if cont.btp3, err = ckks.NewBootstrapper_mod(cont.params3, btpParams, btpKey); err != nil {
+				panic(err)
+			}
+			btpParams.LogSlots = btpParams.LogN - 4
+			if cont.btp4, err = ckks.NewBootstrapper_mod(cont.params4, btpParams, btpKey); err != nil {
 				panic(err)
 			}
 		} else {
@@ -332,6 +389,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 }
 
 func main() {
+
 	// st, _ := strconv.Atoi(os.Args[1])
 	// end, _ := strconv.Atoi(os.Args[2])
 	// ker, _ := strconv.Atoi(os.Args[3])
@@ -379,6 +437,11 @@ func main() {
 
 		debug := false // if turned on, it shows all intermediate input
 		if wide_case == 1 {
+			// test with small inputs
+			testResNet_crop_sparse(0, test_num, ker_wid, depth, true, cf100)
+			os.Exit(1)
+			// end test with small inputs
+
 			testResNet_crop_fast_in(0, test_num, ker_wid, depth, debug, cf100)
 		} else {
 			testResNet_crop_fast_wide_in(0, test_num, ker_wid, depth, wide_case, debug, cf100)
