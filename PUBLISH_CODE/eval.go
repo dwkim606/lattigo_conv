@@ -371,8 +371,10 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 
 	start = time.Now()
 	for ul := 0; ul < iter; ul++ { // up & low parts
-		ct_boots[ul] = evalReLU(cont.params, cont.evaluator, ct_boots[ul], alpha)
-		cont.evaluator.MulByPow2(ct_boots[ul], int(pow), ct_boots[ul])
+		if ct_boots[ul] != nil {
+			ct_boots[ul] = evalReLU(cont.params, cont.evaluator, ct_boots[ul], alpha)
+			cont.evaluator.MulByPow2(ct_boots[ul], int(pow), ct_boots[ul])
+		}
 	}
 	fmt.Printf("ReLU Done in %s \n", time.Since(start))
 	start = time.Now()
@@ -406,7 +408,9 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 				}
 			}
 		} else if inside {
-			ct_keep[ul] = keep_ctxt(cont.params, cont.evaluator, cont.encoder, ct_boots[ul], cont.ext_idx[step][ul])
+			if ct_boots[ul] != nil {
+				ct_keep[ul] = keep_ctxt(cont.params, cont.evaluator, cont.encoder, ct_boots[ul], cont.ext_idx[step][ul])
+			}
 		} else {
 			ct_keep[ul] = keep_ctxt(cont.params, cont.evaluator, cont.encoder, ct_boots[ul], cont.ext_idx[in_wid][ul])
 		}
@@ -449,7 +453,7 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 		case 3:
 			printDebugCfs(cont.params4, ct_res, cfs_postB, cont.decryptor, cont.encoder)
 		default:
-			panic("Nocases for log_sparse")
+			panic("No cases for log_sparse")
 		}
 		max_batch := cont.N / (in_wid * in_wid)
 		res_tmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_res))
