@@ -391,7 +391,7 @@ def plain_resnet_crop_bench():
     vec_size = 3*input_width**2
 
     pad_list = {3: [1,1,1], 5: [2,1,1], 7: [3,2,2]}
-    bn_a = [0.1, 0.1, 0.1]
+    bn_a = [0.2, 0.1, 0.1]
     pad_size = pad_list[ker_width]
 
     num_bl1 = 2
@@ -409,9 +409,9 @@ def plain_resnet_crop_bench():
 
     ## Correctness Check: Compare with TF NN CONV2D
     raw_input = [1.0-(1.0 * i)/vec_size for i in range(vec_size)]
-    ker0 = [(0.25 * i)/(3 * init_batch * ker_size) for i in range(3 * init_batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
-    ker01 = [(0.25 * i)/(init_batch * batch * ker_size) for i in range(init_batch * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
-    ker =  [(0.25 * i)/(batch * batch * ker_size) for i in range(batch * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker0 = [(0.3 * i)/(3 * init_batch * ker_size) for i in range(3 * init_batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker01 = [(0.3 * i)/(init_batch * batch * ker_size) for i in range(init_batch * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker =  [(0.3 * i)/(batch * batch * ker_size) for i in range(batch * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
     ker12 = [(0.25*i)/(batch*batch2*ker_size)for i in range(batch * batch2 * ker_size)]  #[(1000.0 * 1)/(batch * batch2 * ker_size) for i in range(batch * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
     ker2 = [(0.25 * i)/(batch2 * batch2 * ker_size) for i in range(batch2 * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
     ker23 = [(0.25 * i)/(batch2 * batch3 * ker_size) for i in range(batch2 * batch3 * ker_size)]  # (0.5 * i)/(batch2 * batch3 * ker_size) #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]

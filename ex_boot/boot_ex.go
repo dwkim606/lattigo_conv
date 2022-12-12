@@ -35,7 +35,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	btpParams2 := ckks.DefaultBootstrapParams[8] // less slots
+	btpParams2 := ckks.DefaultBootstrapParams[2] // less slots
+	btpParams2.LogSlots = 13
 	params2, err := btpParams2.Params()
 	if err != nil {
 		panic(err)
@@ -106,6 +107,7 @@ func main() {
 	fmt.Println()
 	fmt.Println("Precision of ciphertext vs. Bootstrapp(ciphertext)")
 	printDebug(params, ciphertext2, valuesTest1, decryptor, encoder)
+	_ = btp
 }
 
 func printDebug(params ckks.Parameters, ciphertext *ckks.Ciphertext, valuesWant []complex128, decryptor ckks.Decryptor, encoder ckks.Encoder) (valuesTest []complex128) {

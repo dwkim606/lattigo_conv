@@ -364,9 +364,9 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	// fmt.Println("after Boot (CtoS): LV = ", ct_boots[0].Level(), " Scale = ", math.Log2(ct_boots[0].Scale))
 
 	if debug {
-		slot1, slot2 = debugCtoS(cont, cfs_preB)
-		slot1 = printDebug(cont.params, ct_boots[0], slot1, cont.decryptor, cont.encoder) // Compare before & after CtoS
-		slot2 = printDebug(cont.params, ct_boots[1], slot2, cont.decryptor, cont.encoder) // Compare before & after CtoS
+		slot1, slot2 = debugCtoS(cont, cfs_preB, log_sparse)
+		slot1 = printDebug(log_sparse, cont.params, ct_boots[0], slot1, cont.decryptor, cont.encoder) // Compare before & after CtoS
+		slot2 = printDebug(log_sparse, cont.params, ct_boots[1], slot2, cont.decryptor, cont.encoder) // Compare before & after CtoS
 	}
 
 	start = time.Now()
@@ -384,8 +384,8 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	if debug {
 		fmt.Println("after Relu: ", math.Log2(ct_boots[0].Scale), "lv: ", ct_boots[0].Level())
 		relu1, relu2 := debugReLU(cont, slot1, slot2, alpha, pow)
-		relu1 = printDebug(cont.params, ct_boots[0], relu1, cont.decryptor, cont.encoder)
-		relu2 = printDebug(cont.params, ct_boots[1], relu2, cont.decryptor, cont.encoder)
+		relu1 = printDebug(log_sparse, cont.params, ct_boots[0], relu1, cont.decryptor, cont.encoder)
+		relu2 = printDebug(log_sparse, cont.params, ct_boots[1], relu2, cont.decryptor, cont.encoder)
 		cfs_postB = debugStoC(cont, relu1, relu2, in_wid, kp_wid, pack_pos, step, kind, fast_pack)
 	}
 
@@ -471,37 +471,58 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	return ct_res
 }
 
-func debugCtoS(cont *context, cfs_preB []float64) (slot1, slot2 []complex128) {
+// log_spars = 0 -> full slot, 1 -> full/2 , ...
+func debugCtoS(cont *context, cfs_preB []float64, log_sparse int) (slot1, slot2 []complex128) {
 	preB_cfs1 := make([]float64, cont.params.Slots())
 	preB_cfs2 := make([]float64, cont.params.Slots())
-	slot1 = make([]complex128, cont.params.Slots()) // first part of ceffs
-	slot2 = make([]complex128, cont.params.Slots()) // second part of ceffs
+	slot1 = make([]complex128, cont.params.Slots()/(1<<log_sparse)) // first part of ceffs
+	slot2 = make([]complex128, cont.params.Slots()/(1<<log_sparse)) // second part of ceffs
 	for i := range preB_cfs1 {
 		preB_cfs1[i] = cfs_preB[reverseBits(uint32(i), cont.params.LogSlots())] // first part of coeffs
 		preB_cfs2[i] = cfs_preB[reverseBits(uint32(i), cont.params.LogSlots())+uint32(cont.params.Slots())]
-		slot1[i] = complex(preB_cfs1[i], 0)
-		slot2[i] = complex(preB_cfs2[i], 0)
+		if i < len(slot1) {
+			slot1[i] = complex(preB_cfs1[i], 0)
+			slot2[i] = complex(preB_cfs2[i], 0)
+		}
 		// slot1[i] = complex(preB_cfs1[i]/math.Pow(2, float64(pow)), 0)
 		// slot2[i] = complex(preB_cfs2[i]/math.Pow(2, float64(pow)), 0)
 	}
+	if log_sparse != 0 { // not full slot, we pack two ciphertexts slots into one ciphertext
+		slot1 = append(slot1, slot2...)
+		slot2 = nil
+	}
+
 	return
 }
 
 func debugReLU(cont *context, slot1, slot2 []complex128, alpha, pow float64) (relu1, relu2 []complex128) {
 	relu1 = make([]complex128, len(slot1))
-	relu2 = make([]complex128, len(slot1))
+	if slot2 != nil {
+		relu2 = make([]complex128, len(slot1))
+	} else {
+		relu2 = nil
+	}
+
 	for i := range relu1 {
 		relu1[i] = complex((math.Max(0, real(slot1[i]))+math.Min(0, real(slot1[i])*alpha))*math.Pow(2, float64(pow)), 0)
+	}
+	for i := range relu2 {
 		relu2[i] = complex((math.Max(0, real(slot2[i]))+math.Min(0, real(slot2[i])*alpha))*math.Pow(2, float64(pow)), 0)
 	}
+
 	return
 }
 
 func debugStoC(cont *context, slot1, slot2 []complex128, in_wid, kp_wid, pos, step int, kind string, fast_pack bool) (cfs_postB []float64) {
-	slot1_fl := make([]float64, len(slot1))
-	slot2_fl := make([]float64, len(slot1))
+	slot1_fl := make([]float64, cont.params.Slots())
+	slot2_fl := make([]float64, cont.params.Slots())
+	if slot2 == nil {
+		slot2_fl = nil
+	}
 	for i := range slot1 {
 		slot1_fl[i] = real(slot1[i])
+	}
+	for i := range slot2 {
 		slot2_fl[i] = real(slot2[i])
 	}
 
@@ -516,8 +537,17 @@ func debugStoC(cont *context, slot1, slot2 []complex128, in_wid, kp_wid, pos, st
 		tmp1 = keep_vec(slot1_fl, in_wid, kp_wid, 0)
 		tmp2 = keep_vec(slot2_fl, in_wid, kp_wid, 1)
 	case "StrConv_inside", "Conv_inside":
-		tmp1 = keep_vec_stride(slot1_fl, in_wid, kp_wid, step, 0, raw_in_wid_odd)
-		tmp2 = keep_vec_stride(slot2_fl, in_wid, kp_wid, step, 1, raw_in_wid_odd)
+		if slot2_fl != nil {
+			tmp1 = keep_vec_stride(slot1_fl, in_wid, kp_wid, step, 0, raw_in_wid_odd)
+			tmp2 = keep_vec_stride(slot2_fl, in_wid, kp_wid, step, 1, raw_in_wid_odd)
+		} else {
+			tmp1 = make([]float64, cont.params.Slots())
+			tmp2 = make([]float64, cont.params.Slots())
+			for i := 0; i < len(slot1)/2; i++ {
+				tmp1[i] = slot1_fl[i]
+				tmp2[i] = slot1_fl[i+len(slot1)/2]
+			}
+		}
 	case "StrConv", "StrConv_fast", "StrConv_odd":
 		if fast_pack {
 			tmp1 = comprs_full_fast(slot1_fl, in_wid, kp_wid, pos, 0)
@@ -530,10 +560,12 @@ func debugStoC(cont *context, slot1, slot2 []complex128, in_wid, kp_wid, pos, st
 		panic("No kind!")
 	}
 
-	cfs_postB1 := make([]float64, len(slot1))
-	cfs_postB2 := make([]float64, len(slot1))
+	cfs_postB1 := make([]float64, cont.params.N()/2)
+	cfs_postB2 := make([]float64, cont.params.N()/2)
 	for i := range cfs_postB1 {
 		cfs_postB1[i] = tmp1[reverseBits(uint32(i), cont.params.LogSlots())]
+	}
+	for i := range cfs_postB2 {
 		cfs_postB2[i] = tmp2[reverseBits(uint32(i), cont.params.LogSlots())]
 	}
 	cfs_postB = append(cfs_postB1, cfs_postB2...) // After rot(ext) and boot

@@ -465,7 +465,16 @@ func main() {
 
 func printDebugCfs(params ckks.Parameters, ciphertext *ckks.Ciphertext, valuesWant []float64, decryptor ckks.Decryptor, encoder ckks.Encoder) (valuesTest []float64) {
 	total_size := make([]int, 15)
-	valuesTest = encoder.DecodeCoeffs(decryptor.DecryptNew(ciphertext))
+
+	valuesTest_pre := encoder.DecodeCoeffs(decryptor.DecryptNew(ciphertext))
+	valuesTest = make([]float64, 2*params.Slots())
+	step := len(valuesTest_pre) / len(valuesTest) // to cover cases with less slots (N/2 => 1, N/4 => 2, ...)
+	for i := range valuesTest {
+		valuesTest[i] = valuesTest_pre[i*step]
+	}
+
+	fmt.Println("len val Want:", len(valuesWant))
+	fmt.Println("len val Test:", len(valuesTest))
 
 	fmt.Println()
 	fmt.Printf("Level: %d (logQ = %d)\n", ciphertext.Level(), params.LogQLvl(ciphertext.Level()))
@@ -477,16 +486,18 @@ func printDebugCfs(params ckks.Parameters, ciphertext *ckks.Ciphertext, valuesWa
 	fmt.Printf("... \n")
 	fmt.Printf("ValuesWant:")
 	for i := range total_size {
-		fmt.Printf("%6.10f, ", valuesWant[i])
+		fmt.Printf("%6.10f, ", valuesWant[i*step])
 	}
 	fmt.Printf("... \n")
 
-	valuesWantC := make([]complex128, len(valuesWant))
 	valuesTestC := make([]complex128, len(valuesTest))
-	for i := range valuesWantC {
-		valuesWantC[i] = complex(valuesWant[i], 0)
+	valuesWantC := make([]complex128, len(valuesWant)/step)
+
+	for i := range valuesTestC {
 		valuesTestC[i] = complex(valuesTest[i], 0)
+		valuesWantC[i] = complex(valuesWant[i*step], 0)
 	}
+
 	precStats := ckks.GetPrecisionStats(params, encoder, nil, valuesWantC[:params.Slots()], valuesTestC[:params.Slots()], params.LogSlots(), 0)
 
 	fmt.Println(precStats.String())
@@ -524,13 +535,26 @@ func printDebugCfsPlain(valuesTest, valuesWant []float64) {
 	fmt.Println()
 }
 
-func printDebug(params ckks.Parameters, ciphertext *ckks.Ciphertext, valuesWant []complex128, decryptor ckks.Decryptor, encoder ckks.Encoder) (valuesTest []complex128) {
+// decrypt ciphertext then compare with valuesWant, then output the msgs to valuesTest
+// log_sparse = 0 -> full slot & TWO ciphertexts
+// log_sparse = 1 -> full/2 & ONE ciphertext
+func printDebug(log_sparse int, params ckks.Parameters, ciphertext *ckks.Ciphertext, valuesWant []complex128, decryptor ckks.Decryptor, encoder ckks.Encoder) (valuesTest []complex128) {
 	total_size := make([]int, 15)
-	valuesTest = encoder.Decode(decryptor.DecryptNew(ciphertext), params.LogSlots())
+	if ciphertext == nil {
+		return nil
+		// valuesTest = make([]complex128, params.Slots()/(1<<log_sparse))
+		// for i := range valuesTest {
+		// 	valuesTest[i] = 0.0
+		// }
+	} else if log_sparse == 0 {
+		valuesTest = encoder.Decode(decryptor.DecryptNew(ciphertext), params.LogSlots())
+	} else {
+		valuesTest = encoder.Decode(decryptor.DecryptNew(ciphertext), params.LogSlots()-(log_sparse-1))
+	}
 
 	fmt.Println()
-	fmt.Printf("Level: %d (logQ = %d)\n", ciphertext.Level(), params.LogQLvl(ciphertext.Level()))
-	fmt.Printf("Scale: 2^%f\n", math.Log2(ciphertext.Scale))
+	// fmt.Printf("Level: %d (logQ = %d)\n", ciphertext.Level(), params.LogQLvl(ciphertext.Level()))
+	// fmt.Printf("Scale: 2^%f\n", math.Log2(ciphertext.Scale))
 	fmt.Printf("ValuesTest:")
 	for i := range total_size {
 		fmt.Printf("%6.5f, ", real(valuesTest[i]))

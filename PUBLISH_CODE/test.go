@@ -110,8 +110,8 @@ func testResNet_crop_sparse(st, end, ker_wid, depth int, debug, cf100 bool) {
 	}
 	real_batch := []int{4, 8, 16} // same as python (small for faster eval test) !! NEEDS to be changed for real test input {16, 32, 64}
 	norm := []int{4, 8, 16}       // only use 1/norm batches among full batches (i.e., sparse packing)
-	step := []int{1, 2, 4}
-	prt_start := []int{1, 1, 1} // !! NEEDS to be modified since now we don't use fast pack
+	step := []int{1, 1, 1}        // non-one only when it is for inside
+	prt_start := []int{1, 1, 1}   // !! NEEDS to be modified since now we don't use fast pack
 	if ker_wid == 5 {
 		prt_start[0] = 1
 		prt_start[1] = 2
@@ -179,7 +179,7 @@ func testResNet_crop_sparse(st, end, ker_wid, depth int, debug, cf100 bool) {
 			bn_a := make([]float64, real_batch[0])
 			bn_b := make([]float64, real_batch[0])
 			for i := range bn_a {
-				bn_a[i] = 0.1
+				bn_a[i] = 0.2
 				bn_b[i] = 0.0
 			}
 			ker_in_batch := 3
@@ -189,13 +189,13 @@ func testResNet_crop_sparse(st, end, ker_wid, depth int, debug, cf100 bool) {
 			// ker_in := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-conv.csv", ker_in_batch*real_batch[0]*ker_size)
 			ker_in := make([]float64, ker_in_batch*real_batch[0]*ker_size)
 			for i := range ker_in {
-				ker_in[i] = 0.25 * float64(i) / float64(len(ker_in))
+				ker_in[i] = 0.3 * float64(i) / float64(len(ker_in))
 			}
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, ker_in_batch, real_batch[0], norm[0], 0, step[0], 2, 0, "Conv_inside", fast_pack, debug)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, ker_in_batch, real_batch[0], norm[0], 0, step[0], 2, 2, "Conv_inside", fast_pack, debug)
 			pow = mid_pow
 			fmt.Println("Block1, Layer ", i, "done!")
 		}
-		fmt.Println("Block1 done.") // !!!! HERE is DONE (don't know why errors for log_slot = 2)
+		fmt.Println("Block1 done.") // !!!! HERE is DONE
 		timings[0] = time.Since(start).Seconds()
 		start = time.Now()
 
