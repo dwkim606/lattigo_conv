@@ -276,8 +276,12 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	trans = false
 	stride = false
 	inside = false
+	sparse := false
 	in_step := step
 	switch kind {
+	case "Conv_sparse":
+		inside = true
+		sparse = true
 	case "Conv_inside":
 		inside = true
 	case "StrConv_inside":
@@ -386,7 +390,7 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 		relu1, relu2 := debugReLU(cont, slot1, slot2, alpha, pow)
 		relu1 = printDebug(log_sparse, cont.params, ct_boots[0], relu1, cont.decryptor, cont.encoder)
 		relu2 = printDebug(log_sparse, cont.params, ct_boots[1], relu2, cont.decryptor, cont.encoder)
-		cfs_postB = debugStoC(cont, relu1, relu2, in_wid, kp_wid, pack_pos, step, kind, fast_pack)
+		cfs_postB = debugStoC(cont, relu1, relu2, in_wid, kp_wid, pack_pos, step, log_sparse, kind, fast_pack)
 	}
 
 	ct_keep := make([]*ckks.Ciphertext, iter) // for extend (rotation) of ctxt_in
@@ -409,7 +413,13 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 			}
 		} else if inside {
 			if ct_boots[ul] != nil {
-				ct_keep[ul] = keep_ctxt(cont.params, cont.evaluator, cont.encoder, ct_boots[ul], cont.ext_idx[step][ul])
+				if sparse {
+					ct_keep[ul] = keep_ctxt(cont.params, cont.evaluator, cont.encoder, ct_boots[ul], cont.ext_idx[in_wid][ul])
+				} else {
+					ct_keep[ul] = keep_ctxt(cont.params, cont.evaluator, cont.encoder, ct_boots[ul], cont.ext_idx[step][ul])
+				}
+			} else {
+				ct_keep[ul] = nil
 			}
 		} else {
 			ct_keep[ul] = keep_ctxt(cont.params, cont.evaluator, cont.encoder, ct_boots[ul], cont.ext_idx[in_wid][ul])
@@ -513,7 +523,7 @@ func debugReLU(cont *context, slot1, slot2 []complex128, alpha, pow float64) (re
 	return
 }
 
-func debugStoC(cont *context, slot1, slot2 []complex128, in_wid, kp_wid, pos, step int, kind string, fast_pack bool) (cfs_postB []float64) {
+func debugStoC(cont *context, slot1, slot2 []complex128, in_wid, kp_wid, pos, step, log_sparse int, kind string, fast_pack bool) (cfs_postB []float64) {
 	slot1_fl := make([]float64, cont.params.Slots())
 	slot2_fl := make([]float64, cont.params.Slots())
 	if slot2 == nil {
@@ -536,16 +546,17 @@ func debugStoC(cont *context, slot1, slot2 []complex128, in_wid, kp_wid, pos, st
 	case "Conv":
 		tmp1 = keep_vec(slot1_fl, in_wid, kp_wid, 0)
 		tmp2 = keep_vec(slot2_fl, in_wid, kp_wid, 1)
-	case "StrConv_inside", "Conv_inside":
+	case "StrConv_inside", "Conv_inside", "Conv_sparse":
 		if slot2_fl != nil {
 			tmp1 = keep_vec_stride(slot1_fl, in_wid, kp_wid, step, 0, raw_in_wid_odd)
 			tmp2 = keep_vec_stride(slot2_fl, in_wid, kp_wid, step, 1, raw_in_wid_odd)
 		} else {
+			tmp := keep_vec_sparse(slot1_fl, in_wid, kp_wid, log_sparse)
 			tmp1 = make([]float64, cont.params.Slots())
 			tmp2 = make([]float64, cont.params.Slots())
 			for i := 0; i < len(slot1)/2; i++ {
-				tmp1[i] = slot1_fl[i]
-				tmp2[i] = slot1_fl[i+len(slot1)/2]
+				tmp1[i] = tmp[i]
+				tmp2[i] = tmp[i+len(slot1)/2]
 			}
 		}
 	case "StrConv", "StrConv_fast", "StrConv_odd":

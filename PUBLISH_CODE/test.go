@@ -79,9 +79,9 @@ func testResNet_crop_sparse(st, end, ker_wid, depth int, debug, cf100 bool) {
 	weight_dir := "Resnet_weights/weights_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid1/" // !! NEED to remove "_test"
 	out_dir := "Resnet_enc_results/results_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid1/"
 	fc_out := 10    // 100 for cifar100
-	init_pow := 6.0 // covers [-2^pow, 2^pow] values at ReLU evaluation
-	mid_pow := 6.0
-	final_pow := 6.0
+	init_pow := 1.0 // covers [-2^pow, 2^pow] values at ReLU evaluation
+	mid_pow := 1.0
+	final_pow := 1.0
 	if cf100 {
 		weight_dir = "Resnet_weights/weights_cf100_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid1/"
 		out_dir = "Resnet_enc_results/results_cf100_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid1/"
@@ -191,7 +191,7 @@ func testResNet_crop_sparse(st, end, ker_wid, depth int, debug, cf100 bool) {
 			for i := range ker_in {
 				ker_in[i] = 0.3 * float64(i) / float64(len(ker_in))
 			}
-			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, ker_in_batch, real_batch[0], norm[0], 0, step[0], 2, 2, "Conv_inside", fast_pack, debug)
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, ker_in_batch, real_batch[0], norm[0], 0, step[0], 2, 2, "Conv_sparse", fast_pack, debug)
 			pow = mid_pow
 			fmt.Println("Block1, Layer ", i, "done!")
 		}

@@ -84,6 +84,18 @@ func keep_vec_stride(input []float64, in_wid, kp_wid, step, ul int, raw_in_wid_o
 	return output
 }
 
+func keep_vec_sparse(input []float64, in_wid, kp_wid, log_sparse int) []float64 {
+	output := make([]float64, len(input))
+
+	tmp := gen_keep_vec_sparse(len(input), in_wid, kp_wid, log_sparse)
+
+	for i := range output {
+		output[i] = input[i] * float64(tmp[i])
+	}
+
+	return output
+}
+
 // returns the idx for keep_vec
 // N: length of input (upper + lower)
 // ul = 0 -> upper part, ul = 1 -> lower part
@@ -117,6 +129,50 @@ func gen_keep_vec(vec_size, in_wid, kp_wid, ul int) (idx []int) {
 		}
 	} else {
 		panic("ul not 0 nor 1")
+	}
+
+	return idx
+}
+
+// returns the idx for keep_vec given that we have sparse pack with log_sparse (=0 if full, 1 if half sparse pack)
+// Always assume log_sparse >= 1 so that both up and down part is in one ciphertext
+// N: length of input (upper + lower), vec_size is always N/2!
+func gen_keep_vec_sparse(vec_size, in_wid, kp_wid, log_sparse int) (idx []int) {
+	logN := 0
+	for ; (1 << logN) < (2 * vec_size); logN++ {
+	}
+	idx = make([]int, vec_size)
+	batch := 2 * vec_size / (in_wid * in_wid)
+	sparsity := 1 << log_sparse
+	if sparsity == 1 {
+		panic("We do not support full packing in gen_keep_vec_sparse")
+	}
+	if kp_wid < in_wid/2 {
+		panic("keep width too small. less than in_wid/2")
+	}
+
+	for i := 0; i < in_wid/2; i++ {
+		for j := 0; j < kp_wid; j++ {
+			for b := 0; b < batch/sparsity; b++ {
+				id := int(reverseBits(uint32(in_wid*batch*i+batch*j+b*sparsity), logN-1))
+				idx[id] = 1
+			}
+		}
+	}
+	for i := 0; i < kp_wid-in_wid/2; i++ {
+		for j := 0; j < kp_wid; j++ {
+			for b := 0; b < batch/sparsity; b++ {
+				id := int(reverseBits(uint32(in_wid*batch*i+batch*j+b*sparsity), logN-1)) + vec_size/sparsity
+				idx[id] = 1
+			}
+		}
+	}
+
+	post_slot := 2 * len(idx) / sparsity
+	for i := 0; i < post_slot; i++ {
+		for j := 1; j < sparsity/2; j++ {
+			idx[i+post_slot*j] = idx[i]
+		}
 	}
 
 	return idx

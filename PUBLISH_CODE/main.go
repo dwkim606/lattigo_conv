@@ -133,16 +133,17 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	case "Resnet_crop_sparse": // Generate ext_idx for extracting valid values from conv with "same" padding
 		// !! ALSO NEEDS to extract values after strided conv!
 		iter = 2 // since we use full padding,
+		log_sparse := 2
 		for i := range cont.in_wids {
-			step := 1
 			raw_in_wid_odd := true
 			if cont.kp_wids[i]%2 == 0 {
 				raw_in_wid_odd = false
 			}
+			_ = raw_in_wid_odd
 			// println("i, odd? ", i, raw_in_wid_odd)
-			cont.ext_idx[step] = make([][]int, iter)
+			cont.ext_idx[cont.in_wids[i]] = make([][]int, iter)
 			for ul := 0; ul < iter; ul++ {
-				cont.ext_idx[step][ul] = gen_keep_vec_stride(cont.N/2, cont.in_wids[0], cont.kp_wids[i], step, ul, raw_in_wid_odd)
+				cont.ext_idx[cont.in_wids[i]][ul] = gen_keep_vec_sparse(cont.N/2, cont.in_wids[i], cont.kp_wids[i], log_sparse)
 			}
 		}
 	case "Resnet_crop_fast_wide2": // Generate ext_idx for extracting valid values from conv with "same" padding
