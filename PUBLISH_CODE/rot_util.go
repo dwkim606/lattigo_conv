@@ -616,37 +616,72 @@ func gen_comprs_sparse(vec_size, in_wid, kp_wid, log_sparse, ul, pos int) (m_idx
 			rot := 3 * b * min_wid * min_wid / 2
 			r_idx[rot] = tmp
 		}
-	} else { // (NOT YET) we may move 4*j for optimizations
-		for j := 0; j < min_wid; j++ { // kinds of mov depends on j and b
-			tmp := make([]int, vec_size)
-			for b := 0; b < batch; b++ {
-				for i := 0; i < min_wid/2; i++ {
-					if (ul == 0) && (reverseBits(uint32(j), log_in_wid-1) < uint32(kp_wid)) && (reverseBits(uint32(i), log_in_wid-2) < uint32(kp_wid)) {
-						idx := in_wid*min_wid*b + min_wid*j + i
-						tmp[idx] = 1
+	} else {
+		if batch > 4*min_wid { //we may move 4*j for optimizations
+			for j := 0; j < min_wid; j++ { // kinds of mov depends on j and b
+				for bk := 0; bk < 4; bk++ {
+					tmp := make([]int, vec_size)
+					for b := 0; b < batch/4; b++ {
+						for i := 0; i < min_wid/2; i++ {
+							if (ul == 0) && (reverseBits(uint32(j), log_in_wid-1) < uint32(kp_wid)) && (reverseBits(uint32(i), log_in_wid-2) < uint32(kp_wid)) {
+								idx := 4*in_wid*min_wid*b + bk*min_wid*in_wid + min_wid*j + i
+								tmp[idx] = 1
+							}
+							if (ul == 1) && (reverseBits(uint32(j), log_in_wid-1) < uint32(kp_wid)) && (reverseBits(uint32(i), log_in_wid-2)+uint32(min_wid/2) < uint32(kp_wid)) {
+								idx := 4*in_wid*min_wid*b + bk*min_wid*in_wid + min_wid*j + i
+								tmp[idx] = 1
+							}
+						}
 					}
-					if (ul == 1) && (reverseBits(uint32(j), log_in_wid-1) < uint32(kp_wid)) && (reverseBits(uint32(i), log_in_wid-2)+uint32(min_wid/2) < uint32(kp_wid)) {
-						idx := in_wid*min_wid*b + min_wid*j + i
+					rot := j*min_wid/2 + 3*bk*min_wid*min_wid/2
+					m_idx[rot] = tmp
+				}
+			}
+
+			for b := 0; b < batch/4; b++ { // kinds of mov depends on b
+				tmp := make([]int, vec_size)
+				for bk := 0; bk < 4; bk++ {
+					for j := 0; j < min_wid; j++ {
+						for i := 0; i < min_wid/2; i++ {
+							idx := 4*b*in_wid*min_wid + bk*min_wid*min_wid/2 + j*min_wid/2 + i
+							tmp[idx] = 1
+						}
+					}
+				}
+				rot := 3*b*4*min_wid*min_wid/2 - int(reverseBits(uint32(pos), 2))*batch*min_wid*min_wid/2
+				r_idx[rot] = tmp
+			}
+		} else {
+			for j := 0; j < min_wid; j++ { // kinds of mov depends on j and b
+				tmp := make([]int, vec_size)
+				for b := 0; b < batch; b++ {
+					for i := 0; i < min_wid/2; i++ {
+						if (ul == 0) && (reverseBits(uint32(j), log_in_wid-1) < uint32(kp_wid)) && (reverseBits(uint32(i), log_in_wid-2) < uint32(kp_wid)) {
+							idx := in_wid*min_wid*b + min_wid*j + i
+							tmp[idx] = 1
+						}
+						if (ul == 1) && (reverseBits(uint32(j), log_in_wid-1) < uint32(kp_wid)) && (reverseBits(uint32(i), log_in_wid-2)+uint32(min_wid/2) < uint32(kp_wid)) {
+							idx := in_wid*min_wid*b + min_wid*j + i
+							tmp[idx] = 1
+						}
+					}
+				}
+				rot := j * min_wid / 2
+				m_idx[rot] = tmp
+			}
+
+			for b := 0; b < batch; b++ { // kinds of mov depends on b
+				tmp := make([]int, vec_size)
+				for j := 0; j < min_wid; j++ {
+					for i := 0; i < min_wid/2; i++ {
+						idx := b*in_wid*min_wid + j*min_wid/2 + i
 						tmp[idx] = 1
 					}
 				}
+				rot := 3*b*min_wid*min_wid/2 - int(reverseBits(uint32(pos), 2))*batch*min_wid*min_wid/2
+				r_idx[rot] = tmp
 			}
-			rot := j * min_wid / 2
-			m_idx[rot] = tmp
 		}
-
-		for b := 0; b < batch; b++ { // kinds of mov depends on b
-			tmp := make([]int, vec_size)
-			for j := 0; j < min_wid; j++ {
-				for i := 0; i < min_wid/2; i++ {
-					idx := b*in_wid*min_wid + j*min_wid/2 + i
-					tmp[idx] = 1
-				}
-			}
-			rot := 3*b*min_wid*min_wid/2 - int(reverseBits(uint32(pos), 2))*batch*min_wid*min_wid/2
-			r_idx[rot] = tmp
-		}
-
 	}
 
 	return m_idx, r_idx

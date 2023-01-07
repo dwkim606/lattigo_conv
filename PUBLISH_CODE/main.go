@@ -473,13 +473,13 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 
 func main() {
 	// fmt.Println("Test Start")
-	// input := make([]float64, 32*32)
+	// input := make([]float64, 16*16*128)
 	// log_input := 0
 	// for ; (1 << log_input) < len(input); log_input++ {
 	// }
-	// in_wid := 32
-	// kp_wid := 13
-	// log_sparse := 0 // not 0
+	// in_wid := 16
+	// kp_wid := 6
+	// log_sparse := 1 // not 0
 	// for i := range input {
 	// 	input[i] = 1.0 * float64(i+1)
 	// }
@@ -495,7 +495,7 @@ func main() {
 	// fmt.Println(br_input0)
 	// fmt.Println(br_input1)
 
-	// pos := 2
+	// pos := 0
 	// br_output0 := make([]float64, len(input)/2)
 	// br_output1 := make([]float64, len(input)/2)
 	// output := make([]float64, len(input))
@@ -582,6 +582,7 @@ func main() {
 			// testResNet_crop_fast_in(0, test_num, ker_wid, depth, debug, cf100)
 		} else if (wide_case == 2) || (wide_case == 3) {
 			testResNet_crop_sparse_wide(0, test_num, ker_wid, depth, wide_case, debug, cf100)
+			// testResNet_crop_sparse_wide_test(0, test_num, ker_wid, depth, wide_case, debug, cf100)
 			// testResNet_crop_fast_wide_in(0, test_num, ker_wid, depth, wide_case, debug, cf100)
 		} else {
 			panic("Wrong wide case!")

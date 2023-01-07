@@ -633,7 +633,6 @@ func testResNet_crop_fast_in(st, end, ker_wid, depth int, debug, cf100 bool) {
 		fmt.Println("Final (reduce_mean & FC): ", timings[5], " sec")
 		fmt.Printf("Total done in %s \n", time.Since(begin_start))
 	}
-
 }
 
 func testResNet_crop_sparse_wide(st, end, ker_wid, depth, wide_case int, debug, cf100 bool) {
@@ -665,7 +664,7 @@ func testResNet_crop_sparse_wide(st, end, ker_wid, depth, wide_case int, debug, 
 		}
 	}
 
-	init_batch := 16 // needs to be modified to 16
+	init_batch := 16 // NEEDS to be modified to 16
 
 	var num_blcs [3]int
 	switch depth {
@@ -685,7 +684,7 @@ func testResNet_crop_sparse_wide(st, end, ker_wid, depth, wide_case int, debug, 
 	kind := "Resnet_crop_sparse_wide2"
 
 	if wide_case == 3 {
-		real_batch = []int{48, 96, 192}
+		real_batch = []int{48, 96, 192} // 48, 96, 192
 		norm = []int{1, 2, 4}
 		log_sparse = []int{0, 1, 2}
 		kind = "Resnet_crop_sparse_wide3"
@@ -709,6 +708,7 @@ func testResNet_crop_sparse_wide(st, end, ker_wid, depth, wide_case int, debug, 
 	for iter := st; iter < end; iter++ {
 		fmt.Println("Running ", iter, "-th iter... ker size: ", ker_wid)
 		image := readTxt("Resnet_plain_data/crop_ker"+strconv.Itoa(ker_wid)+"_d"+strconv.Itoa(depth)+"_wid"+strconv.Itoa(wide_case)+"/test_image_"+strconv.Itoa(iter)+".csv", in_wids[0]*in_wids[0]*3)
+
 		if cf100 {
 			image = readTxt("Resnet_plain_data/cf100_crop_ker"+strconv.Itoa(ker_wid)+"_d"+strconv.Itoa(depth)+"_wid"+strconv.Itoa(wide_case)+"/test_image_"+strconv.Itoa(iter)+".csv", in_wids[0]*in_wids[0]*3)
 		}
@@ -757,6 +757,7 @@ func testResNet_crop_sparse_wide(st, end, ker_wid, depth, wide_case int, debug, 
 			}
 			bn_a := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-a.csv", bn_batch)
 			bn_b := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-b.csv", bn_batch)
+
 			if i == 1 {
 				ker_in := readTxt(weight_dir+"w0-conv.csv", 3*init_batch*ker_size)
 				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, 3, init_batch, norm[0], 0, step[0], 2, log_sparse[0], "Conv_sparse", fast_pack, debug)
@@ -775,6 +776,7 @@ func testResNet_crop_sparse_wide(st, end, ker_wid, depth, wide_case int, debug, 
 		start = time.Now()
 
 		ker_in12 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0])+"-conv.csv", real_batch[0]*real_batch[1]*ker_size)
+
 		// ker_in12_new := make([]float64, 2*real_batch[0]*real_batch[1]*ker_size)
 		ker_in12_0 := make([]float64, len(ker_in12)/2)
 		ker_in12_1 := make([]float64, len(ker_in12)/2)
@@ -814,8 +816,8 @@ func testResNet_crop_sparse_wide(st, end, ker_wid, depth, wide_case int, debug, 
 				bn_b_0[i] = bn_b[2*i]
 				bn_b_1[i] = bn_b[2*i+1]
 			}
-			ct_result1 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_0, bn_a_0, bn_b_0, alpha, pow, in_wids[0], raw_in_wids[1], ker_wid, real_batch[0], real_batch[1], norm[1], 0, step[1], 2, 0, "StrConv_sparse", fast_pack, debug)
-			ct_result2 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_1, bn_a_1, bn_b_1, alpha, pow, in_wids[0], raw_in_wids[1], ker_wid, real_batch[0], real_batch[1], norm[1], 0, step[1], 2, 0, "StrConv_sparse", fast_pack, debug)
+			ct_result1 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_0, bn_a_0, bn_b_0, alpha, pow, in_wids[0], raw_in_wids[1], ker_wid, real_batch[0], real_batch[1]/2, norm[0], 0, step[1], 2, 0, "StrConv_sparse_full", fast_pack, debug)
+			ct_result2 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_1, bn_a_1, bn_b_1, alpha, pow, in_wids[0], raw_in_wids[1], ker_wid, real_batch[0], real_batch[1]/2, norm[0], 0, step[1], 2, 0, "StrConv_sparse_full", fast_pack, debug)
 
 			xi := make([]float64, cont.N)
 			xi[2] = 1.0
@@ -823,7 +825,6 @@ func testResNet_crop_sparse_wide(st, end, ker_wid, depth, wide_case int, debug, 
 			cont.encoder.EncodeCoeffs(xi, xi_plain)
 			cont.encoder.ToNTT(xi_plain)
 			ct_result2 = cont.evaluator.MulNew(ct_result2, xi_plain)
-
 			ct_layer = cont.evaluator.AddNew(ct_result1, ct_result2)
 		}
 		fmt.Println("Block1 to 2 done!")
@@ -850,6 +851,7 @@ func testResNet_crop_sparse_wide(st, end, ker_wid, depth, wide_case int, debug, 
 		ker_in23 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+1)+"-conv.csv", real_batch[1]*real_batch[2]*ker_size)
 		bn_a3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+1)+"-a.csv", real_batch[2])
 		bn_b3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+1)+"-b.csv", real_batch[2])
+
 		// ker_in23_new := make([]float64, 2*real_batch[1]*real_batch[2]*ker_size)
 		// for k := 0; k < ker_size; k++ {
 		// 	for i := 0; i < real_batch[1]; i++ {
@@ -890,6 +892,7 @@ func testResNet_crop_sparse_wide(st, end, ker_wid, depth, wide_case int, debug, 
 			ker_inf_wid++
 		}
 		ker_inf := readTxt(weight_dir+"final-fckernel.csv", real_batch[2]*fc_out)
+
 		ker_inf_ := make([]float64, ker_inf_wid*ker_inf_wid*real_batch[2]*fc_out)
 		for i := range ker_inf {
 			for b := 0; b < ker_inf_wid*ker_inf_wid; b++ {
@@ -901,6 +904,7 @@ func testResNet_crop_sparse_wide(st, end, ker_wid, depth, wide_case int, debug, 
 			bn_af[i] = 1.0 / float64(raw_in_wids[2]*raw_in_wids[2]) // for reduce mean on raw_in_wids[2]**2 elements
 		}
 		bn_bf := readTxt(weight_dir+"final-fcbias.csv", fc_out)
+
 		ct_result := evalConv_BN(cont, ct_layer, ker_inf_, bn_af, bn_bf, in_wids[2], ker_inf_wid, real_batch[2], fc_out, norm[2], float64(1<<30), false)
 		fmt.Println("Final FC done.")
 		timings[5] = time.Since(start).Seconds()
@@ -915,6 +919,375 @@ func testResNet_crop_sparse_wide(st, end, ker_wid, depth, wide_case int, debug, 
 		res_out := prt_mat_one_norm(res_tmp, max_batch[2], norm[2], ker_inf_wid/2+1, ker_inf_wid/2+1)
 		fmt.Println("\n result: ", res_out[:fc_out])
 		writeTxt(out_dir+"class_result_"+ker_name+"_"+strconv.Itoa(iter)+".csv", res_out[:fc_out])
+
+		fmt.Println("Blc1: ", timings[0], " sec")
+		fmt.Println("Blc1->2: ", timings[1], " sec")
+		fmt.Println("Blc2: ", timings[2], " sec")
+		fmt.Println("Blc2->3: ", timings[3], " sec")
+		fmt.Println("Blc3: ", timings[4], " sec")
+		fmt.Println("Final (reduce_mean & FC): ", timings[5], " sec")
+		fmt.Printf("Total done in %s \n", time.Since(begin_start))
+	}
+}
+
+func testResNet_crop_sparse_wide_test(st, end, ker_wid, depth, wide_case int, debug, cf100 bool) {
+	// init_batch fixed to 16
+	ker_name := "ker" + strconv.Itoa(ker_wid)
+	weight_dir := "Resnet_weights/weights_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid" + strconv.Itoa(wide_case) + "/"
+	out_dir := "Resnet_enc_results/results_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid" + strconv.Itoa(wide_case) + "/"
+	fc_out := 10 // 100 for cifar100
+
+	init_pow := 5.0
+	mid_pow := 5.0 // needs to be 5.0 in k3 d20 w3 for best performance
+	final_pow := 5.0
+	if ker_wid == 5 {
+		init_pow = 6.0
+		mid_pow = 6.0
+		final_pow = 6.0
+	}
+
+	if cf100 {
+		weight_dir = "Resnet_weights/weights_cf100_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid" + strconv.Itoa(wide_case) + "/"
+		out_dir = "Resnet_enc_results/results_cf100_crop_" + ker_name + "_d" + strconv.Itoa(depth) + "_wid" + strconv.Itoa(wide_case) + "/"
+		fc_out = 100 // 100 for cifar100
+		final_pow = 7.0
+		init_pow = 5.0
+		mid_pow = 5.0
+		if (ker_wid == 5) && (depth == 8) {
+			init_pow = 6.0
+			final_pow = 6.0
+		}
+	}
+
+	init_batch := 4 // NEEDS to be modified to 16
+
+	var num_blcs [3]int
+	switch depth {
+	case 20:
+		num_blcs[0], num_blcs[1], num_blcs[2] = 7, 5, 5
+	case 14:
+		num_blcs[0], num_blcs[1], num_blcs[2] = 5, 3, 3
+	case 8:
+		num_blcs[0], num_blcs[1], num_blcs[2] = 3, 1, 1
+	default:
+		panic("wrong depth case (not in 8,14,20)!")
+	}
+	real_batch := []int{32, 64, 128} // same as python
+	norm := []int{2, 4, 8}           // only use 1/norm batches
+	log_sparse := []int{1, 2, 3}
+	step := []int{1, 1, 1}
+	kind := "Resnet_crop_sparse_wide2"
+
+	if wide_case == 3 {
+		real_batch = []int{12, 24, 48} // 48, 96, 192
+		norm = []int{1, 2, 4}
+		log_sparse = []int{0, 1, 2}
+		kind = "Resnet_crop_sparse_wide3"
+	} else if wide_case != 2 {
+		panic("wrong wide_case (2 nor 3)!")
+	}
+
+	logN := 14
+	alpha := 0.0
+	in_wids := []int{32, 16, 8}                                         // before cropping
+	raw_in_wids := []int{32 - ker_wid/2, 16 - ker_wid/2, 8 - ker_wid/2} // same as python
+	fast_pack := true
+	ker_size := ker_wid * ker_wid
+	max_batch := make([]int, len(real_batch)) // the max batch
+	for i := range max_batch {
+		max_batch[i] = (1 << logN) / (in_wids[i] * in_wids[i])
+	}
+
+	cont := newContext(logN, ker_wid, in_wids, raw_in_wids, true, kind)
+
+	for iter := st; iter < end; iter++ {
+		fmt.Println("Running ", iter, "-th iter... ker size: ", ker_wid)
+		// image := readTxt("Resnet_plain_data/crop_ker"+strconv.Itoa(ker_wid)+"_d"+strconv.Itoa(depth)+"_wid"+strconv.Itoa(wide_case)+"/test_image_"+strconv.Itoa(iter)+".csv", in_wids[0]*in_wids[0]*3)
+		image := make([]float64, in_wids[0]*in_wids[0]*3)
+		for i := range image {
+			image[i] = 1.0 - 1.0*float64(i)/float64(len(image))
+		}
+
+		if cf100 {
+			image = readTxt("Resnet_plain_data/cf100_crop_ker"+strconv.Itoa(ker_wid)+"_d"+strconv.Itoa(depth)+"_wid"+strconv.Itoa(wide_case)+"/test_image_"+strconv.Itoa(iter)+".csv", in_wids[0]*in_wids[0]*3)
+		}
+		input := make([]float64, cont.N)
+		k := 0
+		for i := 0; i < in_wids[0]; i++ {
+			for j := 0; j < in_wids[0]; j++ {
+				for b := 0; b < 3; b++ {
+					if (i < raw_in_wids[0]) && (j < raw_in_wids[0]) {
+						input[i*in_wids[0]*max_batch[0]+j*max_batch[0]+b*norm[0]] = image[k]
+					}
+					k++
+				}
+			}
+		}
+		fmt.Println("Input: ")
+		prt_mat_norm(input, max_batch[0], norm[0], 3, false)
+		fmt.Println("vec size: ", cont.N)
+		fmt.Println("input width: ", raw_in_wids)
+		fmt.Println("kernel width: ", ker_wid)
+		fmt.Println("num batches: ", real_batch)
+
+		enc_start := time.Now()
+		pl_input := ckks.NewPlaintext(cont.params, cont.ECD_LV, cont.params.Scale()) // contain plaintext values
+		cont.encoder.EncodeCoeffs(input, pl_input)
+		ct_input := cont.encryptor.EncryptNew(pl_input)
+		fmt.Printf("Encryption done in %s \n", time.Since(enc_start))
+		enc_start = time.Now()
+
+		timings := make([]float64, 6)
+		begin_start := time.Now()
+		start := time.Now()
+
+		// ResNet Block 1
+		pow := init_pow
+		ct_layer := ct_input
+		for i := 1; i <= num_blcs[0]; i++ {
+			if i == 5 {
+				pow = mid_pow
+			}
+			var bn_batch int
+			if i == 1 {
+				bn_batch = init_batch
+			} else {
+				bn_batch = real_batch[0]
+			}
+			// bn_a := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-a.csv", bn_batch)
+			// bn_b := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-b.csv", bn_batch)
+			bn_a := make([]float64, bn_batch)
+			bn_b := make([]float64, bn_batch)
+			for i := range bn_a {
+				bn_a[i] = 0.2
+				bn_b[i] = 0.0
+			}
+
+			if i == 1 {
+				// ker_in := readTxt(weight_dir+"w0-conv.csv", 3*init_batch*ker_size)
+				ker_in := make([]float64, 3*init_batch*ker_size)
+				for i := range ker_in {
+					ker_in[i] = 0.05 * float64(i) / float64(len(ker_in))
+				}
+
+				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, 3, init_batch, norm[0], 0, step[0], 2, log_sparse[0], "Conv_sparse", fast_pack, debug)
+				// pow = mid_pow
+			} else if i == 2 {
+				// ker_in := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-conv.csv", init_batch*real_batch[0]*ker_size)
+				ker_in := make([]float64, init_batch*real_batch[0]*ker_size)
+				for i := range ker_in {
+					ker_in[i] = 0.05 * float64(i) / float64(len(ker_in))
+				}
+				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, init_batch, real_batch[0], norm[0], 0, step[0], 2, log_sparse[0], "Conv_sparse", fast_pack, debug)
+			} else {
+				// ker_in := readTxt(weight_dir+"w"+strconv.Itoa(i-1)+"-conv.csv", real_batch[0]*real_batch[0]*ker_size)
+				ker_in := make([]float64, real_batch[0]*real_batch[0]*ker_size)
+				for i := range ker_in {
+					ker_in[i] = 0.05 * float64(i) / float64(len(ker_in))
+				}
+
+				ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[0], ker_wid, real_batch[0], real_batch[0], norm[0], 0, step[0], 2, log_sparse[0], "Conv_sparse", fast_pack, debug)
+			}
+			fmt.Println("Block1, Layer ", i, "done!")
+		}
+		fmt.Println("Block1 done.")
+		timings[0] = time.Since(start).Seconds()
+		start = time.Now()
+
+		// ker_in12 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0])+"-conv.csv", real_batch[0]*real_batch[1]*ker_size)
+		ker_in12 := make([]float64, real_batch[0]*real_batch[1]*ker_size)
+		for i := range ker_in12 {
+			ker_in12[i] = 0.05 * float64(i) / float64(len(ker_in12))
+		}
+
+		// ker_in12_new := make([]float64, 2*real_batch[0]*real_batch[1]*ker_size)
+		ker_in12_0 := make([]float64, len(ker_in12)/2)
+		ker_in12_1 := make([]float64, len(ker_in12)/2)
+		// if wide_case == 2 {
+		// 	for k := 0; k < ker_size; k++ {
+		// 		for i := 0; i < real_batch[0]; i++ {
+		// 			for j := 0; j < real_batch[1]; j++ {
+		// 				ker_in12_new[k*2*real_batch[0]*real_batch[1]+2*i*real_batch[1]+j] = ker_in12[k*real_batch[0]*real_batch[1]+i*real_batch[1]+j]
+		// 			}
+		// 		}
+		// 	}
+		// } else
+		if wide_case == 3 {
+			for k := 0; k < ker_size; k++ {
+				for i := 0; i < real_batch[0]; i++ {
+					for j := 0; j < real_batch[1]/2; j++ {
+						ker_in12_0[k*real_batch[0]*real_batch[1]/2+(i*real_batch[1]/2+j)] = ker_in12[k*real_batch[0]*real_batch[1]+(i*real_batch[1]+2*j)]   // [i][2*j]
+						ker_in12_1[k*real_batch[0]*real_batch[1]/2+(i*real_batch[1]/2+j)] = ker_in12[k*real_batch[0]*real_batch[1]+(i*real_batch[1]+2*j+1)] // [i][2*j+1]
+					}
+				}
+			}
+		}
+
+		// bn_a := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0])+"-a.csv", real_batch[1])
+		// bn_b := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0])+"-b.csv", real_batch[1])
+		bn_a := make([]float64, real_batch[1])
+		bn_b := make([]float64, real_batch[1])
+		for i := range bn_a {
+			bn_a[i] = 0.1
+			bn_b[i] = 0.0
+		}
+
+		if wide_case == 2 {
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in12, bn_a, bn_b, alpha, pow, in_wids[0], raw_in_wids[1], ker_wid, real_batch[0], real_batch[1], norm[1], 0, step[1], 2, log_sparse[0]-1, "StrConv_sparse", fast_pack, debug)
+		} else if wide_case == 3 {
+			bn_a_0 := make([]float64, real_batch[1]/2)
+			bn_a_1 := make([]float64, real_batch[1]/2)
+			bn_b_0 := make([]float64, real_batch[1]/2)
+			bn_b_1 := make([]float64, real_batch[1]/2)
+			for i := range bn_b_0 {
+				bn_a_0[i] = bn_a[2*i]
+				bn_a_1[i] = bn_a[2*i+1]
+				bn_b_0[i] = bn_b[2*i]
+				bn_b_1[i] = bn_b[2*i+1]
+			}
+			ct_result1 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_0, bn_a_0, bn_b_0, alpha, pow, in_wids[0], raw_in_wids[1], ker_wid, real_batch[0], real_batch[1]/2, norm[0], 0, step[1], 2, 0, "StrConv_sparse_full", fast_pack, debug)
+			ct_result2 := evalConv_BNRelu_new(cont, ct_layer, ker_in12_1, bn_a_1, bn_b_1, alpha, pow, in_wids[0], raw_in_wids[1], ker_wid, real_batch[0], real_batch[1]/2, norm[0], 0, step[1], 2, 0, "StrConv_sparse_full", fast_pack, debug)
+
+			xi := make([]float64, cont.N)
+			xi[2] = 1.0
+			xi_plain := ckks.NewPlaintext(cont.params, ct_result2.Level(), 1.0)
+			cont.encoder.EncodeCoeffs(xi, xi_plain)
+			cont.encoder.ToNTT(xi_plain)
+			ct_result2 = cont.evaluator.MulNew(ct_result2, xi_plain)
+			ct_layer = cont.evaluator.AddNew(ct_result1, ct_result2)
+		}
+		fmt.Println("Block1 to 2 done!")
+		timings[1] = time.Since(start).Seconds()
+		start = time.Now()
+
+		// ResNet Block 2
+		for i := 1; i <= num_blcs[1]; i++ {
+			if i == 5 {
+				pow = init_pow
+			}
+			// bn_a2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+i)+"-a.csv", real_batch[1])
+			// bn_b2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+i)+"-b.csv", real_batch[1])
+			// ker_in2 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+i)+"-conv.csv", real_batch[1]*real_batch[1]*ker_size)
+			bn_a2 := make([]float64, real_batch[1])
+			bn_b2 := make([]float64, real_batch[1])
+			ker_in2 := make([]float64, real_batch[1]*real_batch[1]*ker_size)
+			for i := range bn_a2 {
+				bn_a2[i] = 0.1
+				bn_b2[i] = 0.0
+			}
+			for i := range ker_in2 {
+				ker_in2[i] = 0.05 * float64(i) / float64(len(ker_in2))
+			}
+
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in2, bn_a2, bn_b2, alpha, pow, in_wids[1], raw_in_wids[1], ker_wid, real_batch[1], real_batch[1], norm[1], 0, step[1], 2, log_sparse[1], "Conv_sparse", fast_pack, debug)
+			fmt.Println("Block2, Layer ", i, "done!")
+		}
+		fmt.Println("Block2 done.")
+		timings[2] = time.Since(start).Seconds()
+		start = time.Now()
+
+		pow = mid_pow
+		// ker_in23 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+1)+"-conv.csv", real_batch[1]*real_batch[2]*ker_size)
+		// bn_a3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+1)+"-a.csv", real_batch[2])
+		// bn_b3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+1)+"-b.csv", real_batch[2])
+		bn_a3 := make([]float64, real_batch[2])
+		bn_b3 := make([]float64, real_batch[2])
+		ker_in23 := make([]float64, real_batch[1]*real_batch[2]*ker_size)
+		for i := range bn_a3 {
+			bn_a3[i] = 0.1
+			bn_b3[i] = 0.0
+		}
+		for i := range ker_in23 {
+			ker_in23[i] = 0.05 * float64(i) / float64(len(ker_in23))
+		}
+
+		// ker_in23_new := make([]float64, 2*real_batch[1]*real_batch[2]*ker_size)
+		// for k := 0; k < ker_size; k++ {
+		// 	for i := 0; i < real_batch[1]; i++ {
+		// 		for j := 0; j < real_batch[2]; j++ {
+		// 			ker_in23_new[k*2*real_batch[1]*real_batch[2]+2*i*real_batch[2]+j] = ker_in23[k*real_batch[1]*real_batch[2]+i*real_batch[2]+j]
+		// 		}
+		// 	}
+		// }
+		ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in23, bn_a3, bn_b3, alpha, pow, in_wids[1], raw_in_wids[2], ker_wid, real_batch[1], real_batch[2], norm[2], 0, step[2], 2, log_sparse[1]-1, "StrConv_sparse", fast_pack, debug)
+		fmt.Println("Block2 to 3 done!")
+		timings[3] = time.Since(start).Seconds()
+		start = time.Now()
+
+		// ResNet Block 3
+		for i := 1; i <= num_blcs[2]; i++ {
+			if i == 3 {
+				pow = init_pow
+			}
+			if i == 5 {
+				pow = mid_pow
+			}
+			// bn_a3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+i+1)+"-a.csv", real_batch[2])
+			// bn_b3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+i+1)+"-b.csv", real_batch[2])
+			// ker_in3 := readTxt(weight_dir+"w"+strconv.Itoa(num_blcs[0]+num_blcs[1]+i+1)+"-conv.csv", real_batch[2]*real_batch[2]*ker_size)
+			bn_a3 := make([]float64, real_batch[2])
+			bn_b3 := make([]float64, real_batch[2])
+			ker_in3 := make([]float64, real_batch[2]*real_batch[2]*ker_size)
+			for i := range bn_a3 {
+				bn_a3[i] = 0.1
+				bn_b3[i] = 0.0
+			}
+			for i := range ker_in3 {
+				ker_in3[i] = 0.1 * float64(i) / float64(len(ker_in3))
+			}
+
+			if i == num_blcs[2] {
+				pow = final_pow
+			}
+			ct_layer = evalConv_BNRelu_new(cont, ct_layer, ker_in3, bn_a3, bn_b3, alpha, pow, in_wids[2], raw_in_wids[2], ker_wid, real_batch[2], real_batch[2], norm[2], 0, step[2], 2, log_sparse[2], "Conv_sparse", fast_pack, debug)
+			fmt.Println("Block3, Layer ", i, "done!")
+		}
+		fmt.Println("Block3 done.")
+		timings[4] = time.Since(start).Seconds()
+		start = time.Now()
+
+		ker_inf_wid := raw_in_wids[2]
+		if ker_inf_wid%2 == 0 {
+			ker_inf_wid++
+		}
+		// ker_inf := readTxt(weight_dir+"final-fckernel.csv", real_batch[2]*fc_out)
+		ker_inf := make([]float64, real_batch[2]*fc_out)
+		for i := range ker_inf {
+			ker_inf[i] = 0.1 * float64(i)
+		}
+
+		ker_inf_ := make([]float64, ker_inf_wid*ker_inf_wid*real_batch[2]*fc_out)
+		for i := range ker_inf {
+			for b := 0; b < ker_inf_wid*ker_inf_wid; b++ {
+				ker_inf_[i+b*real_batch[2]*fc_out] = ker_inf[i]
+			}
+		}
+		bn_af := make([]float64, fc_out)
+		for i := range bn_af {
+			bn_af[i] = 1.0 / float64(raw_in_wids[2]*raw_in_wids[2]) // for reduce mean on raw_in_wids[2]**2 elements
+		}
+		// bn_bf := readTxt(weight_dir+"final-fcbias.csv", fc_out)
+		bn_bf := make([]float64, fc_out)
+		for i := range bn_bf {
+			bn_bf[i] = 1 * float64(i)
+		}
+
+		ct_result := evalConv_BN(cont, ct_layer, ker_inf_, bn_af, bn_bf, in_wids[2], ker_inf_wid, real_batch[2], fc_out, norm[2], float64(1<<30), false)
+		fmt.Println("Final FC done.")
+		timings[5] = time.Since(start).Seconds()
+		start = time.Now()
+
+		fmt.Println()
+		fmt.Println("===============  DECRYPTION  ===============")
+		fmt.Println()
+		cont.decryptor.Decrypt(ct_result, pl_input)
+		res_tmp := cont.encoder.DecodeCoeffs(pl_input)
+		fmt.Printf("Decryption Done in %s \n", time.Since(start))
+		res_out := prt_mat_one_norm(res_tmp, max_batch[2], norm[2], ker_inf_wid/2+1, ker_inf_wid/2+1)
+		fmt.Println("\n result: ", res_out[:fc_out])
+		// writeTxt(out_dir+"class_result_"+ker_name+"_"+strconv.Itoa(iter)+".csv", res_out[:fc_out])
+		_ = out_dir
+		_ = weight_dir
 
 		fmt.Println("Blc1: ", timings[0], " sec")
 		fmt.Println("Blc1->2: ", timings[1], " sec")

@@ -279,6 +279,7 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	sparse := false
 	in_step := step
 	modify_ker := false
+	full := false
 	switch kind {
 	case "Conv_sparse": // sparse pack, normal conv
 		sparse = true
@@ -286,6 +287,11 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 		modify_ker = true
 		sparse = true
 		stride = true
+	case "StrConv_sparse_full": // sparse pack but full pack
+		sparse = true
+		modify_ker = true
+		stride = true
+		full = true
 	case "Conv_inside":
 		inside = true
 	case "StrConv_inside":
@@ -327,7 +333,7 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 
 	var ct_conv *ckks.Ciphertext
 	if modify_ker {
-		if log_sparse != 0 {
+		if !full {
 			bn_a_0 := make([]float64, real_ib)
 			bn_a_1 := make([]float64, real_ib)
 			bn_b_0 := make([]float64, real_ib)
@@ -361,9 +367,9 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 
 			ct_conv = cont.evaluator.AddNew(ct_result1, ct_result2)
 
-			res_tmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
+			// res_tmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
 			max_batch := cont.N / (in_wid * in_wid)
-			prt_mat_norm_step(res_tmp, max_batch, norm/4, step, 1, 4, false)
+			// prt_mat_norm_step(res_tmp, max_batch, norm/4, step, 1, 4, false)
 
 			for i := range xi {
 				xi[i] = 0.0
@@ -371,27 +377,23 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 			if (in_wid-ker_wid/2)%2 != 0 {
 				xi[0] = 1.0
 			} else {
-				fmt.Println("offset nonzero!")
+				// fmt.Println("offset nonzero!")
 				offset = cont.N - (max_batch)*(in_wid+1)
-				fmt.Println(offset)
-				fmt.Println(in_wid)
-				fmt.Println(max_batch)
-				fmt.Println(norm)
 				xi[offset] = -1.0
 			}
 			xi_plain = ckks.NewPlaintext(cont.params, ct_conv.Level(), 1.0)
 			cont.encoder.EncodeCoeffs(xi, xi_plain)
 			cont.encoder.ToNTT(xi_plain)
 			ct_conv = cont.evaluator.MulNew(ct_conv, xi_plain)
-			res_tmp = cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
-			fmt.Println("After offset: ")
-			prt_mat_norm_step(res_tmp, max_batch, norm/4, step, 1, 4, false)
+			// res_tmp = cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
+			// fmt.Println("After offset: ")
+			// prt_mat_norm_step(res_tmp, max_batch, norm/4, step, 1, 4, false)
 		} else { // need to cover the case with full packing
 			ct_conv = evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), trans)
 
-			res_tmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
+			// res_tmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
 			max_batch := cont.N / (in_wid * in_wid)
-			prt_mat_norm_step(res_tmp, max_batch, norm, step, 1, 4, false)
+			// prt_mat_norm_step(res_tmp, max_batch, norm, step, 1, 4, false)
 			xi := make([]float64, cont.N)
 			for i := range xi {
 				xi[i] = 0.0
@@ -400,21 +402,17 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 			if (in_wid-ker_wid/2)%2 != 0 {
 				xi[0] = 1.0
 			} else {
-				fmt.Println("offset nonzero!")
+				// fmt.Println("offset nonzero!")
 				offset = cont.N - (max_batch)*(in_wid+1)
-				fmt.Println(offset)
-				fmt.Println(in_wid)
-				fmt.Println(max_batch)
-				fmt.Println(norm)
 				xi[offset] = -1.0
 			}
 			xi_plain := ckks.NewPlaintext(cont.params, ct_conv.Level(), 1.0)
 			cont.encoder.EncodeCoeffs(xi, xi_plain)
 			cont.encoder.ToNTT(xi_plain)
 			ct_conv = cont.evaluator.MulNew(ct_conv, xi_plain)
-			res_tmp = cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
-			fmt.Println("After offset: ")
-			prt_mat_norm_step(res_tmp, max_batch, norm, step, 1, 4, false)
+			// res_tmp = cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
+			// fmt.Println("After offset: ")
+			// prt_mat_norm_step(res_tmp, max_batch, norm, step, 1, 4, false)
 		}
 	} else {
 		if inside {
@@ -686,7 +684,7 @@ func debugStoC(cont *context, slot1, slot2 []complex128, in_wid, kp_wid, pos, st
 				tmp2[i] = tmp[i+len(slot1)/2]
 			}
 		}
-	case "StrConv_sparse":
+	case "StrConv_sparse", "StrConv_sparse_full":
 		if slot2_fl != nil {
 			tmp1 = comprs_vec_sparse(slot1_fl, in_wid, kp_wid, log_sparse, 0, pos)
 			tmp2 = comprs_vec_sparse(slot2_fl, in_wid, kp_wid, log_sparse, 0, pos)
