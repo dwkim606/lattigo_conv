@@ -268,7 +268,7 @@ func evalConv_BN(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []
 // pack_pos: position to pack (0,1,2,3): only for strided case
 // real_ib, real_ob: real number of batches (less or equal than max_batch)
 // step: step of the output (used for conv_inside only)
-// log_sparse: 0 if no full slot, 1 if half slot, etc
+// log_sparse: 0 if no full slot, 1 if half slot, etc (maybe the same as norm[])
 func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a, bn_b []float64, alpha, pow float64, in_wid, kp_wid, ker_wid, real_ib, real_ob, norm, pack_pos, step, iter, log_sparse int, kind string, fast_pack, debug bool) (ct_res *ckks.Ciphertext) {
 	// iter := 2 // for full packing (contrary to half packing)
 	var trans, stride, odd, inside bool
@@ -278,10 +278,14 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	inside = false
 	sparse := false
 	in_step := step
+	modify_ker := false
 	switch kind {
-	case "Conv_sparse":
-		inside = true
+	case "Conv_sparse": // sparse pack, normal conv
 		sparse = true
+	case "StrConv_sparse": // sparse pack, strided conv, 2 convs -> add them -> 1 boot
+		modify_ker = true
+		sparse = true
+		stride = true
 	case "Conv_inside":
 		inside = true
 	case "StrConv_inside":
@@ -322,22 +326,114 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 	}
 
 	var ct_conv *ckks.Ciphertext
-	if inside {
-		new_ker_wid := ker_wid*in_step - in_step + 1
-		new_ker_in := make([]float64, len(ker_in)*new_ker_wid*new_ker_wid/(ker_wid*ker_wid))
-
-		for i := 0; i < ker_wid; i++ {
-			for j := 0; j < ker_wid; j++ {
-				for ib := 0; ib < real_ib; ib++ {
-					for ob := 0; ob < real_ob; ob++ {
-						new_ker_in[in_step*i*new_ker_wid*real_ib*real_ob+(in_step*j)*real_ib*real_ob+ib*real_ob+ob] = ker_in[i*ker_wid*real_ib*real_ob+j*real_ib*real_ob+ib*real_ob+ob]
+	if modify_ker {
+		if log_sparse != 0 {
+			bn_a_0 := make([]float64, real_ib)
+			bn_a_1 := make([]float64, real_ib)
+			bn_b_0 := make([]float64, real_ib)
+			bn_b_1 := make([]float64, real_ib)
+			for i := range bn_b_0 {
+				bn_a_0[i] = bn_a[2*i]
+				bn_a_1[i] = bn_a[2*i+1]
+				bn_b_0[i] = bn_b[2*i]
+				bn_b_1[i] = bn_b[2*i+1]
+			}
+			ker_in_0 := make([]float64, len(ker_in)/2)
+			ker_in_1 := make([]float64, len(ker_in)/2)
+			for k := 0; k < ker_wid*ker_wid; k++ {
+				for i := 0; i < real_ib; i++ {
+					for j := 0; j < real_ob/2; j++ {
+						ker_in_0[k*real_ib*real_ob/2+(i*real_ob/2+j)] = ker_in[k*real_ib*real_ob+(i*real_ob+2*j)]   // [i][2*j]
+						ker_in_1[k*real_ib*real_ob/2+(i*real_ob/2+j)] = ker_in[k*real_ib*real_ob+(i*real_ob+2*j+1)] // [i][2*j+1]
 					}
 				}
 			}
+			ct_result1 := evalConv_BN(cont, ct_input, ker_in_0, bn_a_0, bn_b_0, in_wid, ker_wid, real_ib, real_ob/2, norm/2, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), trans)
+			ct_result2 := evalConv_BN(cont, ct_input, ker_in_1, bn_a_1, bn_b_1, in_wid, ker_wid, real_ib, real_ob/2, norm/2, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), trans)
+
+			xi := make([]float64, cont.N)
+			offset := norm / 4 // cont.N / norm
+			xi[offset] = 1.0
+			xi_plain := ckks.NewPlaintext(cont.params, ct_result2.Level(), 1.0)
+			cont.encoder.EncodeCoeffs(xi, xi_plain)
+			cont.encoder.ToNTT(xi_plain)
+			ct_result2 = cont.evaluator.MulNew(ct_result2, xi_plain)
+
+			ct_conv = cont.evaluator.AddNew(ct_result1, ct_result2)
+
+			res_tmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
+			max_batch := cont.N / (in_wid * in_wid)
+			prt_mat_norm_step(res_tmp, max_batch, norm/4, step, 1, 4, false)
+
+			for i := range xi {
+				xi[i] = 0.0
+			}
+			if (in_wid-ker_wid/2)%2 != 0 {
+				xi[0] = 1.0
+			} else {
+				fmt.Println("offset nonzero!")
+				offset = cont.N - (max_batch)*(in_wid+1)
+				fmt.Println(offset)
+				fmt.Println(in_wid)
+				fmt.Println(max_batch)
+				fmt.Println(norm)
+				xi[offset] = -1.0
+			}
+			xi_plain = ckks.NewPlaintext(cont.params, ct_conv.Level(), 1.0)
+			cont.encoder.EncodeCoeffs(xi, xi_plain)
+			cont.encoder.ToNTT(xi_plain)
+			ct_conv = cont.evaluator.MulNew(ct_conv, xi_plain)
+			res_tmp = cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
+			fmt.Println("After offset: ")
+			prt_mat_norm_step(res_tmp, max_batch, norm/4, step, 1, 4, false)
+		} else { // need to cover the case with full packing
+			ct_conv = evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), trans)
+
+			res_tmp := cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
+			max_batch := cont.N / (in_wid * in_wid)
+			prt_mat_norm_step(res_tmp, max_batch, norm, step, 1, 4, false)
+			xi := make([]float64, cont.N)
+			for i := range xi {
+				xi[i] = 0.0
+			}
+			var offset int
+			if (in_wid-ker_wid/2)%2 != 0 {
+				xi[0] = 1.0
+			} else {
+				fmt.Println("offset nonzero!")
+				offset = cont.N - (max_batch)*(in_wid+1)
+				fmt.Println(offset)
+				fmt.Println(in_wid)
+				fmt.Println(max_batch)
+				fmt.Println(norm)
+				xi[offset] = -1.0
+			}
+			xi_plain := ckks.NewPlaintext(cont.params, ct_conv.Level(), 1.0)
+			cont.encoder.EncodeCoeffs(xi, xi_plain)
+			cont.encoder.ToNTT(xi_plain)
+			ct_conv = cont.evaluator.MulNew(ct_conv, xi_plain)
+			res_tmp = cont.encoder.DecodeCoeffs(cont.decryptor.DecryptNew(ct_conv))
+			fmt.Println("After offset: ")
+			prt_mat_norm_step(res_tmp, max_batch, norm, step, 1, 4, false)
 		}
-		ct_conv = evalConv_BN(cont, ct_input, new_ker_in, bn_a, bn_b, in_wid, new_ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), trans)
 	} else {
-		ct_conv = evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), trans)
+		if inside {
+			new_ker_wid := ker_wid*in_step - in_step + 1
+			new_ker_in := make([]float64, len(ker_in)*new_ker_wid*new_ker_wid/(ker_wid*ker_wid))
+
+			for i := 0; i < ker_wid; i++ {
+				for j := 0; j < ker_wid; j++ {
+					for ib := 0; ib < real_ib; ib++ {
+						for ob := 0; ob < real_ob; ob++ {
+							new_ker_in[in_step*i*new_ker_wid*real_ib*real_ob+(in_step*j)*real_ib*real_ob+ib*real_ob+ob] = ker_in[i*ker_wid*real_ib*real_ob+j*real_ib*real_ob+ib*real_ob+ob]
+						}
+					}
+				}
+			}
+			ct_conv = evalConv_BN(cont, ct_input, new_ker_in, bn_a, bn_b, in_wid, new_ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), trans)
+		} else {
+			ct_conv = evalConv_BN(cont, ct_input, ker_in, bn_a, bn_b, in_wid, ker_wid, real_ib, real_ob, norm, math.Exp2(math.Round(math.Log2(float64(cont.params.Q()[0]))-(pow+8))), trans)
+		}
 	}
 
 	ct_conv.Scale = ct_conv.Scale * math.Pow(2, pow)
@@ -360,6 +456,8 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 		ct_boots[0], ct_boots[1], _ = cont.btp3.BootstrappConv_CtoS(ct_conv)
 	case 3:
 		ct_boots[0], ct_boots[1], _ = cont.btp4.BootstrappConv_CtoS(ct_conv)
+	case 4:
+		ct_boots[0], ct_boots[1], _ = cont.btp5.BootstrappConv_CtoS(ct_conv)
 	default:
 		panic("No cases for log_sparse")
 	}
@@ -398,17 +496,29 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 		if trans {
 			ct_keep[ul] = ext_ctxt(cont.evaluator, cont.encoder, ct_boots[ul], cont.r_idx[in_wid][ul], cont.params)
 		} else if stride {
-			if fast_pack {
-				if ul == 0 {
-					ct_keep[ul] = ext_double_ctxt(cont.evaluator, cont.encoder, ct_boots[ul], cont.m_idx[in_wid][pack_pos], cont.r_idx[in_wid][pack_pos], cont.params)
+			if sparse { // we will use ext_double to reduce rotations; hence similar to fast_pack case
+				if ct_boots[ul] != nil {
+					if ul == 0 {
+						ct_keep[ul] = ext_double_ctxt(cont.evaluator, cont.encoder, ct_boots[ul], cont.m_idx[in_wid][pack_pos], cont.r_idx[in_wid][pack_pos], cont.params)
+					} else {
+						ct_keep[ul] = ext_double_ctxt(cont.evaluator, cont.encoder, ct_boots[ul], cont.m_idx_l[in_wid][pack_pos], cont.r_idx_l[in_wid][pack_pos], cont.params)
+					}
 				} else {
-					ct_keep[ul] = ext_double_ctxt(cont.evaluator, cont.encoder, ct_boots[ul], cont.m_idx_l[in_wid][pack_pos], cont.r_idx_l[in_wid][pack_pos], cont.params)
+					ct_keep[ul] = nil
 				}
 			} else {
-				if ul == 0 {
-					ct_keep[ul] = ext_ctxt(cont.evaluator, cont.encoder, ct_boots[ul], cont.r_idx[in_wid][pack_pos], cont.params)
+				if fast_pack {
+					if ul == 0 {
+						ct_keep[ul] = ext_double_ctxt(cont.evaluator, cont.encoder, ct_boots[ul], cont.m_idx[in_wid][pack_pos], cont.r_idx[in_wid][pack_pos], cont.params)
+					} else {
+						ct_keep[ul] = ext_double_ctxt(cont.evaluator, cont.encoder, ct_boots[ul], cont.m_idx_l[in_wid][pack_pos], cont.r_idx_l[in_wid][pack_pos], cont.params)
+					}
 				} else {
-					ct_keep[ul] = ext_ctxt(cont.evaluator, cont.encoder, ct_boots[ul], cont.r_idx_l[in_wid][pack_pos], cont.params)
+					if ul == 0 {
+						ct_keep[ul] = ext_ctxt(cont.evaluator, cont.encoder, ct_boots[ul], cont.r_idx[in_wid][pack_pos], cont.params)
+					} else {
+						ct_keep[ul] = ext_ctxt(cont.evaluator, cont.encoder, ct_boots[ul], cont.r_idx_l[in_wid][pack_pos], cont.params)
+					}
 				}
 			}
 		} else if inside {
@@ -422,7 +532,11 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 				ct_keep[ul] = nil
 			}
 		} else {
-			ct_keep[ul] = keep_ctxt(cont.params, cont.evaluator, cont.encoder, ct_boots[ul], cont.ext_idx[in_wid][ul])
+			if ct_boots[ul] != nil {
+				ct_keep[ul] = keep_ctxt(cont.params, cont.evaluator, cont.encoder, ct_boots[ul], cont.ext_idx[in_wid][ul])
+			} else {
+				ct_keep[ul] = nil
+			}
 		}
 	}
 
@@ -442,6 +556,8 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 			ct_res = cont.btp3.BootstrappConv_StoC(ct_keep[0], ct_keep[1])
 		case 3:
 			ct_res = cont.btp4.BootstrappConv_StoC(ct_keep[0], ct_keep[1])
+		case 4:
+			ct_res = cont.btp5.BootstrappConv_StoC(ct_keep[0], ct_keep[1])
 		default:
 			panic("No cases for log_sparse")
 		}
@@ -462,6 +578,8 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 			printDebugCfs(cont.params3, ct_res, cfs_postB, cont.decryptor, cont.encoder)
 		case 3:
 			printDebugCfs(cont.params4, ct_res, cfs_postB, cont.decryptor, cont.encoder)
+		case 4:
+			printDebugCfs(cont.params5, ct_res, cfs_postB, cont.decryptor, cont.encoder)
 		default:
 			panic("No cases for log_sparse")
 		}
@@ -472,9 +590,18 @@ func evalConv_BNRelu_new(cont *context, ct_input *ckks.Ciphertext, ker_in, bn_a,
 			if ker_wid == 5 {
 				start = step
 			}
-			prt_mat_norm_step(res_tmp, max_batch, norm, step, start, 4, false)
+			prt_mat_norm_step(res_tmp, max_batch, norm, step, start, 3, false)
 		} else {
-			prt_mat_norm(res_tmp, max_batch, norm, 4, false)
+			if stride {
+				max_batch = 4 * cont.N / (in_wid * in_wid)
+				start := 1
+				if ker_wid == 5 {
+					start = step
+				}
+				prt_mat_norm_step(res_tmp, max_batch, norm, step, start, 3, false)
+			} else {
+				prt_mat_norm(res_tmp, max_batch, norm, 3, false)
+			}
 		}
 	}
 
@@ -552,6 +679,19 @@ func debugStoC(cont *context, slot1, slot2 []complex128, in_wid, kp_wid, pos, st
 			tmp2 = keep_vec_stride(slot2_fl, in_wid, kp_wid, step, 1, raw_in_wid_odd)
 		} else {
 			tmp := keep_vec_sparse(slot1_fl, in_wid, kp_wid, log_sparse)
+			tmp1 = make([]float64, cont.params.Slots())
+			tmp2 = make([]float64, cont.params.Slots())
+			for i := 0; i < len(slot1)/2; i++ {
+				tmp1[i] = tmp[i]
+				tmp2[i] = tmp[i+len(slot1)/2]
+			}
+		}
+	case "StrConv_sparse":
+		if slot2_fl != nil {
+			tmp1 = comprs_vec_sparse(slot1_fl, in_wid, kp_wid, log_sparse, 0, pos)
+			tmp2 = comprs_vec_sparse(slot2_fl, in_wid, kp_wid, log_sparse, 0, pos)
+		} else {
+			tmp := comprs_vec_sparse(slot1_fl, in_wid, kp_wid, log_sparse, 0, pos)
 			tmp1 = make([]float64, cont.params.Slots())
 			tmp2 = make([]float64, cont.params.Slots())
 			for i := 0; i < len(slot1)/2; i++ {

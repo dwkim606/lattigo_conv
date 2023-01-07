@@ -386,7 +386,7 @@ def plain_resnet_bench():
 def plain_resnet_crop_bench():
     init_batch = 4
     batch = 4   
-    ker_width = 3
+    ker_width = 7
     input_width = 32 - ker_width//2
     vec_size = 3*input_width**2
 
@@ -394,9 +394,9 @@ def plain_resnet_crop_bench():
     bn_a = [0.2, 0.1, 0.1]
     pad_size = pad_list[ker_width]
 
-    num_bl1 = 2
-    num_bl2 = 2
-    num_bl3 = 2
+    num_bl1 = 3 # 2
+    num_bl2 = 1 # 2
+    num_bl3 = 1 # 2
 
     batch2 = batch*2
     batch3 = batch2*2
@@ -409,15 +409,15 @@ def plain_resnet_crop_bench():
 
     ## Correctness Check: Compare with TF NN CONV2D
     raw_input = [1.0-(1.0 * i)/vec_size for i in range(vec_size)]
-    ker0 = [(0.3 * i)/(3 * init_batch * ker_size) for i in range(3 * init_batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
-    ker01 = [(0.3 * i)/(init_batch * batch * ker_size) for i in range(init_batch * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
-    ker =  [(0.3 * i)/(batch * batch * ker_size) for i in range(batch * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
-    ker12 = [(0.25*i)/(batch*batch2*ker_size)for i in range(batch * batch2 * ker_size)]  #[(1000.0 * 1)/(batch * batch2 * ker_size) for i in range(batch * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
-    ker2 = [(0.25 * i)/(batch2 * batch2 * ker_size) for i in range(batch2 * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
-    ker23 = [(0.25 * i)/(batch2 * batch3 * ker_size) for i in range(batch2 * batch3 * ker_size)]  # (0.5 * i)/(batch2 * batch3 * ker_size) #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
-    ker3 = [(0.25 * i)/(batch3 * batch3 * ker_size) for i in range(batch3 * batch3 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker0 = [(0.05 * i)/(3 * init_batch * ker_size) for i in range(3 * init_batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker01 = [(0.05 * i)/(init_batch * batch * ker_size) for i in range(init_batch * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker =  [(0.05 * i)/(batch * batch * ker_size) for i in range(batch * batch * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker12 = [(0.05 *i)/(batch*batch2*ker_size)for i in range(batch * batch2 * ker_size)]  #[(1000.0 * 1)/(batch * batch2 * ker_size) for i in range(batch * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker2 = [(0.05 * i)/(batch2 * batch2 * ker_size) for i in range(batch2 * batch2 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker23 = [(0.05 * i)/(batch2 * batch3 * ker_size) for i in range(batch2 * batch3 * ker_size)]  # (0.5 * i)/(batch2 * batch3 * ker_size) #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
+    ker3 = [(0.1 * i)/(batch3 * batch3 * ker_size) for i in range(batch3 * batch3 * ker_size)] #[0.1 * i / (batch * batch * filter_size) for i in range(batch * batch * filter_size)]
     fc_a = [0.1*i for i in range(batch3*10)]
-    fc_b = [0.0*i for i in range(10)]
+    fc_b = [i for i in range(10)]
 
     ten_x = tf.reshape(tf.constant(np.array(raw_input), tf.float32), [1, input_width, input_width, 3])
     ten_k0 = tf.reshape(tf.constant(np.array(ker0), tf.float32), [ker_width, ker_width, 3, init_batch])
@@ -451,8 +451,6 @@ def plain_resnet_crop_bench():
         print(conv)
         print(i+1,"layer done\n")
     print("after 1st block\n", conv, "\n")
-
-    exit(1)
 
     conv = tf.nn.conv2d(conv, ten_k12, strides = [1,2,2,1], padding = "SAME")*bn_a[1]
     conv = Cropping2D(cropping=((0,pad_size[1]), (0,pad_size[1])))(conv)
@@ -1303,10 +1301,9 @@ def get_seconds(time_str):
 # print("num: ", len(result_list), "avg: ", mean(result_list), "std: ", stdev(result_list))
 # exit(1)
 
-# test_in = tf.reshape(tf.constant([i for i in range(16)], tf.float32), [1, 4, 4, 1])
-# test_in = tf.reshape(tf.constant([i for i in range(16)], tf.float32), [1, 4, 4, 1])
+# test_in = tf.reshape(tf.constant([i for i in range(25)], tf.float32), [1, 5, 5, 1])
 # test_in = Cropping2D(cropping=((0,1), (0,1)))(test_in)
-# test_ker = tf.reshape(tf.constant([1 for i in range(25)], tf.float32), [5, 5, 1, 1]) 
+# test_ker = tf.reshape(tf.constant([1 for i in range(9)], tf.float32), [3, 3, 1, 1]) 
 # test_out = tf.nn.conv2d(test_in, test_ker, strides=[1,2,2,1], padding="SAME")
 # print(test_in)
 # print(test_out)
