@@ -567,12 +567,12 @@ func main() {
 	// fmt.Println(output)
 	// os.Exit(1)
 
-	st, _ := strconv.Atoi(os.Args[1])
-	end, _ := strconv.Atoi(os.Args[2])
-	ker, _ := strconv.Atoi(os.Args[3])
+	// st, _ := strconv.Atoi(os.Args[1])
+	// end, _ := strconv.Atoi(os.Args[2])
+	// ker, _ := strconv.Atoi(os.Args[3])
 	// testImagenet_final_fast_in(st, end, ker)
-	testImagenet_sparse(st, end, ker)
-	os.Exit(1)
+	// testImagenet_sparse(st, end, ker)
+	// os.Exit(1)
 
 	// Test Conv Boot & NoBoot FINAL!
 	batchs := [5]int{4, 16, 64, 256, 1024}

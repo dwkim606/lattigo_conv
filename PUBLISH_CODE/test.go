@@ -1402,7 +1402,7 @@ func testImagenet_final_fast_in(st, end, ker_wid int) {
 func testImagenet_sparse(st, end, ker_wid int) {
 	// We use full packing: i.e., in_wid**2 element is contained in po2_in_wid**2 sized block <-> half padding of Resnet
 	// So ReLU, keep or rot, StoC done on both the 1st & 2nd part of the CtoS ciphertexts
-	debug := true
+	debug := false
 	ker_name := "ker" + strconv.Itoa(ker_wid) // "ker5"
 	weight_dir := "weight_imgnet_" + ker_name + "_h5/"
 	logN := 16
@@ -1587,7 +1587,7 @@ func testImagenet_sparse(st, end, ker_wid int) {
 				}
 			}
 		}
-		ct_result := evalConv_BN(cont, ct_layer, ker_inf_, bn_af, bn_bf, in_wids[1], 7, real_batch[1], 1000, 2, float64(1<<30), false)
+		ct_result := evalConv_BN(cont, ct_layer, ker_inf_, bn_af, bn_bf, in_wids[1], 7, real_batch[1], fin_out_batch, 1, float64(1<<30), false)
 		fmt.Println("Final FC done.")
 		timings[3] = time.Since(new_start).Seconds()
 		new_start = time.Now()
@@ -1595,7 +1595,7 @@ func testImagenet_sparse(st, end, ker_wid int) {
 		cont.decryptor.Decrypt(ct_result, pl_input)
 		res_tmp := cont.encoder.DecodeCoeffs(pl_input)
 		fmt.Printf("Decryption done in %s \n", time.Since(new_start))
-		final_result := prt_mat_one_norm(res_tmp, max_batch[1], 2, 4, 4)
+		final_result := prt_mat_one_norm(res_tmp, max_batch[1], 1, 4, 4)
 		writeTxt(ker_name+"_enc_result/enc_result_"+strconv.Itoa(name_iter)+".csv", final_result[:1000])
 
 		fmt.Println("Blc1: ", timings[0], " sec")
