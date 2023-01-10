@@ -57,7 +57,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	if err != nil {
 		panic(err)
 	}
-	if (kind == "Resnet_crop_sparse") || (kind == "Resnet_crop_sparse_wide2") || (kind == "Resnet_crop_sparse_wide3") { // generate 2 more params for sparse boot (logSlots, -1, -2)
+	if (kind == "Resnet_crop_sparse") || (kind == "Resnet_crop_sparse_wide2") || (kind == "Resnet_crop_sparse_wide3") || (kind == "Imagenet_sparse") { // generate 2 more params for sparse boot (logSlots, -1, -2)
 		btpParams.LogN = 16
 		btpParams.LogSlots = btpParams.LogN - 1
 		if cont.params, err = btpParams.Params(); err != nil {
@@ -222,7 +222,45 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 		for k := range cont.m_idx_l[elt][pos] {
 			rotations = append(rotations, k)
 		}
+	case "Imagenet_sparse":
+		iter = 2 // since we use full padding,
+		log_sparse := 0
+		for i := range cont.in_wids {
+			cont.ext_idx[cont.in_wids[i]] = make([][]int, iter)
+			for ul := 0; ul < iter; ul++ {
+				if log_sparse == 0 {
+					cont.ext_idx[cont.in_wids[i]][ul] = gen_keep_vec(cont.N/2, cont.in_wids[i], cont.kp_wids[i], ul)
+				} else {
+					cont.ext_idx[cont.in_wids[i]][ul] = gen_keep_vec_sparse(cont.N/2, cont.in_wids[i], cont.kp_wids[i], log_sparse)
+				}
+			}
+			log_sparse += 1
+		}
+		// for the first block (stride)
+		elt := cont.in_wids[0]
+		cont.r_idx[elt] = make([]map[int][]int, 1)
+		cont.r_idx_l[elt] = make([]map[int][]int, 1)
+		cont.m_idx[elt] = make([]map[int][]int, 1)
+		cont.m_idx_l[elt] = make([]map[int][]int, 1)
+		pos := 0
+		log_sparse = 0
+		cont.m_idx_l[elt][pos], cont.r_idx_l[elt][pos] = gen_comprs_sparse(cont.N/2, elt, cont.kp_wids[1], log_sparse, 1, pos) // need lower part for full packing
+		cont.m_idx[elt][pos], cont.r_idx[elt][pos] = gen_comprs_sparse(cont.N/2, elt, cont.kp_wids[1], log_sparse, 0, pos)
 
+		for pos := 0; pos < 1; pos++ {
+			for k := range cont.r_idx[elt][pos] {
+				rotations = append(rotations, k)
+			}
+			for k := range cont.r_idx_l[elt][pos] {
+				rotations = append(rotations, k)
+			}
+			for k := range cont.m_idx[elt][pos] {
+				rotations = append(rotations, k)
+			}
+			for k := range cont.m_idx_l[elt][pos] {
+				rotations = append(rotations, k)
+			}
+		}
 	case "Resnet_crop_fast_wide2": // Generate ext_idx for extracting valid values from conv with "same" padding
 		iter = 2 // since we use full padding,
 		for i := 1; i <= 2; i++ {
@@ -426,7 +464,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 	if boot {
 		fmt.Println("Generating bootstrapping keys...")
 		rotations = btpParams.RotationsForBootstrapping(cont.params.LogSlots())
-		if (kind == "Resnet_crop_sparse") || (kind == "Resnet_crop_sparse_wide2") || (kind == "Resnet_crop_sparse_wide3") {
+		if (kind == "Resnet_crop_sparse") || (kind == "Resnet_crop_sparse_wide2") || (kind == "Resnet_crop_sparse_wide3") || (kind == "Imagenet_sparse") {
 			rotations = append(rotations, btpParams.RotationsForBootstrapping(cont.params2.LogSlots())...)
 			rotations = append(rotations, btpParams.RotationsForBootstrapping(cont.params3.LogSlots())...)
 			rotations = append(rotations, btpParams.RotationsForBootstrapping(cont.params4.LogSlots())...)
@@ -439,7 +477,7 @@ func newContext(logN, ker_wid int, in_wids, kp_wids []int, boot bool, kind strin
 			if cont.btp, err = ckks.NewBootstrapper(cont.params, btpParams, btpKey); err != nil {
 				panic(err)
 			}
-		} else if (kind == "Resnet_crop_sparse") || (kind == "Resnet_crop_sparse_wide2") || (kind == "Resnet_crop_sparse_wide3") {
+		} else if (kind == "Resnet_crop_sparse") || (kind == "Resnet_crop_sparse_wide2") || (kind == "Resnet_crop_sparse_wide3") || (kind == "Imagenet_sparse") {
 			btpParams.LogSlots = btpParams.LogN - 1
 			if cont.btp, err = ckks.NewBootstrapper_mod(cont.params, btpParams, btpKey); err != nil {
 				panic(err)
@@ -529,10 +567,12 @@ func main() {
 	// fmt.Println(output)
 	// os.Exit(1)
 
-	// st, _ := strconv.Atoi(os.Args[1])
-	// end, _ := strconv.Atoi(os.Args[2])
-	// ker, _ := strconv.Atoi(os.Args[3])
+	st, _ := strconv.Atoi(os.Args[1])
+	end, _ := strconv.Atoi(os.Args[2])
+	ker, _ := strconv.Atoi(os.Args[3])
 	// testImagenet_final_fast_in(st, end, ker)
+	testImagenet_sparse(st, end, ker)
+	os.Exit(1)
 
 	// Test Conv Boot & NoBoot FINAL!
 	batchs := [5]int{4, 16, 64, 256, 1024}

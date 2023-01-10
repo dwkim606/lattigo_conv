@@ -61,8 +61,8 @@ set label "{/:Bold Ours}" at 750, 94.5 tc rgb '#ed7014'
 set label "Falcon [20]" at 338, 78.5
 set label "EVA [17]" at 3120, 82.5    
 set label "LoLa [19]" at 800, 77.3    
-set label "Lee et al. [29]" at 3650, 91.5   
-set label "SHE [27]" at 12200, 95.5
+set label "Lee et al. [29]" at 3570, 91.5   
+set label "SHE [27]" at 12200, 95
 
 #set label "Falcon (Lou et al., 2020)" at 340, 78.5
 #set label "EVA (Dathathri et al., 2020)" at 3120, 82.5    
